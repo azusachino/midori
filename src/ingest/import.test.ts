@@ -1,12 +1,13 @@
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { unlinkSync } from "node:fs";
+import { resolve } from "node:path";
 import { dedup, type Fixture, general } from "../../tests/fixtures";
 import { buildStoredZip } from "../../tests/util/mkzip";
 import { openDb } from "../db/db";
 import { runImport } from "./import";
 
-const tmp = `${import.meta.dir}/../../.tmp-import-test`;
+const tmp = resolve(import.meta.dir, "../../.tmp-import-test");
 let seq = 0;
 
 function freshDb(): string {
@@ -36,7 +37,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const z of zips) await Bun.file(z).delete();
+  for (const z of zips) {
+    try {
+      await Bun.file(z).delete();
+    } catch {
+      // already moved to the archive dir by the CLI under test — fine
+    }
+  }
 });
 
 describe("runImport", () => {
@@ -123,10 +130,52 @@ describe("CLI", () => {
     const dbPath = freshDb();
     const zipPath = await fixtureZip(general, "cli");
     zips.push(zipPath);
-    const proc = Bun.spawnSync(["bun", "src/cli.ts", "import", zipPath, "--db", dbPath]);
+    const backupDir = `${tmp}/backups-${seq}`;
+    const archiveDir = `${tmp}/archive-${seq}`;
+    seq += 1;
+    const proc = Bun.spawnSync([
+      "bun",
+      "src/cli.ts",
+      "import",
+      zipPath,
+      "--db",
+      dbPath,
+      "--backup-dir",
+      backupDir,
+      "--archive-dir",
+      archiveDir,
+    ]);
     expect(proc.exitCode).toBe(0);
-    const out = JSON.parse(proc.stdout.toString()) as { status: string; inserted: number };
+    const out = JSON.parse(proc.stdout.toString()) as {
+      status: string;
+      inserted: number;
+      backupPath: string | null;
+      archivedPath: string | null;
+    };
     expect(out.status).toBe("done");
     expect(out.inserted).toBeGreaterThan(0);
+    expect(out.backupPath).toMatch(/midori-\d{8}-\d{6}\.db$/);
+    expect(await Bun.file(out.backupPath ?? "").exists()).toBeTrue();
+    expect(out.archivedPath).toBe(`${archiveDir}/cli.zip`);
+    expect(await Bun.file(out.archivedPath ?? "").exists()).toBeTrue();
+    expect(await Bun.file(zipPath).exists()).toBeFalse();
+
+    const zipPath2 = await fixtureZip(general, "cli-keep");
+    zips.push(zipPath2);
+    const proc2 = Bun.spawnSync([
+      "bun",
+      "src/cli.ts",
+      "import",
+      zipPath2,
+      "--db",
+      dbPath,
+      "--backup-dir",
+      backupDir,
+      "--keep-zip",
+    ]);
+    expect(proc2.exitCode).toBe(0);
+    const out2 = JSON.parse(proc2.stdout.toString()) as { archivedPath: string | null };
+    expect(out2.archivedPath).toBeNull();
+    expect(await Bun.file(zipPath2).exists()).toBeTrue();
   });
 });
