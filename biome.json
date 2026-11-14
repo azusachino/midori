@@ -19,9 +19,9 @@
       "**/*.mts",
       "**/*.json",
       "!bun.lock",
-      "!node_modules/**",
-      "!dist/**",
-      "!site/**"
+      "!node_modules",
+      "!dist",
+      "!site"
     ]
   },
   "vcs": {
