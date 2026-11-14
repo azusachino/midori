@@ -55,7 +55,9 @@ development; the cluster never blocks the analysis loop.
 
 - [ ] Task 1: Scaffold Bun + TS strict project (biome, `bun test`, `bun run check`, README
       commands pinned, .gitignore for `data/`). CI on push runs `bun install`, typecheck,
-      `bun test` — synthetic data only.
+      `bun test` — synthetic data only — plus a **tracked-file privacy guard** rejecting health
+      exports, SQLite dbs/`-wal`/`-shm` sidecars, and backup artifacts (pinned pattern list),
+      so personal data cannot enter the public repo.
 - [ ] Task 2: SQLite schema + drizzle migrations — all six tables, WAL, dedup unique key on
       (type, source_name, start_at, end_at, value) with NULL/numeric-normalization behavior
       defined; records persist UTC instant **and** original local offset; `device_events`
@@ -78,7 +80,10 @@ development; the cluster never blocks the analysis loop.
       the fixture scaled to ~2M rows decides drizzle vs raw `bun:sqlite` hot path.
 - [ ] Task 7: Local backup — post-import `VACUUM INTO` snapshot to `data/backups/`, 30-day
       retention, imported zips archived under `data/archive/`; `PRAGMA integrity_check` on
-      snapshots; restore smoke test (snapshot → readable db).
+      snapshots; restore smoke test (snapshot → readable db); WAL-sidecar lifecycle handled
+      (checkpoint before snapshot; restore replaces db **and** removes stale sidecars);
+      synthetic-clock retention test proving the 30-day cutoff deletes expired snapshots while
+      preserving newer ones.
 - [ ] Task 8: Real-export verification (owner-witnessed): 66 MB zip imports in <5 min;
       immediate re-import reports 0 new; sources table matches spike counts (2,047,778
       records); post-import snapshot + archive created.
@@ -144,11 +149,15 @@ tool-call transcript preserved as evidence.
       `Recreate` update strategy (no overlapping writers), app-level import lock respected;
       chart build/synth/test gates green.
 - [ ] Task 24: Backup CronJob in the chart — nightly `VACUUM INTO`, 30-day retention,
-      integrity check; restore drill executed once on the cluster.
+      integrity check; restore drill executed once on the cluster; WAL-sidecar handling across
+      backup, restore, pod restart, and node replacement (sidecars never restored across
+      restarts).
 - [ ] Task 25: Deploy per playbook: midori service-owned image target; harus-k3s image pin +
       `check-drift` + validate; authorized apply; rollout verification from other machines —
       briefing via tailnet, zip upload through ingress, MCP query from workstation, CronJob
-      firing; rollback note recorded. Separate commits per owning repo (midori, harus-charts,
+      firing; rollback note recorded. Rollout verification also covers pod-restart behavior
+      (SQLite reopens cleanly; no stale sidecars) and a re-import idempotence check through the
+      cluster endpoint. Separate commits per owning repo (midori, harus-charts,
       harus-k3s).
 
 **Checkpoint 5 (v0 done)**: all six success criteria in `docs/design.md` verified and recorded

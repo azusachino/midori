@@ -270,3 +270,24 @@ Once those changes are made, the existing phase structure and checkpoints are a 
 - `make context NAMES="midori"` and `make status NAMES="midori"` could not run because `mise` is unavailable (`mise: command not found`). Direct Git inspection and direct reads of the available project instruction files were used for this read-only review; this is **not** a claim that those Make gates passed.
 - No tests or runtime acceptance journeys were run: the reviewed revision contains only the design/plan and no implementation to execute.
 - No tracked files, remotes, issues, deployments, or shared task systems were modified. No subagents or delegation were used.
+
+---
+
+## Re-verification of rev 2 (b5a6ed4) — 2026-11-14
+
+Delta-only re-check by the same reviewer. Verdict: **CHANGES REQUESTED (narrow)** — no finding
+wholly unresolved; 8/11 resolved, 3 partially resolved. Residuals:
+
+1. HIGH-1 (partial): synthetic-clock retention test for the 30-day policy missing from Task 7.
+2. HIGH-4 (partial): no automated tracked-file/CI privacy guard against personal-data fixtures
+   entering the public repo.
+3. MED-5 (partial): no explicit pod-restart/re-import verification; WAL-sidecar runtime
+   lifecycle (backup/restore/restart/replacement) unspecified.
+
+Reviewer's note: "No structural replan is needed; these are narrow additions to Tasks 1, 7,
+and 23–25."
+
+All three accepted and folded into rev 2.1: Task 1 (CI tracked-file privacy guard with pinned
+pattern list), Task 7 (synthetic-clock retention test + WAL checkpoint/restore-sidecar rules),
+Task 24 (WAL-sidecar handling across backup/restore/pod restart/node replacement), Task 25
+(pod-restart + re-import idempotence checks in rollout verification).
