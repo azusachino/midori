@@ -53,13 +53,15 @@ All six tables per design; offsets persisted; dedup key behavior defined.
 Synthetic corpora that pin every edge the real export taught us.
 
 - AC:
-  - [ ] Builder emits export.xml (~50 records): multi-source, ±timezone offsets, sleep stages,
+  - [x] Builder emits export.xml (~50 records): multi-source, ±timezone offsets, sleep stages,
     night HR samples, one unknown record type, malformed-edge dates
-  - [ ] Boundary corpus: records at 14:59/15:00, 08:59/09:00, 21:00, cross-midnight stages
-  - [ ] Spike-regression fixture: two sources of wrist temp, baseline window on source A,
+  - [x] Boundary corpus: records at 14:59/15:00, 08:59/09:00, 21:00, cross-midnight stages
+  - [x] Spike-regression fixture: two sources of wrist temp, baseline window on source A,
     recent window on source B
-  - [ ] Dedup corpus: NULL values, category records, equivalent numerics, exact ties
-- Verify: fixtures render to valid XML; snapshot test locks their shape.
+  - [x] Dedup corpus: NULL values, category records, equivalent numerics, exact ties
+- Verify: fixtures render to valid XML; snapshot test locks their shape. DONE — built by pi
+  worker (claude-haiku-5-5, t7x), lead-reviewed; 8 snapshots lock shape; suite also pins
+  determinism, well-formedness checker, synthetic-source labels.
 - Deps: T1. Files: tests/fixtures/ (builders + snapshots). Scope: M
 
 ### Task 4 — Pin module contracts [lead]
@@ -67,17 +69,19 @@ Synthetic corpora that pin every edge the real export taught us.
 Tracked, unit-tested contracts in `src/domain/` before any consumer exists.
 
 - AC:
-  - [ ] `Finding` + `EvidenceRef` types exactly per design (kind: deviation|recalibration|
+  - [x] `Finding` + `EvidenceRef` types exactly per design (kind: deviation|recalibration|
     coverage; severity bands)
-  - [ ] Stats constants: baseline window anchor−90…anchor−29 **inclusive**; recent
+  - [x] Stats constants: baseline window anchor−90…anchor−29 **inclusive**; recent
     anchor−13…anchor; gates ≥15 baseline / ≥7 recent days; |z|≥1.5 notable, ≥2.5 alert
-  - [ ] Zero-MAD policy ported from spike `analyze.py:111-113`, unit-pinned (incl. flat
+  - [x] Zero-MAD policy ported from spike `analyze.py:111-113`, unit-pinned (incl. flat
     baseline, MAD=0 with nonzero diff)
-  - [ ] Coverage-boundary algorithm signature + semantics (gap vs switch, ported from spike
+  - [x] Coverage-boundary algorithm signature + semantics (gap vs switch, ported from spike
     source-check logic)
-  - [ ] JSON API DTOs + upload-job DTOs (202 + id, status enum, error shape)
-  - [ ] Trust-label map per metric (steps/HR high, HRV moderate, energy low)
-  - [ ] Every item above has a failing-first unit test
+  - [x] JSON API DTOs + upload-job DTOs (202 + id, status enum, error shape)
+  - [x] Trust-label map per metric (steps/HR high, HRV moderate, energy low)
+  - [x] Every item above has a failing-first unit test (written contract-first in the same
+    commit; spike off-by-one −89..−29 fixed to the pinned −90..−29)
+- Verify: `bun test src/domain` green; no consumer imports outside src/domain yet.
 - Verify: `bun test src/domain` green; no consumer imports outside src/domain yet.
 - Deps: T2, T3. Files: src/domain/*.ts + tests. Scope: M (split if >5 files)
 
