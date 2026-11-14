@@ -1,7 +1,8 @@
 # midori design — v0
 
-Status: draft for owner review (2026-11-13). Evidence base: the landscape survey and spike in
-harus-workstation `docs/runbooks/research/2026-11/2026-11-13-midori-apple-health-assistant.md`
+Status: approved 2026-11-13; eleven decisions from grilling rounds 1–3 folded in 2026-11-14.
+Evidence base: the landscape survey and spike in harus-workstation
+`docs/runbooks/research/2026-11/2026-11-13-midori-apple-health-assistant.md`
 (commit f526308), which this design turns into decisions.
 
 ## Objective
@@ -54,10 +55,13 @@ this document.
 - **TypeScript** strict throughout.
 - **SQLite** (owner decision 2026-11-13: no Postgres for the MVP) — single file
   `data/midori.db`, WAL mode. Postgres is a later migration decision, not a v0 concern.
-- **drizzle-orm + bun:sqlite** for typed schema and migrations (open question 1).
+- **drizzle-orm + bun:sqlite** for typed schema and migrations (settled 2026-11-13: drizzle).
 - **Hono** for HTTP (small, Bun-native).
-- **Vite + React** for `web/` (open question 2).
-- **@modelcontextprotocol/sdk** for the stdio MCP server.
+- **Vite + React** for `web/` (settled 2026-11-13: React) with **uPlot** for charts, wrapped in a
+  small React component (grill Q3) — multi-year daily series with baseline bands is its exact case.
+- **@modelcontextprotocol/sdk**: stdio transport for local dev; **streamable HTTP transport,
+  tailnet-only**, so agents on other machines (pi, luna) reach the cluster deployment (grill
+  Q8/Q11). Tool set identical, all read-only.
 
 ## Commands
 
@@ -84,6 +88,10 @@ data/          gitignored: SQLite db, uploaded zips
 - `sources(name PK, kind, first_seen, last_seen, n_records)` — kind: watch | iphone | app
 - `records(id, type, source_name, start_at, end_at, value, unit, meta_json)` with a dedup
   unique key on `(type, source_name, start_at, end_at, value)`; re-imports collapse.
+  **All recognized `<Record>` types are stored** (grill Q2) — the full ~2.05M rows of the real
+  export, raw samples included: any future metric works without re-finding a deleted zip.
+  Types outside the analysis whitelist are stored, not aggregated. Workout elements, GPS routes,
+  and ECG CSVs are logged as present but not parsed in v0.
 - `daily_metrics(metric, source_name, day, value, method, n)` PK `(metric, source_name, day)`
   — method: `median` (HRV, RHR, wrist temp, resp rate, SpO2) or `sum` (exercise min,
   effort, active energy); sleep assembled per night (rule below).
@@ -97,6 +105,10 @@ belongs to that date's night; one starting <09:00 belongs to the previous date's
 daytime records (naps) are excluded in v0. Per night, use the dominant source's stages only
 (no cross-source double counting).
 
+**Day semantics** (grill Q5): records store the UTC instant plus the export's local offset; a
+"day" is the record's own local calendar day (JST for this user), derived at aggregation time.
+Nights and "today" must match lived days, not UTC.
+
 ## Stats engine
 
 Deterministic only — the two-layer rule from the survey: an LLM (in an agent, via MCP) may
@@ -104,9 +116,13 @@ narrate findings but never compute over raw series.
 
 - Daily aggregates per `(metric, source_name, day)`. HRV restricted to nighttime samples
   (21:00–09:00), as in the spike.
-- Baselines: median and MAD over days −90…−29 relative to the analysis anchor; recent window:
-  last 14 days. Robust z = (recent_median − baseline_median) / (1.4826 · MAD). Require
-  ≥15 baseline days and ≥7 recent days, else no finding.
+- **Analysis anchor = each metric+source's last data day** (grill Q9), not calendar today —
+  imports land roughly monthly, and anchoring to today would leave the recent window mostly
+  empty air. Every view surfaces "as of <date>". Baselines: median and MAD over days −90…−29
+  relative to that anchor; recent window: the 14 days before it. Robust
+  z = (recent_median − baseline_median) / (1.4826 · MAD). Findings recompute per import — under
+  this anchor they cannot change between imports, so the `findings` table is a pure cache.
+  Require ≥15 baseline days and ≥7 recent days, else no finding.
 - Severity: |z| ≥ 1.5 notable, ≥ 2.5 alert.
 - **Per-source baselines are mandatory.** Deviations compare a source against itself. When a
   source coverage boundary falls inside the compared windows, emit a `device_events` row
@@ -136,18 +152,23 @@ REST (Hono, JSON): `POST /api/imports` (zip upload), `GET /api/imports`,
 `GET /api/briefing`, `GET /api/metrics/:metric/daily`, `GET /api/deviations?days=14`,
 `GET /api/findings`, `GET /api/sources`.
 
-MCP tools (read-only, stdio): `list_imports`, `list_sources`,
+MCP tools (read-only; stdio locally, streamable HTTP from the cluster): `list_imports`,
+`list_sources`,
 `metric_daily(metric, days)`, `deviations(days)`, `findings(since)`, `briefing()`.
 
-UI pages: **Briefing** (last night, recovery summary, top deviations with evidence links,
-recalibration notices, import status + cadence nudge), **Investigate** (metric picker,
-baseline band chart, deviation table, device events), **Import** (drop zone, run history,
-new-since-last-run counts).
+UI pages: **Briefing** (last night, top ranked deviations with evidence links, recalibration
+notices, import status + cadence nudge), **Investigate** (metric picker, baseline band chart,
+deviation table, device events), **Import** (drop zone, run history, new-since-last-run counts).
+No composite readiness/recovery score in v0 (grill Q1) — the ranking *is* the story, and a
+composite is exactly the artifact that goes unexplained across device seams. Dark-first on
+design tokens from day one (grill Q10), no theme switcher in v0; the deviation table and uPlot
+bands get the polish. English-first copy in one centralized module (grill Q6).
 
 ## Testing strategy
 
-`bun test` throughout. Unit: night assignment, baseline/z math on synthetic series, dedup
-key behavior. Parser: a small synthetic `export.xml` fixture (~50 records). **Regression
+`bun test` throughout; minimal GitHub Actions CI on push — `bun install`, typecheck, tests
+(grill Q4; the repo is public). Unit: night assignment, baseline/z math on synthetic series,
+dedup key behavior. Parser: a small synthetic `export.xml` fixture (~50 records). **Regression
 fixture: the spike scenario** — a two-source wrist-temp series where the device swaps
 mid-window must produce a `switch` event and suppressed z, never a raw +4σ deviation.
 Integration: fixture zip → db → briefing endpoint payload. Browser e2e deferred.
@@ -161,11 +182,16 @@ Integration: fixture zip → db → briefing endpoint payload. Browser e2e defer
 3. Briefing renders fully from imported data; import page shows run history and cadence.
 4. A pi session answers "what changed recently and why" using only MCP tools.
 5. `bun test` green; `data/` gitignored; nothing personal leaves the host.
+6. Closing milestone (grill Q11): running on harus-k3s per the ship-to-cluster playbook —
+   tailnet-reachable, MCP over streamable HTTP, nightly backup CronJob firing.
 
 ## Boundaries
 
 - **Always**: deterministic stats (no LLM in any compute path); per-source baselines;
   run tests before commits; keep `data/` out of git.
+- **Backups are owned by midori** (grill Q7): nightly `VACUUM INTO` snapshot, 30-day retention,
+  imported zips archived — as a k8s CronJob on the cluster (grill Q8), as a post-import job
+  during local development. Health data does not rely on "the machine backup will catch it".
 - **Ask first**: new runtime dependencies beyond the stack list; schema changes after this
   spec is approved; exposing the server beyond the tailnet.
 - **Never**: commit health data or the db; LLM arithmetic on raw series; publish any
@@ -173,18 +199,26 @@ Integration: fixture zip → db → briefing endpoint payload. Browser e2e defer
 
 ## Open questions
 
-1. drizzle-orm (typed, migrations, one dep tree) vs raw `bun:sqlite` (zero deps, hand-rolled
-   SQL typing) — default: drizzle.
-2. React vs Svelte for `web/` — default: React.
+1. ~~drizzle-orm vs raw `bun:sqlite`~~ — settled 2026-11-13: drizzle.
+2. ~~React vs Svelte~~ — settled 2026-11-13: React.
 3. RMSSD vs SDNN across the device switch: v0 shows both series with a boundary marker and
    no blending; revisit if briefings feel broken at the seam.
-4. Hosting when v0 is done: stay on this machine via tailnet, or ship to harus-k3s
-   (ship-to-cluster playbook) — v0 is local-only either way.
+4. ~~Hosting~~ — settled by grilling Q8/Q11: harus-k3s at the end of v0 (see Deployment).
+
+## Deployment (end of v0, grill Q8 + Q11)
+
+Develop the whole loop locally first (the real 909 MB export is on this machine); the cluster
+is the final milestone, not a blocker. Container image on a Bun base; single pod; SQLite on a
+PVC (single-writer — fine on k3s local-path); ingress via tailnet only; zip uploads through
+ingress (66 MB is nothing). The chart is authored in harus-charts per its own workflow at
+deployment time, via the ship-to-cluster playbook — cross-repo work that lives outside midori's
+repo.
 
 ## Roadmap (post-v0)
 
 - **v1**: HAE push ingest; advisory layer grounded in HowToLiveBetter (sync + citations);
   manual clinical entries (labs, meds, symptoms); longitudinal trends and 12-month heatmaps;
   workout routes.
-- **v2**: k3s deployment; Postgres migration if retention/multi-machine ever demands it;
-  own iOS anchored-sync app (FreeReps pattern).
+- **v2**: Postgres migration if retention/multi-machine ever demands it; own iOS
+  anchored-sync app (FreeReps pattern); a composite readiness score only if the briefing ever
+  feels incomplete without one (grill Q1).
