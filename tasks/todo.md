@@ -105,13 +105,18 @@ Zip → streaming XML → typed record rows. **Blocked by OQ1 (dep approval).**
 Batched, deduped, restartable import with the benchmark that picks the insert path.
 
 - AC:
-  - [ ] Batched transactions; dedup on conflict (T2 behavior); import-run bookkeeping (counts,
+  - [x] Batched transactions; dedup on conflict (T2 behavior); import-run bookkeeping (counts,
     timings, status)
-  - [ ] sources table gains first/last-seen + record counts on import
-  - [ ] `bun run import <export.zip>` CLI end-to-end on fixtures
-  - [ ] In-task benchmark: scaled fixture ~2M rows; drizzle-vs-raw-`bun:sqlite` decision
+  - [x] sources table gains first/last-seen + record counts on import
+  - [x] `bun run import <export.zip>` CLI end-to-end on fixtures
+  - [x] In-task benchmark: scaled fixture ~2M rows; drizzle-vs-raw-`bun:sqlite` decision
     recorded here with numbers
 - Verify: fixture import twice → 0 new rows second time; benchmark numbers in this file.
+  DONE — benchmark (scripts/bench-insert.ts, bun 1.4.4, 2M synthetic rows, batch 10k,
+  2026-11-14): drizzle pass1 15.4s / 129,880 rows/s (all-dup pass2 15.4s);
+  raw bun:sqlite prepared stmt pass1 3.9s / 508,705 rows/s (all-dup 3.8s).
+  DECISION: raw prepared statements for the insert hot path (~3.9x); drizzle stays
+  the typed read layer. Real 2.05M-record export projects to ~4s insert.
 - Deps: T2, T5. Files: src/ingest/store.ts, src/cli.ts. Scope: M
 
 ### Task 7 — Local backup + retention [delegable]

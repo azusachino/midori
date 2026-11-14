@@ -16,3 +16,6 @@ apple_health_export/
 
 .env
 .env.*
+
+# scratch from import tests
+.tmp-import-test/
