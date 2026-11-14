@@ -291,3 +291,8 @@ All three accepted and folded into rev 2.1: Task 1 (CI tracked-file privacy guar
 pattern list), Task 7 (synthetic-clock retention test + WAL checkpoint/restore-sidecar rules),
 Task 24 (WAL-sidecar handling across backup/restore/pod restart/node replacement), Task 25
 (pod-restart + re-import idempotence checks in rollout verification).
+
+## Final verdict — 2026-11-14
+
+APPROVE — all three residual deltas resolved (summary-based confirmation of the ae99b4b
+additions; no re-review, as instructed). Review loop closed.
