@@ -263,5 +263,9 @@ transcript preserved as evidence.
 
 ## Decision log (fill as made)
 
-- OQ1 SAX/ZIP deps: **OPEN — owner decision before T5**
+- OQ1 SAX/ZIP deps: **RESOLVED 2026-11-14** — `saxes` + `yauzl` (owner approved; benchmark
+  escape-hatch to `sax-wasm` if T6 numbers disappoint). Input surface is **zip only**: no bare
+  XML-file import path exists; export.xml is parsed inside the zip (owner, 2026-11-14).
+- Code style (owner, 2026-11-14): TypeScript files only — no `.js`/`.mjs` sources, configs as
+  `.ts` where the tool allows. CI guard scripts are `.ts` run under Bun.
 - T6 insert path: drizzle vs raw bun:sqlite — decide in-task with benchmark numbers here
