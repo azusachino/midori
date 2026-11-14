@@ -90,11 +90,14 @@ Tracked, unit-tested contracts in `src/domain/` before any consumer exists.
 Zip → streaming XML → typed record rows. **Blocked by OQ1 (dep approval).**
 
 - AC:
-  - [ ] Parses export.zip without materializing the 909 MB XML
-  - [ ] Record → row mapping exact; unknown types stored, not aggregated
-  - [ ] Workout/route/ECG presence logged per import (counts only, not parsed)
-  - [ ] All T3 fixture corpora parse to expected rows
-- Verify: `bun test src/ingest/parser` green on all corpora.
+  - [x] Parses export.zip without materializing the 909 MB XML
+  - [x] Record → row mapping exact; unknown types stored, not aggregated
+  - [x] Workout/route/ECG presence logged per import (counts only, not parsed)
+  - [x] All T3 fixture corpora parse to expected rows
+- Verify: `bun test src/ingest/parser` green on all corpora. DONE — saxes streaming
+  parse (records via callback, presence counts per tag, ExportDate + version comment
+  captured); yauzl entry selection skips export_cda.xml; mapper pins unknown-type rows
+  (null metric key) and malformed dates (counted, never repaired). 89 tests green.
 - Deps: T4. Files: src/ingest/parser.ts, mapper.ts. Scope: M
 
 ### Task 6 — Transactional ingest store + CLI [lead-adjacent]
