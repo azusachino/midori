@@ -11,7 +11,18 @@
     }
   },
   "files": {
-    "ignoreUnknown": true
+    "ignoreUnknown": true,
+    "includes": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.cts",
+      "**/*.mts",
+      "**/*.json",
+      "!bun.lock",
+      "!node_modules/**",
+      "!dist/**",
+      "!site/**"
+    ]
   },
   "vcs": {
     "enabled": true,
