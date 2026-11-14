@@ -124,12 +124,14 @@ Batched, deduped, restartable import with the benchmark that picks the insert pa
 Own backups from day one, and prove they restore.
 
 - AC:
-  - [ ] Post-import `VACUUM INTO` snapshot → `data/backups/`; WAL checkpoint before snapshot
-  - [ ] 30-day retention; imported zips → `data/archive/`
-  - [ ] `PRAGMA integrity_check` on snapshots
-  - [ ] Restore smoke: snapshot → readable db; stale `-wal`/`-shm` removed on restore
-  - [ ] Synthetic-clock retention test: expired deleted at cutoff boundary, newer preserved
-- Verify: `bun test src/backup` green incl. clock test.
+  - [x] Post-import `VACUUM INTO` snapshot → `data/backups/`; WAL checkpoint before snapshot
+  - [x] 30-day retention; imported zips → `data/archive/`
+  - [x] `PRAGMA integrity_check` on snapshots
+  - [x] Restore smoke: snapshot → readable db; stale `-wal`/`-shm` removed on restore
+  - [x] Synthetic-clock retention test: expired deleted at cutoff boundary, newer preserved
+- Verify: `bun test src/backup` green incl. clock test. DONE 2026-11-14 (deepseek worker + lead wiring:
+  same-second re-backup allocates `-N` snapshot suffix instead of throwing; CLI wires backup →
+  prune → archive on successful import, `--keep-zip` skips archival).
 - Deps: T6. Files: src/backup/. Scope: S–M
 
 ### Task 8 — Real-export verification [lead, owner-witnessed]
@@ -150,11 +152,12 @@ The 66 MB proof. No CI. Owner watches.
 ### Task 9 — Local-day + night assembly [delegable]
 
 - AC:
-  - [ ] Day = record-local calendar day derived from UTC+offset (JST)
-  - [ ] Night rule: sleep start ≥15:00 → that date; <09:00 → previous date; else nap excluded
-  - [ ] Dominant-source stages per night incl. tie behavior
-  - [ ] Boundary corpus green (14:59/15:00, 08:59/09:00, 21:00, cross-midnight)
-- Verify: `bun test src/stats/nights`.
+  - [x] Day = record-local calendar day derived from UTC+offset (JST)
+  - [x] Night rule: sleep start ≥15:00 → that date; <09:00 → previous date; else nap excluded
+  - [x] Dominant-source stages per night incl. tie behavior
+  - [x] Boundary corpus green (14:59/15:00, 08:59/09:00, 21:00, cross-midnight)
+- Verify: `bun test src/stats/nights`. DONE 2026-11-14 (haiku worker; dominance = inBed+asleep
+  seconds, awake excluded, ties → lexicographically smallest source; durations from UTC instants).
 - Deps: T4. Files: src/stats/nights.ts. Scope: S–M
 
 ### Task 10 — Daily metrics [delegable]
