@@ -36,14 +36,16 @@ Bun + TS strict project skeleton with CI that can never see real data.
 All six tables per design; offsets persisted; dedup key behavior defined.
 
 - AC:
-  - [ ] Tables: imports, sources, records, daily_metrics, findings, device_events
-  - [ ] records: value + unit + type + source_name + start_at/end_at UTC **and** original local
+  - [x] Tables: imports, sources, records, daily_metrics, findings, device_events
+  - [x] records: value + unit + type + source_name + start_at/end_at UTC **and** original local
     offset columns
-  - [ ] Dedup unique key on (type, source_name, start_at, end_at, value) with NULL-value and
+  - [x] Dedup unique key on (type, source_name, start_at, end_at, value) with NULL-value and
     numeric-equivalence (60 vs 60.0) behavior pinned by migration-level test
-  - [ ] device_events.kind ∈ {first_seen, last_seen, switch}
-  - [ ] WAL mode on init; migrations idempotent on re-run
-- Verify: `bun test src/db` green incl. dedup-edge test.
+  - [x] device_events.kind ∈ {first_seen, last_seen, switch}
+  - [x] WAL mode on init; migrations idempotent on re-run
+- Verify: `bun test src/db` green incl. dedup-edge test. DONE (9 tests; SQL migrations are the
+  source of truth tracked via PRAGMA user_version, drizzle-orm typed mirror guarded by a
+  column-set test).
 - Deps: T1. Files: src/db/schema.ts, drizzle config, migrations/. Scope: M
 
 ### Task 3 — Fixture builders [delegable]
