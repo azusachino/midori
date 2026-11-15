@@ -453,15 +453,37 @@ export function staleChangesStub(): ChangesDTO {
   };
 }
 
+function buildWeeklyIndexSeries(metric: string, fx: MetricFixtureSpec, seamDay: string) {
+  const totalWeeks = 52;
+  const endWeekStart = "2026-02-23";
+  return Array.from({ length: totalWeeks }, (_, idx) => {
+    const weeksBack = totalWeeks - 1 - idx;
+    const weekStart = isoDayOffset(endWeekStart, -weeksBack * 7);
+    const isWatchB = weekStart >= seamDay;
+    const isLastWeek = idx === totalWeeks - 1;
+    const base = isWatchB ? fx.baseB : fx.baseA;
+    const shift = isLastWeek ? fx.recentShift * 0.8 : 0;
+    const raw = base + shift + deterministicNoise(idx, fx.spread * 0.45);
+    return {
+      weekStart,
+      median: roundMetricVal(raw, metric),
+      epochId: isWatchB ? 2 : 1,
+      hasPartial: idx === 18 || isLastWeek,
+    };
+  });
+}
+
 export function metricsIndexStub(hasImports = true): MetricsIndexDTO {
   if (!hasImports) {
     return { hasImports: false, asOfDay: null, metrics: [] };
   }
+  const noDataMetrics = new Set(["hrv_rmssd", "heart_rate"]);
   const ordered = [...OVERNIGHT_ORDER, ...DAYTIME_ORDER, ...TREND_ONLY_ORDER];
   const entries: MetricIndexEntryDTO[] = ordered.map((metric) => {
     const spec = METRICS[metric];
     const kind = metricKindFor(metric);
-    const hasData = metric === "wrist_temp";
+    const hasData = !noDataMetrics.has(metric);
+    const fx = metricFixtureSpecFor(metric, kind);
     return {
       metric,
       kind,
@@ -469,14 +491,9 @@ export function metricsIndexStub(hasImports = true): MetricsIndexDTO {
       trust: spec?.trust ?? "moderate",
       trustNote: spec?.trustNote ?? "Trend metric.",
       hasData,
-      finding: kind === "trendOnly" ? null : buildStubFinding(metric),
-      weeklySeries: hasData
-        ? [
-            { weekStart: "2026-02-16", median: 36.41, epochId: 1, hasPartial: false },
-            { weekStart: "2026-02-23", median: 36.93, epochId: 2, hasPartial: false },
-          ]
-        : [],
-      seams: hasData ? [{ day: "2026-02-22", kind: "step" }] : [],
+      finding: !hasData || kind === "trendOnly" ? null : buildStubFinding(metric),
+      weeklySeries: hasData ? buildWeeklyIndexSeries(metric, fx, fx.seamDay) : [],
+      seams: hasData ? [{ day: fx.seamDay, kind: fx.seamKind }] : [],
     };
   });
   return {

@@ -8,6 +8,7 @@ import { ChecksPanel } from "@/components/ChecksPanel";
 import { EvidenceSheet } from "@/components/EvidenceSheet";
 import { FindingRow } from "@/components/FindingRow";
 import { LoadingState } from "@/components/LoadingState";
+import { LongViewCalendar } from "@/components/LongViewCalendar";
 import { MetricChart } from "@/components/MetricChart";
 import { ReadError } from "@/components/ReadError";
 import { Badge } from "@/components/ui/badge";
@@ -37,11 +38,12 @@ export function MetricDetailPage() {
   const navigate = useNavigate({ from: "/metrics/$key" });
 
   const known = isKnownMetric(key);
+  const seriesRange: MetricRange = search.tab === "long" ? "1y" : search.range;
 
   const query = useAsyncQuery<MetricSeriesDTO>((signal) => {
     if (!known) return Promise.reject(new Error(copy.pages.metricDetail.unknownBody(key)));
-    return apiClient.metricSeries(key, search.range, signal);
-  }, `${key}:${search.range}`);
+    return apiClient.metricSeries(key, seriesRange, signal);
+  }, `${key}:${seriesRange}`);
 
   const handleTabChange = useCallback(
     (next: string) => {
@@ -398,11 +400,10 @@ export function MetricDetailPage() {
         </TabsContent>
 
         <TabsContent value="long">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">{copy.pages.metricDetail.tabs.long}</CardTitle>
-              <CardDescription>{copy.pages.metricDetail.longViewPlaceholder}</CardDescription>
-            </CardHeader>
+          <Card className="min-w-0 overflow-hidden">
+            <CardContent className="pt-4">
+              <LongViewCalendar series={data} onSelectDay={handleSelectDay} />
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>

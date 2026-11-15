@@ -200,8 +200,12 @@ export const copy = {
     metrics: {
       title: "Metrics",
       subtitle: "One card per metric, ordered overnight, daytime, then trend-only.",
-      placeholderNote:
-        "Foundation shell active. Full 1-year mini charts per metric land in Slice 16.",
+      noDataYet: "No data yet",
+      trendOnlySummary: "Trend only — no baseline",
+      weeklySummary: (metricLabel: string, count: number, seamCount: number) =>
+        seamCount > 0
+          ? `${metricLabel} 1-year weekly trend across ${count} weeks with ${seamCount} device seam.`
+          : `${metricLabel} 1-year weekly trend across ${count} weeks.`,
       groups: {
         overnight: "Overnight",
         daytime: "Daytime",
@@ -223,7 +227,21 @@ export const copy = {
       rangeGroupLabel: "Time range",
       resetZoom: "Reset zoom",
       trendOnlyNote: "Trend only — no baseline comparison",
-      longViewPlaceholder: "Long view bands and milestone markers land in Slice 16.",
+      longView: {
+        summary: (metricLabel: string, count: number, yearCount: number) =>
+          `${metricLabel} calendar across ${count} units in ${yearCount} ${yearCount === 1 ? "year" : "years"}.`,
+        noData: "No units available for Long view",
+        legendLower: "Lower",
+        legendMedian: "Stint median",
+        legendHigher: "Higher",
+        legendPartial: "Partial (hatched)",
+        legendSeam: "Device seam",
+        colYear: "Year",
+        colDeviation: "vs stint median",
+        colPartial: "Partial",
+        colSeam: "Seam",
+        fromStintMedian: (diffText: string) => `${diffText} vs stint median`,
+      },
       emptyRange: (noun: "nights" | "days") => `No ${noun} in this range`,
       widenRangeCta: (nextRangeLabel: string) => `Show ${nextRangeLabel}`,
       recentUnitsTitle: (noun: "nights" | "days") => `Recent ${noun}`,

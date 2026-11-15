@@ -1,5 +1,6 @@
 import { CustomChart, LineChart, ScatterChart } from "echarts/charts";
 import {
+  CalendarComponent,
   DataZoomComponent,
   GridComponent,
   LegendComponent,
@@ -19,6 +20,7 @@ echarts.use([
   LineChart,
   ScatterChart,
   CustomChart,
+  CalendarComponent,
   GridComponent,
   TooltipComponent,
   MarkAreaComponent,
@@ -138,13 +140,27 @@ export function EChart({
         dataIndex?: unknown;
         seriesName?: unknown;
         seriesType?: unknown;
+        data?: { name?: unknown } | unknown;
+        value?: unknown;
         event?: { event?: unknown };
       };
       if (ev.componentType !== "series") return;
       if (typeof ev.dataIndex !== "number") return;
       lastHandledDomEvent = ev.event?.event ?? null;
+      const dataObj =
+        typeof ev.data === "object" && ev.data !== null
+          ? (ev.data as { name?: unknown })
+          : undefined;
+      const resolvedName =
+        typeof ev.name === "string" && ev.name.length > 0
+          ? ev.name
+          : typeof dataObj?.name === "string" && dataObj.name.length > 0
+            ? dataObj.name
+            : Array.isArray(ev.value) && typeof ev.value[0] === "string"
+              ? ev.value[0]
+              : String(ev.name ?? "");
       handler({
-        name: typeof ev.name === "string" ? ev.name : String(ev.name ?? ""),
+        name: resolvedName,
         dataIndex: ev.dataIndex,
         seriesName: typeof ev.seriesName === "string" ? ev.seriesName : undefined,
         seriesType: typeof ev.seriesType === "string" ? ev.seriesType : undefined,
@@ -157,6 +173,8 @@ export function EChart({
       const zrEv = rawZr as { offsetX?: number; offsetY?: number; event?: unknown };
       if (zrEv.event && zrEv.event === lastHandledDomEvent) return;
       if (typeof zrEv.offsetX !== "number" || typeof zrEv.offsetY !== "number") return;
+      const opt = chart.getOption() as { grid?: unknown[] } | undefined;
+      if (!Array.isArray(opt?.grid) || opt.grid.length === 0) return;
       if (!chart.containPixel("grid", [zrEv.offsetX, zrEv.offsetY])) return;
       const coord = chart.convertFromPixel({ seriesIndex: 0 }, [zrEv.offsetX, zrEv.offsetY]) as
         | number[]
