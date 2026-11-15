@@ -62,23 +62,29 @@ function sixDaysFrom(start: string) {
 }
 
 describe("API regression fixes from UI integration", () => {
-  test("H2 / metrics index uses only the current primary stint for at most 52 weeks", async () => {
+  test("H2 / metrics index keeps 52 weeks of primary values and splits a seam week", async () => {
     const { api, insertEpoch, insertValue, db } = setup();
-    addEpoch(insertEpoch, 1, "Old watch", "Watch5,1", "watch", "2024-01-01");
-    addEpoch(insertEpoch, 2, "Current watch", "Watch7,5", "watch", "2024-01-01");
+    addEpoch(insertEpoch, 1, "Old watch", "Watch5,1", "watch", "2024-12-01");
+    addEpoch(insertEpoch, 2, "Current watch", "Watch7,5", "watch", "2025-10-15");
     db.prepare(
-      `INSERT INTO stints (metric,epoch_id,start_day,end_day)
-       VALUES ('steps',2,'2024-01-01',NULL)`,
+      `INSERT INTO stints (metric,epoch_id,start_day,end_day) VALUES
+       ('steps',1,'2024-12-01','2025-10-14'),
+       ('steps',2,'2025-10-15',NULL)`,
     ).run();
-    const days: string[] = [];
     const asOfDate = new Date("2026-02-28T00:00:00Z");
     for (let week = 59; week >= 0; week -= 1) {
       const day = new Date(asOfDate);
       day.setUTCDate(day.getUTCDate() - week * 7);
       const unitDay = day.toISOString().slice(0, 10);
-      days.push(unitDay);
       insertValue.run("steps", 1, unitDay, 10 + week);
       insertValue.run("steps", 2, unitDay, 200 + week);
+    }
+    for (const [day, oldValue, newValue] of [
+      ["2025-10-14", 12, 212],
+      ["2025-10-15", 13, 213],
+    ] as const) {
+      insertValue.run("steps", 1, day, oldValue);
+      insertValue.run("steps", 2, day, newValue);
     }
     db.prepare(
       `INSERT INTO metric_values (metric,epoch_id,unit_day,unit_kind,value,n,usable)
@@ -89,19 +95,22 @@ describe("API regression fixes from UI integration", () => {
     const payload = (await response.json()) as {
       metrics: Array<{
         metric: string;
-        weeklySeries: Array<{ weekStart: string; median: number | null; epochId: number | null }>;
+        weeklySeries: Array<{ weekStart: string; median: number | null; epochId: number }>;
       }>;
     };
     const weekly = payload.metrics.find((metric) => metric.metric === "steps")?.weeklySeries ?? [];
-    expect(weekly.length).toBeLessThanOrEqual(52);
-    expect(weekly.length).toBeGreaterThan(0);
-    expect(weekly.every((point) => point.epochId === 2)).toBe(true);
-    expect(weekly.every((point) => point.median !== null && point.median >= 200)).toBe(true);
-    const firstWeek = weekly.at(0);
-    expect(firstWeek).toBeDefined();
-    if (!firstWeek) throw new Error("expected a current weekly point");
-    expect(firstWeek.weekStart >= "2025-03-01").toBe(true);
-    expect(days).toHaveLength(60);
+    const weekStarts = new Set(weekly.map((point) => point.weekStart));
+    expect(weekStarts.size).toBeLessThanOrEqual(52);
+    expect(weekStarts.size).toBeGreaterThan(5);
+    expect(new Set(weekly.map((point) => point.epochId))).toEqual(new Set([1, 2]));
+    expect(
+      weekly.every(
+        (point) =>
+          point.median !== null && (point.epochId === 1 ? point.median < 100 : point.median >= 200),
+      ),
+    ).toBe(true);
+    const seamWeek = weekly.filter((point) => point.weekStart === "2025-10-13");
+    expect(seamWeek.map((point) => point.epochId)).toEqual([1, 2]);
   });
 
   test("M5 / metric band includes only baseline ranks 8–35 of the current stint", async () => {

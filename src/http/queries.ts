@@ -317,9 +317,9 @@ function weekly(db: Database, metric: string) {
       `SELECT v.unit_day,v.value,v.epoch_id,v.usable,n.partial_reason
        FROM metric_values v
        JOIN stints s ON s.metric=v.metric AND s.epoch_id=v.epoch_id
-         AND s.end_day IS NULL AND v.unit_day>=s.start_day
+         AND s.start_day<=v.unit_day AND (s.end_day IS NULL OR s.end_day>=v.unit_day)
        LEFT JOIN nights n ON n.date=v.unit_day
-       WHERE v.metric=? AND v.unit_day BETWEEN ? AND ? ORDER BY v.unit_day`,
+       WHERE v.metric=? AND v.unit_day BETWEEN ? AND ? ORDER BY v.unit_day,v.epoch_id`,
     )
     .all(metric, from, asOfDay) as {
     unit_day: string;
@@ -328,28 +328,37 @@ function weekly(db: Database, metric: string) {
     usable: number;
     partial_reason: string | null;
   }[];
-  const buckets = new Map<string, { values: number[]; epochs: number[]; hasPartial: boolean }>();
-  for (const r of rows) {
-    const d = new Date(`${r.unit_day}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-    const key = d.toISOString().slice(0, 10);
-    const b = buckets.get(key) ?? { values: [], epochs: [], hasPartial: false };
-    if (r.usable === 1) {
-      b.values.push(r.value);
-      b.epochs.push(r.epoch_id);
-    }
-    b.hasPartial ||= r.partial_reason !== null;
-    buckets.set(key, b);
-  }
-  return [...buckets]
-    .map(([weekStart, b]) => ({
+  const buckets = new Map<
+    string,
+    { weekStart: string; epochId: number; values: number[]; hasPartial: boolean }
+  >();
+  for (const row of rows) {
+    const date = new Date(`${row.unit_day}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+    const weekStart = date.toISOString().slice(0, 10);
+    const key = `${weekStart}:${row.epoch_id}`;
+    const bucket = buckets.get(key) ?? {
       weekStart,
-      median: median(b.values),
-      epochId: b.epochs[0] ?? null,
-      hasPartial: b.hasPartial,
-    }))
-    .filter((point): point is typeof point & { epochId: number } => point.epochId !== null)
-    .slice(-52);
+      epochId: row.epoch_id,
+      values: [],
+      hasPartial: false,
+    };
+    if (row.usable === 1) bucket.values.push(row.value);
+    bucket.hasPartial ||= row.partial_reason !== null;
+    buckets.set(key, bucket);
+  }
+  const points = [...buckets.values()].sort(
+    (a, b) => a.weekStart.localeCompare(b.weekStart) || a.epochId - b.epochId,
+  );
+  const visibleWeeks = new Set([...new Set(points.map((point) => point.weekStart))].slice(-52));
+  return points
+    .filter((point) => visibleWeeks.has(point.weekStart))
+    .map(({ weekStart, epochId, values, hasPartial }) => ({
+      weekStart,
+      median: median(values),
+      epochId,
+      hasPartial,
+    }));
 }
 function weeklyByEpoch(db: Database, metric: string) {
   const rows = db

@@ -83,6 +83,24 @@ function sanitizeName(raw: string | undefined): string {
   return name.length > 0 && name.length <= 255 ? name : "upload.zip";
 }
 
+async function createImportRow(db: Database, zipName: string, bytes: number): Promise<number> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      db.run(
+        `INSERT INTO imports (created_at, zip_name, zip_size, status, stage, progress)
+         VALUES (?, ?, ?, 'queued', 'queued', 0)`,
+        [new Date().toISOString(), zipName, bytes],
+      );
+      return Number((db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
+    } catch (error) {
+      const code =
+        typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+      if ((code !== "SQLITE_BUSY" && code !== "SQLITE_LOCKED") || attempt >= 19) throw error;
+      await Bun.sleep(25);
+    }
+  }
+}
+
 async function spool(body: ReadableStream<Uint8Array>, path: string, maxBytes: number) {
   const sink = Bun.file(path).writer();
   const reader = body.getReader();
@@ -286,14 +304,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       }
 
       const zipName = sanitizeName(c.req.header("x-zip-name"));
-      db.run(
-        `INSERT INTO imports (created_at, zip_name, zip_size, status, stage, progress)
-         VALUES (?, ?, ?, 'queued', 'queued', 0)`,
-        [new Date().toISOString(), zipName, bytes],
-      );
-      const importId = Number(
-        (db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
-      );
+      const importId = await createImportRow(db, zipName, bytes);
       const zipPath = join(spoolDir, `${importId}.zip`);
       renameSync(tmpPath, zipPath);
       start(importId, zipPath);
