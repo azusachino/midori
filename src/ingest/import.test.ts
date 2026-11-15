@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
 import { unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { dedup, type Fixture, general } from "../../tests/fixtures";
@@ -8,6 +9,9 @@ import { openDb } from "../db/db";
 import { runImport } from "./import";
 
 const tmp = resolve(import.meta.dir, "../../.tmp-import-test");
+// Run-unique: archive/backup dirs must not collide with a previous run's
+// leftovers (an archived cli.zip from run N breaks run N+1's assertions).
+const runId = randomUUID().slice(0, 8);
 let seq = 0;
 
 function freshDb(): string {
@@ -130,8 +134,8 @@ describe("CLI", () => {
     const dbPath = freshDb();
     const zipPath = await fixtureZip(general, "cli");
     zips.push(zipPath);
-    const backupDir = `${tmp}/backups-${seq}`;
-    const archiveDir = `${tmp}/archive-${seq}`;
+    const backupDir = `${tmp}/backups-${runId}-${seq}`;
+    const archiveDir = `${tmp}/archive-${runId}-${seq}`;
     seq += 1;
     const proc = Bun.spawnSync([
       "bun",

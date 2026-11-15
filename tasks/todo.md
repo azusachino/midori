@@ -139,10 +139,19 @@ Own backups from day one, and prove they restore.
 The 66 MB proof. No CI. Owner watches.
 
 - AC:
-  - [ ] Import <5 min (record actual); immediate re-import reports 0 new
-  - [ ] records total = 2,047,778; sources match spike counts (iWatch/Ultra/iPhone/NRC/あずさWatch)
-  - [ ] Post-import snapshot + zip archive created; integrity green
-- Verify: numbers recorded here, owner-acknowledged.
+  - [x] Import <5 min (record actual); immediate re-import reports 0 new
+  - [x] records total = 2,047,778; sources match spike counts (iWatch/Ultra/iPhone/NRC/あずさWatch)
+  - [x] Post-import snapshot + zip archive created; integrity green
+- Verify: numbers recorded here, owner-acknowledged. DONE 2026-11-15, owner-witnessed in session:
+  first import 19.1s (22.5s wall incl. backup+archive), re-import 14.7s → inserted 0, deduped
+  2,047,778; stored records 2,046,801; sources windows match spike (iWatch 2024-02-16→2026-10-10,
+  Ultra from 2026-10-08T15:01Z = Oct 9 JST switch, iPhone→2026-11-07, NRC 2025-04-16 only,
+  あずさWatch 2023-12-12→2024-02-18); per-source counts differ slightly from spike rg counts
+  because spike matched sourceName in Workout elements too — Record totals agree exactly.
+  Snapshots data/backups/midori-20261115-000457.db + -000725.db (741MB each, integrity ok);
+  zip archived data/archive/export.zip. Two fixes landed during T8: openDb mkdirs parent dir
+  (first-run SQLITE_CANTOPEN), import.test.ts archive/backup dirs now run-unique (UUID) to kill
+  a cross-run residue flake.
 - Deps: T7. Scope: S (session)
 
 **Checkpoint 1** — real import loop proven: timings, idempotence, backup+restore smoke.
