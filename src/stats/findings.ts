@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { METRICS } from "../domain/metrics";
-import type { BaselineResult } from "./baselines";
+import { dispersionForZ } from "../domain/stats";
+import type { BaselineResult, BaselineState, Confidence } from "./baselines";
 import { type CheckDTO, deriveChecks } from "./checks";
 
 export type FindingState = "computed" | "warming_up" | "insufficient" | "stale";
@@ -57,10 +58,15 @@ function toFinding(db: Database, row: BaselineResult): FindingRowDTO | null {
       : (db
           .query(
             `SELECT unit_day AS day, value, usable FROM metric_values
-     WHERE metric = ? AND epoch_id = ? AND unit_day <= ?
+     WHERE metric = ? AND epoch_id = ? AND unit_day >=
+       (SELECT start_day FROM stints WHERE id = ?) AND unit_day <= ?
      ORDER BY unit_day DESC LIMIT 35`,
           )
-          .all(row.metric, epochId, asOf) as Array<{ day: string; value: number; usable: number }>);
+          .all(row.metric, epochId, row.stintId, asOf) as Array<{
+          day: string;
+          value: number;
+          usable: number;
+        }>);
   const usable = units.filter((unit) => unit.usable === 1);
   const recent = usable.slice(0, 7);
   const baseline = usable.slice(7, 35);
@@ -130,10 +136,6 @@ function toFinding(db: Database, row: BaselineResult): FindingRowDTO | null {
     sparkline,
     caveats: checks.filter((check) => check.flagged).map((check) => check.key),
   };
-  db.run("UPDATE findings SET checks_json = ? WHERE metric = ?", [
-    JSON.stringify(checks),
-    row.metric,
-  ]);
   return dto;
 }
 
@@ -149,6 +151,15 @@ export function rebuildFindings(
   const rows = baselines
     .map((row) => toFinding(db, row))
     .filter((row): row is FindingRowDTO => row !== null);
+  for (const row of rows)
+    db.run("UPDATE findings SET checks_json = ? WHERE metric = ?", [
+      JSON.stringify(row.checks),
+      row.metric,
+    ]);
+  return rankFindings(rows);
+}
+
+function rankFindings(rows: FindingRowDTO[]): FindingRowDTO[] {
   const overnight = rows.filter((row) => row.kind === "overnight");
   const daytime = rows.filter((row) => row.kind === "daytime" && row.severity !== "within");
   const rank = (a: FindingRowDTO, b: FindingRowDTO) => {
@@ -171,4 +182,64 @@ export function rebuildFindings(
     );
   };
   return [...overnight.sort(rank), ...daytime.sort(rank)];
+}
+
+/** Read and rank the persisted finding snapshot without writing to the database. */
+export function readFindings(db: Database): FindingRowDTO[] {
+  const persisted = db
+    .query(
+      `SELECT metric, state, z, severity, confidence, onset_day AS onsetDay,
+              onset_open AS onsetOpen, recent, baseline, k_outside AS kOutside,
+              asof_day AS asOfDay, stint_id AS stintId
+       FROM findings`,
+    )
+    .all() as Array<{
+    metric: string;
+    state: string;
+    z: number | null;
+    severity: FindingSeverity | null;
+    confidence: Confidence | null;
+    onsetDay: string | null;
+    onsetOpen: number | null;
+    recent: number | null;
+    baseline: number | null;
+    kOutside: number | null;
+    asOfDay: string;
+    stintId: number | null;
+  }>;
+  const results: BaselineResult[] = [];
+  for (const row of persisted) {
+    const spec = METRICS[row.metric];
+    if (!spec || spec.kind === "trendOnly" || row.stintId === null) continue;
+    const stint = db
+      .query("SELECT epoch_id AS epochId, start_day AS startDay FROM stints WHERE id = ?")
+      .get(row.stintId) as { epochId: number; startDay: string } | null;
+    if (!stint) continue;
+    const units = db
+      .query(
+        `SELECT value FROM metric_values WHERE metric = ? AND epoch_id = ?
+         AND unit_day >= ? AND unit_day <= ? AND usable = 1 ORDER BY unit_day DESC LIMIT 35`,
+      )
+      .all(row.metric, stint.epochId, stint.startDay, row.asOfDay) as Array<{ value: number }>;
+    const baselineValues = units.slice(7, 35).map((unit) => unit.value);
+    results.push({
+      metric: row.metric,
+      state: row.state as BaselineState,
+      z: row.z,
+      dispersion: baselineValues.length ? dispersionForZ(baselineValues, spec.floor) : null,
+      severity: row.severity ?? "within",
+      confidence: row.confidence,
+      onsetDay: row.onsetDay,
+      onsetOpen: row.onsetOpen === null ? null : row.onsetOpen === 1,
+      recent: row.recent,
+      baseline: row.baseline,
+      kOutside: row.kOutside,
+      progress: units.length,
+      asOfDay: row.asOfDay,
+      stintId: row.stintId,
+    });
+  }
+  return rankFindings(
+    results.map((row) => toFinding(db, row)).filter((row): row is FindingRowDTO => row !== null),
+  );
 }

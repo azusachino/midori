@@ -84,7 +84,8 @@ export function rebuildSeamSteps(db: Database, usable: UsablePredicate): SeamSte
     .prepare(
       `SELECT metric, epoch_id AS epochId, e.kind AS epochKind, unit_day AS unitDay,
             unit_kind AS unitKind, value, n
-     FROM metric_values JOIN epochs e ON e.id = epoch_id ORDER BY metric, unit_day, epoch_id`,
+     FROM metric_values JOIN epochs e ON e.id = epoch_id WHERE usable = 1
+     ORDER BY metric, unit_day, epoch_id`,
     )
     .all() as MetricUnit[];
   const rows = deriveSeamSteps(stints, units, usable);

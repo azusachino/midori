@@ -9,11 +9,13 @@ import {
 import { openDb } from "./db/db";
 import { runImport } from "./ingest/import";
 import { createMcpServer } from "./mcp/server";
+import { readFindings } from "./stats/findings";
 
 /**
  * midori CLI. Subcommands:
  *   import <export.zip> [--db <path>] [--backup-dir <dir>] [--archive-dir <dir>] [--keep-zip]
  *   mcp [--db <path>] — read-only MCP server over stdio (T20)
+ *   changes --json [--db <path>] — print ranked finding rows
  *
  * After a successful import (design: "backups are owned by midori"): WAL-checkpointed
  * snapshot into the backup dir, retention prune, and the zip moves into the archive
@@ -25,7 +27,8 @@ function usage(): never {
     "usage: bun src/cli.ts import <export.zip> [--db <path>] [--backup-dir <dir>] " +
       "[--archive-dir <dir>] [--keep-zip]\n" +
       "       bun src/cli.ts backup [--db <path>] [--backup-dir <dir>] [--retention-days <n>]\n" +
-      "       bun src/cli.ts mcp [--db <path>]",
+      "       bun src/cli.ts mcp [--db <path>]\n" +
+      "       bun src/cli.ts changes --json [--db <path>]",
   );
   process.exit(2);
 }
@@ -33,7 +36,25 @@ function usage(): never {
 const args = process.argv.slice(2);
 const command = args[0];
 
-if (command === "mcp") {
+if (command === "changes") {
+  let dbPath = "data/midori.db";
+  let json = false;
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--json") json = true;
+    else if (a === "--db") {
+      dbPath = args[i + 1] ?? usage();
+      i += 1;
+    } else usage();
+  }
+  if (!json) usage();
+  const db = openDb(dbPath, { readonly: true });
+  try {
+    console.log(JSON.stringify(readFindings(db), null, 2));
+  } finally {
+    db.close();
+  }
+} else if (command === "mcp") {
   // stdio MCP server: JSON-RPC over stdin/stdout. Logs must go to stderr only.
   let dbPath = "data/midori.db";
   for (let i = 1; i < args.length; i++) {
