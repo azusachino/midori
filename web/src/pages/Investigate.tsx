@@ -239,7 +239,7 @@ function MetricView({
                 <td className="num">{f.anchorDay}</td>
                 <td>
                   {f.kind === "recalibration"
-                    ? `${f.sourceName} took over ${label.toLowerCase()}`
+                    ? `${f.sourceName} began recording ${label.toLowerCase()} near another source`
                     : f.kind === "coverage"
                       ? `coverage boundary after ${f.sourceName}`
                       : `${f.sourceName} deviates (${f.severity})`}

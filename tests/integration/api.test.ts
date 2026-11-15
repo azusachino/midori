@@ -51,6 +51,30 @@ afterAll(() => {
 const app = () => createApp({ db });
 
 describe("read routes over an imported spike corpus", () => {
+  test("legacy source-boundary evidence does not assert a device takeover", async () => {
+    const result = db
+      .prepare(`INSERT INTO findings
+      (import_id, anchor_day, kind, metric, source_name, window_days, severity, evidence, created_at)
+      VALUES (1, '2026-03-01', 'recalibration', 'wrist_temp', 'legacy', 14, 'info', ?, ?)`)
+      .run(
+        JSON.stringify([
+          {
+            kind: "source_span",
+            detail: "took over from another source; cross-device offsets reset",
+          },
+        ]),
+        new Date().toISOString(),
+      );
+    try {
+      const res = await app().request("/api/findings");
+      const text = await res.text();
+      expect(text).toContain("a device change is not established");
+      expect(text).not.toContain("took over from");
+    } finally {
+      db.prepare("DELETE FROM findings WHERE id = ?").run(result.lastInsertRowid);
+    }
+  });
+
   test("GET /api/imports lists the completed import", async () => {
     const res = await app().request("/api/imports");
     expect(res.status).toBe(200);

@@ -136,22 +136,13 @@ Own backups from day one, and prove they restore.
 
 ### Task 8 — Real-export verification [lead, owner-witnessed]
 
-The 66 MB proof. No CI. Owner watches.
+Private export verification; no CI.
 
-- AC:
-  - [x] Import <5 min (record actual); immediate re-import reports 0 new
-  - [x] records total = 2,047,778; sources match spike counts (iWatch/Ultra/iPhone/NRC/あずさWatch)
-  - [x] Post-import snapshot + zip archive created; integrity green
-- Verify: numbers recorded here, owner-acknowledged. DONE 2026-11-15, owner-witnessed in session:
-  first import 19.1s (22.5s wall incl. backup+archive), re-import 14.7s → inserted 0, deduped
-  2,047,778; stored records 2,046,801; sources windows match spike (iWatch 2024-02-16→2026-10-10,
-  Ultra from 2026-10-08T15:01Z = Oct 9 JST switch, iPhone→2026-11-07, NRC 2025-04-16 only,
-  あずさWatch 2023-12-12→2024-02-18); per-source counts differ slightly from spike rg counts
-  because spike matched sourceName in Workout elements too — Record totals agree exactly.
-  Snapshots data/backups/midori-20261115-000457.db + -000725.db (741MB each, integrity ok);
-  zip archived data/archive/export.zip. Two fixes landed during T8: openDb mkdirs parent dir
-  (first-run SQLITE_CANTOPEN), import.test.ts archive/backup dirs now run-unique (UUID) to kill
-  a cross-run residue flake.
+- AC: import within five minutes, re-import inserts no new records, and a verified snapshot
+  and archived ZIP exist.
+- The earlier record included personal data and has been removed from the current document;
+  historical Git commits still contain it. Prior runs reported an idempotent re-import and
+  verified snapshot; independently check the archive and restore path before deployment.
 - Deps: T7. Scope: S (session)
 
 **Checkpoint 1** — real import loop proven: timings, idempotence, backup+restore smoke.
@@ -192,10 +183,8 @@ The 66 MB proof. No CI. Owner watches.
 - Verify: `bun test src/stats/baselines`. DONE by lead 2026-11-15: src/stats/baselines.ts
   computeDeviations — one row per (metric, source) with any daily rows; composes T4
   robustZ/severityOf/baselineOffsets; insufficient_data when gates fail (only suppression
-  kind here; cross_source/coverage_gap arrive in T12). Real-db readout: 49 rows, 24 computed,
-  25 suppressed (Ultra has no baseline window yet), 9ms; top |z| = rhr +1.21 on iWatch tail —
-  consistent with spike verdict. Per-source anchor differs from spike's global anchor by
-  design (grilled Q9). 6 tests incl. flat-baseline alert + per-source anchor self-containment.
+  kind here; cross_source/coverage_gap arrive in T12). Per-source anchor differs from the
+  earlier global anchor by design. 6 tests include flat-baseline and per-source anchor cases.
 - Deps: T10. Files: src/stats/baselines.ts. Scope: M
 
 ### Task 12 — Device events + findings wiring [lead]
@@ -211,15 +200,13 @@ The 66 MB proof. No CI. Owner watches.
   (computeFindings: deviation findings severity≠info; seam suppression precedence switch→cross_source,
   gap→coverage_gap when boundary∈[anchor−90,anchor] involves the row's source; recalibration finding
   per switch boundary, coverage per series_start/gap; recomputeFindings wholesale DELETE+INSERT per
-  import, wired into runImport after daily metrics). Live readout: 0 deviations (all |z|<1.5),
-  29 recalibration + 8 coverage findings — full 3-year device history incl. WatchUltra takeover
-  2026-10-10 on every metric and hrv_rmssd series_start. Tests: 8 in findings.test.ts — spike fixture
+  import, wired into runImport after daily metrics). Tests: 8 in findings.test.ts — spike fixture
   (gap seam: B suppressed coverage_gap, no deviation finding, no |z|≥2.5) + abutting-seam corpus
   (switch event + recalibration finding + B cross_source, A's own z stands).
 - Deps: T11, T6. Files: src/stats/events.ts, findings.ts. Scope: M
 
-**Checkpoint 2** — on the real import: spike readout reproduced (wrist temp = recalibration
-artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
+**Checkpoint 2** — verify per-source statistics and source-boundary interpretation on the
+private import. Source changes are possible confounders, not proof of an artifact.
 
 ## Phase 3 — API + UI
 
@@ -239,8 +226,7 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
   metric → 404 typed error, known-but-empty → 200 []. hono@4.13.18 (stack-approved).
   Integration test tests/integration/api.test.ts: spike zip → runImport → all 6 routes asserted
   (asOf per metric, coverage finding present, no wrist-temp z≥2.5, trust on every deviation row).
-  Live check: re-import of archived zip populated findings ledger (37: 29 recal + 8 coverage)
-  via the real pipeline; wrist_temp story: WatchUltra recal 2026-10-10, 3 per-source series.
+  The real pipeline populated the findings ledger; interpretation requires further review.
 - Deps: T12. Files: src/http/routes.ts, tests/integration/api.test.ts. Scope: M
 
 ### Task 14 — Upload/job route [delegable]
@@ -294,8 +280,7 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
   is not unit-snapshot-testable under Bun — builders are unit-tested (tests/web/chartData.test.ts,
   8 tests) and pixels land in checkpoint 3 manual browse. Contract change: DeviationDTO +=
   baselineLow/baselineHigh (baseline ± 1.5σ_r = notable edge; null when suppressed) — filled by
-  baselines.ts from robustZ dispersion, verified on real db (iWatch wrist_temp band
-  [34.91, 35.64]). DeviationRow now extends DeviationDTO.
+  baselines.ts from robustZ dispersion. DeviationRow now extends DeviationDTO.
 - Deps: T15. Files: web/src/components/Chart.tsx. Scope: S
 
 ### Task 17 — Import page [delegable]
@@ -341,8 +326,7 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
   days from findings, baseline-check table (baseline/recent valueFmt'd, suppression reason
   prose), device-events table (took over / coverage boundary after); HRV family draws BOTH
   metrics as separate labeled series, never blended. copy.ts += copy.investigate block.
-  Verified live on real db: wrist_temp 3 sources + band + 2024-02-18 boundary; hrv_sdnn view
-  shows SDNN ×3 sources + Ultra RMSSD. DEVIATION: no component render test (same as T18).
+  DEVIATION: no component render test (same as T18); real chart rendering needs verification.
 - Deps: T16. Files: web/src/pages/Investigate.tsx. Scope: M
 
 **Checkpoint 3** — integration test green in CI; manual real-data browse: briefing cadence/
@@ -351,11 +335,8 @@ status/evidence links, as-of everywhere, investigate reproduces the spike story.
 playwright-verify skill (playwright.config.ts + e2e/ + scripts/e2e/run.ts + Makefile,
 @playwright/test 1.64.1 devDep = cached chromium-1248, no new download); hermetic fixture
 db (spike corpus) + real server + 6 browser checks green (928ms). Real-data browse via
-playwright probe against the live db (ARIA snapshots + screenshots): briefing = as-of
-2026-11-07 + 6 last-night cards w/ trust + all-Ultra deviations suppressed cross_source +
-recalibration/coverage findings + import line; investigate wrist_temp = 3 sources, band,
-boundaries; hrv_sdnn = SDNN ×3 + RMSSD unblended; import = dropzone + 3 real runs.
-Value formatting fixed (valueFmt everywhere; "Sleep 1.2113888888888888 h" → "1.21 h").
+playwright probe against the live db used ARIA snapshots; screenshots need visual review.
+Value formatting was corrected.
 bun test scoped to src/tests/scripts (e2e specs are playwright-only). e2e stays local/gated
 (make e2e), not in CI (fast CI; Chromium download per-run not worth it yet).
 
@@ -373,9 +354,8 @@ bun test scoped to src/tests/scripts (e2e specs are playwright-only). e2e stays 
   src/cli.ts mcp [--db] subcommand over StdioServerTransport; openDb(path, {readonly: true})
   skips WAL/migrations (read-only handle). @modelcontextprotocol/sdk 1.32.2 + zod (stack-approved).
   Tests src/mcp/server.test.ts: real Client + InMemoryTransport pair over imported spike corpus,
-  6 tests asserting as-of/trust travel + no wrist-temp z≥2.5 + since filtering. Live stdio smoke
-  on real db: initialize + tools/list + tools/call briefing → anchor 2026-11-07, 37 findings,
-  13 as-of entries. Commit 7390f3a.
+  6 tests asserting as-of/trust travel + no wrist-temp z≥2.5 + since filtering. A live stdio
+  smoke exercised initialization and briefing. Commit 7390f3a.
 - Deps: T13. Files: src/mcp/. Scope: M
 
 ### Task 21 — Streamable HTTP transport [delegable]
@@ -393,10 +373,8 @@ bun test scoped to src/tests/scripts (e2e specs are playwright-only). e2e stays 
 - Deps: T20. Files: src/mcp/http.ts. Scope: S
 
 **Checkpoint 4** — PASSED 2026-11-15: fresh pi session (claude-haiku-5-5, project MCP config
-  .pi/mcp.json → stdio server) answered "what changed recently and why" using only the six
-  mcp__midori__ tools: device switch Oct 8–10 with recalibration ledger, suppressed cross_source
-  baselines, per-metric stability with real numbers, declined clinical claims. Transcript
-  evidence: tasks/checkpoint-4-mcp-session.md.
+  .pi/mcp.json → stdio server) used the six mcp__midori__ tools. The earlier interpretation
+  overstated what source changes establish; see tasks/checkpoint-4-mcp-session.md.
 
 ## Phase 5 — Ship to cluster
 
@@ -405,8 +383,21 @@ bun test scoped to src/tests/scripts (e2e specs are playwright-only). e2e stays 
 - AC: multi-stage Bun Dockerfile; .dockerignore (data/, zips, sidecars, backups, archive);
   image-content inspection proves no personal data; container smoke = synthetic import +
   briefing + MCP HTTP in-container.
-- Verify: docker build + smoke script green locally.
-- Deps: T14, T21. Files: Dockerfile, .dockerignore, scripts/smoke.sh. Scope: M
+- Verify: docker build + smoke script green locally. DONE by lead 2026-11-15 (commit 6fbb67e):
+  Dockerfile (build→deps→runtime on pinned oven/bun:1.4.4-slim; runtime = prod node_modules +
+  web/dist + src + migrations as uid-1000 `bun` user — the image's own user, no custom
+  useradd; /data = volume root with MIDORI_{DB,BACKUP_DIR,ARCHIVE_DIR,SPOOL_DIR} envs;
+  port 8080). Server wiring fixed en route: startServer now mounts MCP-over-HTTP (T21 built
+  it but never wired it into the entry) and handles SIGTERM/SIGINT (bun ignores SIGTERM by
+  default — as PID 1 every rollout would hit SIGKILL; caught via podman stop warning in the
+  first smoke run). tests/integration/server.test.ts pins REST+shell+MCP on one origin.
+  Makefile: image-app (podman build → sudo k3s ctr images import), image-local, smoke-container.
+  scripts/smoke-container.ts: image find-scan (no .db/.sqlite/.zip/export*.xml anywhere),
+  fixture upload via HTTP → 202 → poll done (recordsInserted>0), briefing anchorDay,
+  MCP initialize+tools/list, /data snapshot+archive presence. Image azusachino.com/midori:v0.1.0
+  built+smoked green (2ee3b9c5). Lesson: Bun.spawnSync piped stdout is a Buffer —
+  `typeof === "string"` silently reads "" (first smoke pass was vacuously clean; fixed).
+- Deps: T14, T21. Files: Dockerfile, .dockerignore, scripts/smoke-container.ts. Scope: M
 
 ### Task 23 — harus-charts base chart [lead] (separate repo)
 

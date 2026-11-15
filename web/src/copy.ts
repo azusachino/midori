@@ -87,7 +87,7 @@ export const copy = {
     asOf: (day: string) => `as of ${day}`,
     lastNightTitle: "Last night",
     deviationsTitle: "Deviations from your baseline",
-    recalibrationTitle: "Device changes",
+    recalibrationTitle: "Source coverage changes",
     importTitle: "Import",
     noDeviations: "No metric deviates from its baseline right now.",
     noFindings: "No device changes on record.",
@@ -96,7 +96,7 @@ export const copy = {
     retry: "Retry",
     evidenceLink: "Investigate",
     suppressed: {
-      cross_source: "across a device switch — baselines not comparable",
+      cross_source: "near a source coverage boundary — interpretation is uncertain",
       insufficient_data: "not enough baseline days yet",
       coverage_gap: "gap in coverage",
     },

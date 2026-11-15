@@ -95,7 +95,7 @@ describe("spike regression: two-source wrist-temp swap (15-day hole -> gap seam)
     expect(b?.suppressed).not.toBeNull();
     expect(b?.z).toBeNull();
     // A's row is per-source: its own stable series may compute a small z,
-    // but the cross-source jump (35.3 -> 36.3) must never appear as a z
+    // but a cross-source jump must never appear as a z
     const a = wrist.find((r) => r.sourceName === SOURCE_A);
     expect(Math.abs(a?.z ?? 0)).toBeLessThan(1.5);
     for (const r of wrist) {
@@ -164,10 +164,10 @@ describe("abutting seam: switch -> recalibration finding + cross_source suppress
     // A: -90..-1 (90 days, anchor -1: baseline AND recent windows both full)
     for (let o = -90; o <= -1; o++) {
       const day = offsetDay(ANCHOR, o);
-      records.push(temp(SOURCE_A, day, (35.3 + ((o * 7) % 5) * 0.01).toFixed(2)));
+      records.push(temp(SOURCE_A, day, (34.0 + ((o * 7) % 5) * 0.01).toFixed(2)));
     }
     // B: 0..0 (takes over the very next day — abutting seam -> switch)
-    records.push(temp(SOURCE_B, ANCHOR, "36.30"));
+    records.push(temp(SOURCE_B, ANCHOR, "36.00"));
     dbPath = await importSpec(
       { exportDate: "2026-03-02 08:00:00 +0900", records, workouts: [] },
       "abut",
@@ -191,7 +191,7 @@ describe("abutting seam: switch -> recalibration finding + cross_source suppress
     const recal = persistedFindings(db, "WHERE kind = 'recalibration' AND metric = 'wrist_temp'");
     expect(recal.length).toBe(1);
     expect(recal[0]?.sourceName).toBe(SOURCE_B);
-    expect(recal[0]?.evidence[0]?.detail).toContain("took over");
+    expect(recal[0]?.evidence[0]?.detail).toContain("a device change is not established");
     db.close();
   });
 

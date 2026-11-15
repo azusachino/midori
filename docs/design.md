@@ -12,10 +12,10 @@ Periodic `export.zip` imports into a local SQLite store; deterministic, per-sour
 analysis; a briefing UI; and a read-only MCP server so agents (pi, luna) can query the store.
 No LLM runs inside midori in v0.
 
-The acceptance story is the project's origin: *"my watch readiness has been slightly off
-lately — why?"* must be answerable from one import, with ranked per-metric evidence and
-device switches flagged, in minutes — and without ever mistaking a device-change artifact
-for physiology (the spike's lesson).
+The acceptance story is to investigate a change in watch readiness using ranked,
+per-metric evidence and source provenance. Apple’s proprietary readiness score and the
+cause of a change cannot necessarily be established from an export; source changes are
+potential confounders, not proof of a device artifact.
 
 User stories:
 
@@ -177,8 +177,8 @@ Integration: fixture zip → db → briefing endpoint payload. Browser e2e defer
 
 1. The real 909 MB export imports in < 5 min locally; an immediate re-import reports
    0 new records.
-2. On the 2026-11-07 data, the investigate view reproduces the spike readout: wrist-temp
-   artifact flagged as recalibration; RHR/HRV/sleep/SpO2/resp rate in range.
+2. The investigate view shows per-source measurements and baseline limitations for the
+   private export, without asserting that source changes explain observed differences.
 3. Briefing renders fully from imported data; import page shows run history and cadence.
 4. A pi session answers "what changed recently and why" using only MCP tools.
 5. `bun test` green; `data/` gitignored; nothing personal leaves the host.

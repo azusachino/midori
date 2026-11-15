@@ -110,7 +110,14 @@ export function listFindings(db: Database, sinceDay?: string): FindingDTO[] {
     unit: r.unit,
     z: r.z,
     severity: r.severity as FindingDTO["severity"],
-    evidence: JSON.parse(r.evidence) as FindingDTO["evidence"],
+    evidence: (JSON.parse(r.evidence) as FindingDTO["evidence"]).map((item) =>
+      r.kind === "recalibration" && item.detail?.includes("took over from")
+        ? {
+            ...item,
+            detail: "Source coverage began near another source; a device change is not established",
+          }
+        : item,
+    ),
   }));
 }
 

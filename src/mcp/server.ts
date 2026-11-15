@@ -90,7 +90,7 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
     "deviations",
     {
       description:
-        "Robust-z deviations (baseline = per-source median+MAD over anchor−90..−29, recent = last 14d of that source). Rows carry trust labels; suppressed rows carry a reason (cross_source = device switch inside the window).",
+        "Robust-z deviations (baseline = per-source median+MAD over anchor−90..−29, recent = last 14d of that source). Rows carry trust labels; cross_source suppression indicates a source coverage boundary, not proof of a device switch.",
       inputSchema: {
         days: z
           .number()
@@ -112,7 +112,7 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
     "findings",
     {
       description:
-        "Persisted finding ledger from the last import: deviation | recalibration (device switch) | coverage (series start/gap), with evidence refs.",
+        "Persisted finding ledger from the last import: deviation | recalibration (inferred source coverage boundary) | coverage (series start/gap), with evidence refs. A boundary does not establish a device switch or its cause; older persisted evidence may use stronger wording.",
       inputSchema: {
         since: daySchema.optional().describe("only findings anchored on/after this day"),
       },

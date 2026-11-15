@@ -1,7 +1,6 @@
 /**
- * Spike-regression fixture. Mirrors the 2026-11-07 wrist-temperature artifact: source A reads
- * ~35.3 degC on the baseline window, source B reads ~36.3 degC on the recent window after a
- * device swap. A correct engine flags a switch and suppresses cross-source z, never a +4 sigma.
+ * Synthetic regression fixture: source A and source B have different values in separate
+ * windows. A correct engine avoids computing a cross-source z-score.
  *
  * Windows are relative to the fixed ANCHOR (the source's last data day in the full design):
  *   baseline: ANCHOR-90 .. ANCHOR-29 inclusive (62 days, source A only)
@@ -23,8 +22,8 @@ export const SOURCE_A = "Synthetic Watch A";
 export const SOURCE_B = "Synthetic Watch B";
 export const SPIKE_EXPORT_DATE = "2026-03-02 08:00:00 +0900";
 
-export const BASELINE_CENTRE = 35.3;
-export const RECENT_CENTRE = 36.3;
+export const BASELINE_CENTRE = 34.0;
+export const RECENT_CENTRE = 36.0;
 
 /** Jitter in [-0.2, +0.2], two decimals, from a fixed seed. */
 function jitter(rand: () => number): string {
@@ -57,7 +56,7 @@ function tempRecord(source: string, day: string, value: string): RecordSpec {
 }
 
 export function spikeSpec(): ExportSpec {
-  const rand = seeded(20261107);
+  const rand = seeded(12345);
   const records: RecordSpec[] = [];
   for (let day = SPIKE_WINDOWS.baselineStart; day <= SPIKE_WINDOWS.baselineEnd; ) {
     records.push(tempRecord(SOURCE_A, day, centreValue(BASELINE_CENTRE, jitter(rand))));

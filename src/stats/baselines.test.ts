@@ -129,8 +129,8 @@ describe("computeDeviations", () => {
   test("anchor is per source: stale source keeps its own last day", () => {
     const db = freshDb();
     // old source stops at ANCHOR-30; new source runs to ANCHOR
-    seed(db, "wrist_temp", "old", flat(-90, -30, 35.3));
-    seed(db, "wrist_temp", "new", [...flat(-29, -14, 36.3), ...flat(-13, 0, 36.3)]);
+    seed(db, "wrist_temp", "old", flat(-90, -30, 34.0));
+    seed(db, "wrist_temp", "new", [...flat(-29, -14, 36.0), ...flat(-13, 0, 36.0)]);
     const { rows } = computeDeviations(db);
     const old = rowFor(rows, "wrist_temp", "old");
     const neu = rowFor(rows, "wrist_temp", "new");

@@ -84,9 +84,9 @@ development; the cluster never blocks the analysis loop.
       (checkpoint before snapshot; restore replaces db **and** removes stale sidecars);
       synthetic-clock retention test proving the 30-day cutoff deletes expired snapshots while
       preserving newer ones.
-- [ ] Task 8: Real-export verification (owner-witnessed): 66 MB zip imports in <5 min;
-      immediate re-import reports 0 new; sources table matches spike counts (2,047,778
-      records); post-import snapshot + archive created.
+- [ ] Task 8: Real-export verification (owner-witnessed): import in <5 min;
+      immediate re-import reports 0 new; source counts agree with the import;
+      post-import snapshot + archive created.
 
 **Checkpoint 1**: import loop proven on real data; idempotence shown; timing met; backup +
 restore smoke green.
@@ -104,8 +104,8 @@ restore smoke green.
       detection per contract, suppressed cross-source z, findings recompute wired into import
       completion with an integration assertion. Spike regression test green.
 
-**Checkpoint 2**: on the real import, stats reproduce the spike readout (wrist temp =
-recalibration artifact; RHR/HRV/sleep/SpO2/resp in range).
+**Checkpoint 2**: verify per-source statistics against the private import. A change in
+source is a potential confounder; it does not establish the cause of a measured change.
 
 ### Phase 3: API + UI (http + briefing-ui)
 

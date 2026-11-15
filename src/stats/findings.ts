@@ -101,7 +101,7 @@ function boundaryFindings(boundariesByMetric: Map<string, CoverageBoundary[]>): 
               metric,
               sourceName: b.sourceName,
               fromDay: b.boundaryDay,
-              detail: `took over from ${b.counterpartSource ?? "another source"}; cross-device offsets reset`,
+              detail: `recording began near or during coverage by ${b.counterpartSource ?? "another source"}; a device change is not established`,
             },
           ],
         });

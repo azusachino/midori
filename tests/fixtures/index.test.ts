@@ -317,9 +317,9 @@ describe("spike-regression corpus", () => {
     expect(b.length).toBe(14);
   });
 
-  test("baseline near 35.3 degC on A, recent near 36.3 degC on B", () => {
-    for (const r of a) expect(Math.abs((r.valueNumeric ?? NaN) - 35.3)).toBeLessThanOrEqual(0.2);
-    for (const r of b) expect(Math.abs((r.valueNumeric ?? NaN) - 36.3)).toBeLessThanOrEqual(0.2);
+  test("baseline and recent values are near their synthetic centers", () => {
+    for (const r of a) expect(Math.abs((r.valueNumeric ?? NaN) - 34.0)).toBeLessThan(0.201);
+    for (const r of b) expect(Math.abs((r.valueNumeric ?? NaN) - 36.0)).toBeLessThan(0.201);
   });
 
   test("all records are wrist temperature in degC", () => {
