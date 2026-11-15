@@ -343,11 +343,24 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
 - Rules: B-A1–B-A4.
 - Files: `src/mcp/server.ts`, `src/mcp/server.test.ts`, `src/mcp/http.test.ts`.
 - AC:
-  - [ ] Tools `changes, metric_series, nights, epochs, list_imports`.
-  - [ ] A parity test shows `changes()` == `/api/changes` rows.
-  - [ ] Descriptions carry the B-A3 sentences.
-  - [ ] Unknown metric → `isError` with the known list.
+  - [x] Tools `changes, metric_series, nights, epochs, list_imports`.
+  - [x] A parity test shows `changes()` == `/api/changes` rows.
+  - [x] Descriptions carry the B-A3 sentences.
+  - [x] Unknown metric → `isError` with the known list.
 - Checkpoint B (lead): a fresh pi session answers "what changed recently, and could the device
+- **Done 2026-11-15** — `midori-engine-s10` (pi, gpt-6-luna high), commit `3f42540`. `bun run
+  check` (lead): exit 0, 203 tests. The writer stalled once on an out-of-scope integration test
+  that expected the v0 `briefing` tool; the lead approved the update.
+  - **Checkpoint B passed** (lead):
+    - A fresh pi session (magpie/codex/gpt-6-luna, medium) with only the midori MCP tools
+      (`--tools 'codemode,mcp__midori__*'`, stdio over a derived real-data db copy) answered
+      the question.
+    - The answer cites specific nights and names the new watch epoch and an OS update as
+      possible contributors. It states that midori does not establish the update caused the
+      change: no cause assertion (B-A3).
+    - The transcript is kept in workstation scratch only (it contains values).
+  - Pitfall: the pi MCP server runs in codemode, so `--tools` must also allow `codemode`; the
+    first run saw no tools.
   explain it?" via MCP only. The transcript is reviewed for cause assertions and recorded here
   without values.
 
