@@ -125,8 +125,8 @@ type EpochTraits = {
   minorByMetric: Map<string, Set<number>>;
 };
 
-function apiFindings(db: Database) {
-  const rows = readFindings(db);
+function apiFindings(db: Database, includeWithinDaytime = false) {
+  const rows = readFindings(db, includeWithinDaytime);
   const names = new Map(
     (
       db.query("SELECT id,source_name FROM epochs").all() as Array<{
@@ -373,7 +373,7 @@ function weeklyByEpoch(db: Database, metric: string) {
     .sort((a, b) => a.weekStart.localeCompare(b.weekStart) || a.epochId - b.epochId);
 }
 export function getMetrics(db: Database): MetricsIndexDTO {
-  const rows = apiFindings(db);
+  const rows = apiFindings(db, true);
   return {
     hasImports: hasImports(db),
     asOfDay: asOf(db),
@@ -441,7 +441,7 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
     partialReason: string | null;
     tzChange: number;
   }[];
-  const rows = apiFindings(db);
+  const rows = apiFindings(db, true);
   const row = rows.find((r) => r.metric === metric) ?? null;
   const recentDays = new Set(
     row?.sparkline

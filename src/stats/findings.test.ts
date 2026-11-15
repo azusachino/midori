@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { applyMigrations } from "../db/db";
 import type { BaselineResult } from "./baselines";
-import { rebuildFindings } from "./findings";
+import { readFindings, rebuildFindings } from "./findings";
 
 function baseline(
   metric: string,
@@ -81,6 +81,15 @@ describe("ranked findings", () => {
       .query("SELECT checks_json AS checks FROM findings WHERE metric = 'sleep_h'")
       .get() as { checks: string };
     expect(Array.isArray(JSON.parse(checksJson.checks))).toBe(true);
+    db.close();
+  });
+
+  test("B-F7 per-metric reads keep within-usual daytime findings that Changes omits", () => {
+    const db = makeDb();
+    db.prepare("UPDATE findings SET severity = 'within', z = 0.2 WHERE metric = 'steps'").run();
+    expect(readFindings(db).map((row) => row.metric)).not.toContain("steps");
+    const all = readFindings(db, true);
+    expect(all.find((row) => row.metric === "steps")?.severity).toBe("within");
     db.close();
   });
 });
