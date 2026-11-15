@@ -1,4 +1,5 @@
 import { openDb } from "../db/db";
+import { computeDailyMetrics } from "../stats/daily";
 import { mapRecord } from "./mapper";
 import { parseExportXml } from "./parser";
 import type { WriteCounters } from "./store";
@@ -58,6 +59,11 @@ export async function runImport(dbPath: string, zipPath: string): Promise<Import
     setStatus("storing");
     const counters = writer.finish();
     refreshSources(db, importId);
+
+    // Stats are a derived cache, recomputed on every import (design.md).
+    // Runs within the storing phase (~1s on 2M records): 'analyzing' is not a
+    // user-visible lifecycle state worth a schema CHECK update.
+    computeDailyMetrics(db, importId);
 
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");

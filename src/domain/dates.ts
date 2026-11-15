@@ -62,3 +62,20 @@ export function addDays(ymd: string, days: number): string {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+/**
+ * Inverse of parseHealthKitDate for stored rows: UTC instant + stored offset ->
+ * record-local calendar day and minute-of-day. Used when reading records back
+ * from the store (the XML timestamp itself is long gone by then).
+ */
+export function utcToLocal(
+  utcIso: string,
+  offsetMinutes: number,
+): { localDay: string; localMinute: number } {
+  const shifted = new Date(new Date(utcIso).getTime() + offsetMinutes * 60_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    localDay: `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`,
+    localMinute: shifted.getUTCHours() * 60 + shifted.getUTCMinutes(),
+  };
+}

@@ -51,6 +51,8 @@ export interface Night {
   stageSeconds: Record<SleepStage, number>;
   /** inBed + asleep seconds per source that has records in this night (awake excluded). */
   sourceSeconds: Record<string, number>;
+  /** Sleep records per source in this night (sample counts for daily metrics). */
+  sourceRecordCounts: Record<string, number>;
 }
 
 /** Night key for a sleep record by its record-local start, or null for daytime naps. */
@@ -74,6 +76,7 @@ function emptyStageSeconds(): Record<SleepStage, number> {
 
 interface NightAccumulator {
   bySource: Map<string, Record<SleepStage, number>>;
+  countsBySource: Map<string, number>;
 }
 
 /**
@@ -89,9 +92,10 @@ export function assembleNights(sleepRecords: SleepRecordInput[]): Night[] {
     if (key === null) continue;
     let acc = nights.get(key);
     if (!acc) {
-      acc = { bySource: new Map() };
+      acc = { bySource: new Map(), countsBySource: new Map() };
       nights.set(key, acc);
     }
+    acc.countsBySource.set(r.source, (acc.countsBySource.get(r.source) ?? 0) + 1);
     let stages = acc.bySource.get(r.source);
     if (!stages) {
       stages = emptyStageSeconds();
@@ -104,11 +108,13 @@ export function assembleNights(sleepRecords: SleepRecordInput[]): Night[] {
     // biome-ignore lint/style/noNonNullAssertion: key came from nights.keys()
     const acc = nights.get(date)!;
     const sourceSeconds: Record<string, number> = {};
+    const sourceRecordCounts: Record<string, number> = {};
     let dominantSource: string | null = null;
     let dominantTotal = -1;
     for (const source of [...acc.bySource.keys()].sort()) {
       // biome-ignore lint/style/noNonNullAssertion: iterating own keys
       const stages = acc.bySource.get(source)!;
+      sourceRecordCounts[source] = acc.countsBySource.get(source) ?? 0;
       let total = 0;
       for (const stage of DOMINANCE_STAGES) total += stages[stage];
       sourceSeconds[source] = total;
@@ -120,6 +126,12 @@ export function assembleNights(sleepRecords: SleepRecordInput[]): Night[] {
     }
     const winner = dominantSource ?? "";
     const stageSeconds = acc.bySource.get(winner) ?? emptyStageSeconds();
-    return { date, dominantSource: winner, stageSeconds: { ...stageSeconds }, sourceSeconds };
+    return {
+      date,
+      dominantSource: winner,
+      stageSeconds: { ...stageSeconds },
+      sourceSeconds,
+      sourceRecordCounts,
+    };
   });
 }

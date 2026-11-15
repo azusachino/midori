@@ -172,9 +172,14 @@ The 66 MB proof. No CI. Owner watches.
 ### Task 10 — Daily metrics [delegable]
 
 - AC:
-  - [ ] Per (metric, source, day): median or sum method per contract; HRV 21:00–09:00 filter
-  - [ ] Sparse-series behavior pinned (missing days stay missing, no zero-fill)
-- Verify: unit tests vs hand-computed fixture values.
+  - [x] Per (metric, source, day): median or sum method per contract; HRV 21:00–09:00 filter
+  - [x] Sparse-series behavior pinned (missing days stay missing, no zero-fill)
+- Verify: unit tests vs hand-computed fixture values. DONE by lead 2026-11-15:
+  src/stats/daily.ts computeDailyMetrics (wholesale recompute per import, 1.0s / 14,420 rows
+  on live 2M-record db; 13 metrics; night-only SQL filter; sleep family via assembleNights
+  dominant source; JST day boundaries verified). Supporting: dates.ts utcToLocal (round-trip),
+  nights.ts Night.sourceRecordCounts. Wired into runImport (storing phase — status CHECK has
+  no 'analyzing'; not a user-visible state). 6 new tests in daily.test.ts.
 - Deps: T9. Files: src/stats/daily.ts. Scope: M
 
 ### Task 11 — Baselines + z + trust [lead]
