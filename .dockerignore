@@ -1,0 +1,19 @@
+# Keep the build context minimal and personal-data-free. The image itself only
+# ever receives explicit COPYs (see Dockerfile); this list bounds the context.
+.git
+.github
+.tmp*
+data/
+test-results/
+tests/
+e2e/
+scripts/
+docs/
+tasks/
+node_modules/
+web/node_modules/
+web/dist/
+Makefile
+playwright.config.ts
+biome.json
+bunfig.toml

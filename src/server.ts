@@ -7,6 +7,7 @@ import { openDb } from "./db/db";
 import { MAX_UPLOAD_BYTES } from "./domain/api";
 import { DEFAULT_SPOOL_DIR } from "./http/import";
 import { createApp } from "./http/routes";
+import { MCP_HTTP_PATH, mountMcp } from "./mcp/http";
 
 /**
  * HTTP entry (T15). One Bun.serve handler: `/api/*` goes to the Hono app, everything
@@ -47,7 +48,12 @@ function staticFile(webRoot: string, pathname: string): string | null {
 }
 
 function isApiPath(pathname: string): boolean {
-  return pathname === "/api" || pathname.startsWith("/api/");
+  return (
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    // Stateless MCP-over-HTTP rides the same Hono app (T21).
+    pathname === MCP_HTTP_PATH
+  );
 }
 
 /** Builds the fetch handler: /api wins; the web shell serves everything else. */
@@ -87,6 +93,7 @@ export function startServer(opts: ServerOptions): Bun.Server<undefined> {
       backupDir: opts.backupDir ?? DEFAULT_BACKUP_DIR,
     },
   });
+  mountMcp(app, { db: opts.db });
   return Bun.serve({
     port: opts.port ?? DEFAULT_PORT,
     hostname: opts.hostname ?? "127.0.0.1",
@@ -96,10 +103,36 @@ export function startServer(opts: ServerOptions): Bun.Server<undefined> {
   });
 }
 
+/** Reads an optional server option from MIDORI_* env, omitting it when unset. */
+function envOpt<K extends keyof ServerOptions>(
+  env: string,
+  key: K,
+): Partial<Pick<ServerOptions, K>> {
+  const value = process.env[env];
+  return value === undefined ? {} : ({ [key]: value } as Partial<Pick<ServerOptions, K>>);
+}
+
 if (import.meta.main) {
   const dbPath = process.env.MIDORI_DB ?? "data/midori.db";
   const port = Number(process.env.MIDORI_PORT ?? DEFAULT_PORT);
   const hostname = process.env.MIDORI_HOST ?? "127.0.0.1";
-  const server = startServer({ db: openDb(dbPath), dbPath, port, hostname });
+  // exactOptionalPropertyTypes: spread so absent envs omit the keys entirely.
+  const server = startServer({
+    db: openDb(dbPath),
+    dbPath,
+    port,
+    hostname,
+    ...envOpt("MIDORI_BACKUP_DIR", "backupDir"),
+    ...envOpt("MIDORI_ARCHIVE_DIR", "archiveDir"),
+    ...envOpt("MIDORI_SPOOL_DIR", "spoolDir"),
+  });
   console.log(`midori listening on http://${hostname}:${server.port}`);
+  // Bun does not exit on SIGTERM by default; as PID 1 in the container it must,
+  // or every rollout waits out the grace period and dies to SIGKILL.
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.on(signal, () => {
+      server.stop(true);
+      process.exit(0);
+    });
+  }
 }

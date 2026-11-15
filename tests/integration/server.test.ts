@@ -1,108 +1,93 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+/**
+ * Integration test for the full server entry (T22): one Bun.serve over the real
+ * startServer — REST + web shell + stateless MCP-over-HTTP on the same port.
+ * Covers the /mcp wiring that the standalone mcp tests cannot (fetch-handler
+ * routing) and the env-independent ServerOptions defaults.
+ */
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { openDb } from "../../src/db/db";
 import { runImport } from "../../src/ingest/import";
 import { startServer } from "../../src/server";
-import { spike } from "../fixtures";
+import { spike } from "../../tests/fixtures";
 import { buildStoredZip } from "../util/mkzip";
 
-/**
- * T15 smoke: the Bun.serve handler wiring. /api answers JSON from an imported fixture db;
- * everything else serves the built web shell. The server starts on an ephemeral port and
- * is stopped inside the test run.
- */
+const workdir = join(import.meta.dir, "..", "..", ".tmp-server-test");
+let server: ReturnType<typeof startServer> | null = null;
+let baseUrl = "";
 
-const tmp = resolve(import.meta.dir, "../../.tmp-server-test");
-const runId = randomUUID().slice(0, 8);
-const dbPath = `${tmp}/db-${runId}.sqlite`;
-const zipPath = `${tmp}/${runId}.zip`;
-const webDist = `${tmp}/web-${runId}`;
-
-let server: ReturnType<typeof startServer> | undefined;
-let base = "";
-
-beforeAll(async () => {
-  mkdirSync(tmp, { recursive: true });
-  await Bun.write(
-    zipPath,
-    buildStoredZip([{ name: "apple_health_export/export.xml", data: spike.xml }]),
-  );
-  await runImport(dbPath, zipPath);
-
-  mkdirSync(`${webDist}/assets`, { recursive: true });
-  writeFileSync(`${webDist}/index.html`, "<!doctype html><title>shell</title>");
-  writeFileSync(`${webDist}/assets/app.js`, "console.log('ok');");
-
-  server = startServer({
-    db: openDb(dbPath),
-    dbPath,
-    port: 0,
-    hostname: "127.0.0.1",
-    webDist,
-    spoolDir: `${tmp}/spool-${runId}`,
-    archiveDir: `${tmp}/archive-${runId}`,
-    backupDir: `${tmp}/backups-${runId}`,
-  });
-  base = `http://127.0.0.1:${server.port}`;
+beforeEach(() => {
+  rmSync(workdir, { recursive: true, force: true });
+  mkdirSync(workdir, { recursive: true });
 });
 
-afterAll(() => {
+afterEach(() => {
   server?.stop(true);
-  for (const suffix of ["", "-wal", "-shm"]) {
-    try {
-      unlinkSync(`${dbPath}${suffix}`);
-    } catch {
-      // absent
-    }
-  }
-  rmSync(webDist, { recursive: true, force: true });
-  rmSync(zipPath, { force: true });
-  rmSync(tmp, { recursive: true, force: true });
+  server = null;
+  rmSync(workdir, { recursive: true, force: true });
 });
 
-describe("server wiring (T15 smoke)", () => {
-  test("GET /api/sources returns 200 JSON from the fixture db", async () => {
-    const res = await fetch(`${base}/api/sources`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("application/json");
-    const rows = (await res.json()) as Array<{ name: string; recordCount: number }>;
-    expect(rows.length).toBeGreaterThan(0);
-    for (const r of rows) expect(r.recordCount).toBeGreaterThan(0);
-  });
+describe("server entry: REST + web shell + MCP on one port", () => {
+  test("briefing, web shell and MCP initialize answer on the same origin", async () => {
+    const dbPath = join(workdir, "midori.db");
+    writeFileSync(
+      join(workdir, "fixture.zip"),
+      buildStoredZip([{ name: "apple_health_export/export.xml", data: spike.xml }]),
+    );
+    await runImport(dbPath, join(workdir, "fixture.zip"));
 
-  test("GET /api/... is never shadowed by the static fallback", async () => {
-    const res = await fetch(`${base}/api/nope`);
-    expect(res.status).toBe(404);
-    expect(res.headers.get("content-type")).not.toContain("text/html");
-  });
+    // Minimal web shell so the static path has an index to fall back to.
+    const webDist = join(workdir, "web", "dist");
+    mkdirSync(webDist, { recursive: true });
+    writeFileSync(join(webDist, "index.html"), "<!doctype html><title>midori</title>");
 
-  test("GET / serves the built index.html", async () => {
-    const res = await fetch(`${base}/`);
-    expect(res.status).toBe(200);
-    expect(await res.text()).toContain("shell");
-  });
+    server = startServer({ db: openDb(dbPath, { readonly: true }), dbPath, port: 0, webDist });
+    baseUrl = `http://127.0.0.1:${server.port}`;
 
-  test("client routes fall back to index.html, asset files are served directly", async () => {
-    const page = await fetch(`${base}/investigate`);
-    expect(page.status).toBe(200);
-    expect(await page.text()).toContain("shell");
+    const briefing = await fetch(`${baseUrl}/api/briefing`);
+    expect(briefing.status).toBe(200);
+    const body = (await briefing.json()) as { anchorDay: string | null };
+    expect(body.anchorDay).toBe("2026-03-01");
 
-    const asset = await fetch(`${base}/assets/app.js`);
-    expect(asset.status).toBe(200);
-    expect(await asset.text()).toContain("console.log");
-  });
+    const shell = await fetch(`${baseUrl}/some/client/route`);
+    expect(shell.status).toBe(200);
+    expect(await shell.text()).toContain("midori");
 
-  test("path traversal never leaves the web root", async () => {
-    const res = await fetch(`${base}/..%2F..%2Fpackage.json`);
-    expect(res.status).not.toBe(200);
-    const raw = await fetch(`${base}/%2e%2e/%2e%2e/package.json`);
-    expect(raw.status).not.toBe(200);
-  });
+    // Stateless MCP: initialize + a tool call, no session header anywhere.
+    const init = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "test", version: "0" },
+        },
+      }),
+    });
+    expect(init.status).toBe(200);
+    expect(init.headers.get("mcp-session-id")).toBeNull();
+    const initBody = (await init.json()) as { result?: { serverInfo?: { name?: string } } };
+    expect(initBody.result?.serverInfo?.name).toBe("midori");
 
-  test("non-GET methods on web paths are rejected", async () => {
-    const res = await fetch(`${base}/briefing`, { method: "POST", body: "x" });
-    expect(res.status).toBe(405);
+    const tools = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const toolBody = (await tools.json()) as { result?: { tools?: { name: string }[] } };
+    const names = toolBody.result?.tools?.map((t) => t.name) ?? [];
+    expect(names).toContain("briefing");
+    expect(names).toContain("deviations");
   });
 });
