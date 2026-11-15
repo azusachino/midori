@@ -56,6 +56,73 @@ export function parseHealthKitDate(raw: string): DateParse {
   };
 }
 
+/** Calendar day and minute in the selected zone. */
+export interface ZonedDateTime {
+  localDay: string;
+  localMinute: number;
+}
+
+/** Gets the wall-clock day and minute for an instant in an IANA timezone. */
+export function instantInZone(utcIso: string, timeZone: string): ZonedDateTime {
+  const fixedOffset = /^UTC([+-])(\d{2}):(\d{2})$/.exec(timeZone);
+  if (fixedOffset) {
+    const offset =
+      (fixedOffset[1] === "-" ? -1 : 1) * (Number(fixedOffset[2]) * 60 + Number(fixedOffset[3]));
+    return utcToLocal(utcIso, offset);
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(utcIso));
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return {
+    localDay: `${values.year}-${values.month}-${values.day}`,
+    localMinute: Number(values.hour) * 60 + Number(values.minute),
+  };
+}
+
+/** Converts a local wall-clock time to an instant using the zone's offset at that time. */
+export function zoneLocalToUtc(ymd: string, minute: number, timeZone: string): number {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const fixedOffset = /^UTC([+-])(\d{2}):(\d{2})$/.exec(timeZone);
+  if (fixedOffset) {
+    const offset =
+      (fixedOffset[1] === "-" ? -1 : 1) * (Number(fixedOffset[2]) * 60 + Number(fixedOffset[3]));
+    return (
+      Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1, Math.floor(minute / 60), minute % 60) -
+      offset * 60_000
+    );
+  }
+  const guess = Date.UTC(
+    year ?? 0,
+    (month ?? 1) - 1,
+    day ?? 1,
+    Math.floor(minute / 60),
+    minute % 60,
+  );
+  const local = instantInZone(new Date(guess).toISOString(), timeZone);
+  const localGuess = Date.UTC(
+    year ?? 0,
+    (month ?? 1) - 1,
+    day ?? 1,
+    Math.floor(minute / 60),
+    minute % 60,
+  );
+  const observedLocal = Date.UTC(
+    Number(local.localDay.slice(0, 4)),
+    Number(local.localDay.slice(5, 7)) - 1,
+    Number(local.localDay.slice(8, 10)),
+    Math.floor(local.localMinute / 60),
+    local.localMinute % 60,
+  );
+  return guess + (localGuess - observedLocal);
+}
+
 /** Adds n days to a 'YYYY-MM-DD' string (UTC arithmetic, format-level operation). */
 export function addDays(ymd: string, days: number): string {
   const d = new Date(`${ymd}T00:00:00Z`);
