@@ -88,7 +88,7 @@ export function startServer(opts: ServerOptions): Bun.Server<undefined> {
   const reconcileDb = openDb(opts.dbPath);
   try {
     reconcileDb.run(
-      `UPDATE imports SET status = 'failed', stage = 'failed', error = 'interrupted by restart'
+      `UPDATE imports SET status = 'failed', error = 'interrupted by restart'
        WHERE status NOT IN ('done', 'failed')`,
     );
   } finally {

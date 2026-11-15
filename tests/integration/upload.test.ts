@@ -1,7 +1,15 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, utimesSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  unlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { openDb } from "../../src/db/db";
 import type { ErrorResponse, UploadAcceptedDTO } from "../../src/domain/api";
@@ -155,6 +163,9 @@ describe("POST /api/imports", () => {
       const dto = (await detail.json()) as Record<string, unknown>;
       expect(dto.stage).toBe("done");
       expect(dto.progress).toBeGreaterThan(0);
+      expect(dto.progressTotal).toBeGreaterThanOrEqual(dto.progress as number);
+      expect(dto.newUsableNights).toBeGreaterThanOrEqual(0);
+      expect(dto.newEpochs).toBeGreaterThanOrEqual(0);
       expect(dto.exportDate).toBe("2026-01-07 08:00:00 +0900");
       expect(dto.retryable).toBe(false);
     } finally {
@@ -171,6 +182,50 @@ describe("POST /api/imports", () => {
       expect(spoolFiles(h)).toEqual([]);
       expect(existsSync(h.archiveDir)).toBe(true);
       expect(readdirSync(h.archiveDir).length).toBe(1);
+    } finally {
+      h.close();
+    }
+  });
+
+  test("B-I8 M6 exposes the uncompressed progress total and newly derived counts over HTTP", async () => {
+    const h = harness();
+    try {
+      const response = await upload(h.app, validZip());
+      const { importId } = (await response.json()) as UploadAcceptedDTO;
+      expect((await waitForTerminal(h, importId)).status).toBe("done");
+      const detail = await h.app.request(`/api/imports/${importId}`);
+      const dto = (await detail.json()) as Record<string, unknown>;
+      expect(dto.progressTotal).toBeGreaterThan(0);
+      expect(dto.progress).toBe(dto.progressTotal);
+      const usableNights = h.db
+        .query(
+          "SELECT COUNT(DISTINCT unit_day) AS count FROM metric_values WHERE metric='sleep_h' AND usable=1",
+        )
+        .get() as { count: number };
+      const epochs = h.db.query("SELECT COUNT(*) AS count FROM epochs").get() as { count: number };
+      expect(dto.newUsableNights).toBe(usableNights.count);
+      expect(dto.newEpochs).toBe(epochs.count);
+    } finally {
+      h.close();
+    }
+  });
+
+  test("B-I5 L5 mount removes expired spools and orphaned upload parts", () => {
+    const h = harness();
+    try {
+      mkdirSync(h.spoolDir, { recursive: true });
+      const expired = `${h.spoolDir}/expired.zip`;
+      const part = `${h.spoolDir}/orphan.part`;
+      writeFileSync(expired, "old spool");
+      writeFileSync(part, "interrupted upload");
+      const old = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      utimesSync(expired, old, old);
+      createApp({
+        db: h.db,
+        upload: { dbPath: h.dbPath, archiveDir: h.archiveDir, spoolDir: h.spoolDir },
+      });
+      expect(existsSync(expired)).toBe(false);
+      expect(existsSync(part)).toBe(false);
     } finally {
       h.close();
     }
@@ -208,6 +263,9 @@ describe("POST /api/imports", () => {
       const row = await waitForTerminal(h, importId);
       expect(row.status).toBe("failed");
       expect(row.error).toBeTruthy();
+      expect(h.db.query("SELECT stage FROM imports WHERE id = ?").get(importId)).toEqual({
+        stage: "parsing",
+      });
       expect(h.db.inTransaction).toBe(false);
       const left = h.db.query("SELECT COUNT(*) AS n FROM records").get() as { n: number };
       expect(left.n).toBe(0); // the open batch was rolled back, nothing half-written
@@ -237,7 +295,7 @@ describe("POST /api/imports", () => {
       expect(get.status).toBe(200);
       const item = (await get.json()) as Record<string, unknown>;
       expect(item.retryable).toBe(true);
-      expect(item.stage).toBe("failed");
+      expect(item.stage).toBe("queued");
       expect(item.error).toContain("injected first attempt failure");
 
       const retry = await h.app.request(`/api/imports/${importId}/retry`, { method: "POST" });

@@ -20,6 +20,8 @@ export interface ImportSummary extends WriteCounters {
   exportVersion: string | null;
   exportDate: string | null;
   malformedDates: number;
+  newUsableNights: number;
+  newEpochs: number;
   durationMs: number;
   status: "done" | "failed";
 }
@@ -87,7 +89,10 @@ export async function runImport(
         yield chunk;
       }
     }
-    db.run(`UPDATE imports SET progress = 0 WHERE id = ?`, [id]);
+    db.run(`UPDATE imports SET progress = 0, progress_total = ? WHERE id = ?`, [
+      handle.uncompressedSize,
+      id,
+    ]);
     const stats = await parseExportXml(trackedChunks(), {
       onRecord: (row) => {
         checkAborted();
@@ -117,19 +122,48 @@ export async function runImport(
     refreshSources(db, id);
 
     // Keep the current derived snapshot readable until this entire rebuild commits.
+    const priorUsableNights = Number(
+      (
+        db
+          .query(
+            "SELECT COUNT(DISTINCT unit_day) AS count FROM metric_values WHERE metric = 'sleep_h' AND usable = 1",
+          )
+          .get() as { count: number }
+      ).count,
+    );
+    const priorEpochs = Number(
+      (db.query("SELECT COUNT(*) AS count FROM epochs").get() as { count: number }).count,
+    );
     setStatus("deriving");
     derive(db);
+    const nextUsableNights = Number(
+      (
+        db
+          .query(
+            "SELECT COUNT(DISTINCT unit_day) AS count FROM metric_values WHERE metric = 'sleep_h' AND usable = 1",
+          )
+          .get() as { count: number }
+      ).count,
+    );
+    const nextEpochs = Number(
+      (db.query("SELECT COUNT(*) AS count FROM epochs").get() as { count: number }).count,
+    );
+    const newUsableNights = Math.max(0, nextUsableNights - priorUsableNights);
+    const newEpochs = Math.max(0, nextEpochs - priorEpochs);
 
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");
     db.run(
-      `UPDATE imports SET progress = ?, records_seen = ?, records_inserted = ?, records_deduped = ?,
-         duration_ms = ?, export_version = ?, export_date = ? WHERE id = ?`,
+      `UPDATE imports SET progress = ?, progress_total = ?, records_seen = ?, records_inserted = ?, records_deduped = ?,
+         new_usable_nights = ?, new_epochs = ?, duration_ms = ?, export_version = ?, export_date = ? WHERE id = ?`,
       [
         parsedBytes,
+        handle.uncompressedSize,
         stats.recordCount,
         counters.inserted,
         counters.deduped,
+        newUsableNights,
+        newEpochs,
         durationMs,
         stats.exportVersion,
         stats.exportDate,
@@ -145,6 +179,8 @@ export async function runImport(
       exportVersion: stats.exportVersion,
       exportDate: stats.exportDate,
       malformedDates,
+      newUsableNights,
+      newEpochs,
       durationMs,
       status: "done",
       ...counters,

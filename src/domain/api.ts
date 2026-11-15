@@ -33,6 +33,9 @@ export interface ImportDTO {
   status: ImportStatus;
   stage?: string | null;
   progress?: number | null;
+  progressTotal?: number | null;
+  newUsableNights?: number | null;
+  newEpochs?: number | null;
   error: string | null;
   exportDate?: string | null;
   retryable?: boolean;

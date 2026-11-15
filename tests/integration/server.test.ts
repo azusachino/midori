@@ -43,7 +43,7 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     expect(res.status).toBe(200);
     const item = (await res.json()) as Record<string, unknown>;
     expect(item.status).toBe("failed");
-    expect(item.stage).toBe("failed");
+    expect(item.stage).toBe("parsing");
     expect(item.error).toBe("interrupted by restart");
     expect(item.retryable).toBe(false);
   });

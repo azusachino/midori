@@ -33,10 +33,11 @@ export function deriveChecks(
     .slice(0, 10);
   const seam = db
     .query(
-      `SELECT seam_day AS day FROM seam_steps
-       WHERE metric = ? AND seam_day >= ? AND seam_day <= ? ORDER BY seam_day DESC LIMIT 1`,
+      `SELECT start_day AS day FROM stints
+       WHERE metric = ? AND start_day > (SELECT MIN(start_day) FROM stints WHERE metric = ?)
+         AND start_day >= ? AND start_day <= ? ORDER BY start_day DESC LIMIT 1`,
     )
-    .get(metric, since, asOfDay) as { day: string } | null;
+    .get(metric, metric, since, asOfDay) as { day: string } | null;
   const event = db
     .query(
       `SELECT day FROM epoch_events WHERE epoch_id = ? AND kind = 'os_update'
@@ -54,10 +55,11 @@ export function deriveChecks(
           (
             db
               .query(
-                `SELECT COUNT(*) AS count FROM nights WHERE date >= ? AND date <= ?
-               AND partial_reason IS NOT NULL`,
+                `SELECT COUNT(*) AS count FROM metric_values
+                 WHERE metric = ? AND epoch_id = ? AND usable = 0
+                   AND unit_day >= ? AND unit_day <= ? AND unit_day <= ?`,
               )
-              .get(oldestRecentDay, newestRecentDay) as { count: number }
+              .get(metric, epochId, oldestRecentDay, newestRecentDay, asOfDay) as { count: number }
           ).count,
         )
       : 0;
@@ -73,13 +75,12 @@ export function deriveChecks(
         ).count,
       )
     : 0;
-  const span = recent.length
-    ? Math.abs(
-        (Date.parse(`${recent[0]}T00:00:00Z`) -
-          Date.parse(`${recent[recent.length - 1]}T00:00:00Z`)) /
-          86_400_000,
-      )
-    : 0;
+  const span =
+    oldestRecentDay && newestRecentDay
+      ? (Date.parse(`${newestRecentDay}T00:00:00Z`) - Date.parse(`${oldestRecentDay}T00:00:00Z`)) /
+          86_400_000 +
+        1
+      : 0;
   return [
     { key: "device_change", flagged: seam !== null, ...(seam ? { day: seam.day } : {}) },
     { key: "os_update", flagged: event !== null, ...(event ? { day: event.day } : {}) },
@@ -93,7 +94,7 @@ export function deriveChecks(
       flagged: tzChangeCount > 0,
       ...(tzChangeCount ? { count: tzChangeCount } : {}),
     },
-    { key: "missing_nights", flagged: span > 10, ...(span > 10 ? { count: Math.ceil(span) } : {}) },
+    { key: "missing_nights", flagged: span > 10, ...(span > 10 ? { count: span } : {}) },
     { key: "low_trust", flagged: spec.trust === "low" },
   ];
 }

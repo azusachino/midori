@@ -16,6 +16,7 @@ export interface ExportXmlHandle {
   /** Entry name that was selected, e.g. 'apple_health_export/export.xml'. */
   entryName: string;
   totalEntries: number;
+  uncompressedSize: number;
   /** All non-directory entry names, for presence logging. */
   entryNames: string[];
   chunks: AsyncIterable<Buffer>;
@@ -109,5 +110,12 @@ export async function openExportXml(zipPath: string): Promise<ExportXmlHandle> {
     readStream.once("error", done);
   });
 
-  return { entryName: entry.fileName, totalEntries: total, entryNames, chunks: readStream, closed };
+  return {
+    entryName: entry.fileName,
+    totalEntries: total,
+    uncompressedSize: entry.uncompressedSize,
+    entryNames,
+    chunks: readStream,
+    closed,
+  };
 }

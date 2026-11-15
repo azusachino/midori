@@ -1,19 +1,9 @@
 import type { Database } from "bun:sqlite";
-import { utcToLocal } from "../domain/dates";
 
 const MAX_INHERITANCE_DAYS = 30;
 const DAY_MS = 86_400_000;
 
 export type EpochKind = "watch" | "phone" | "app" | "other";
-
-export interface EpochInput {
-  id: number;
-  sourceName: string;
-  deviceHw: string | null;
-  deviceSw: string | null;
-  startAt: string;
-  startOffsetMin: number | null;
-}
 
 export interface EpochRow {
   sourceName: string;
@@ -32,21 +22,11 @@ export interface EpochEvent {
   detail: string;
 }
 
-export interface EpochDerivation {
-  epochs: EpochRow[];
-  assignments: Array<{ recordId: number; sourceName: string; deviceHw: string }>;
-  events: EpochEvent[];
-}
-
 function kindOf(deviceHw: string): EpochKind {
   if (deviceHw === "") return "app";
   if (deviceHw.startsWith("Watch")) return "watch";
   if (deviceHw.startsWith("iPhone")) return "phone";
   return "other";
-}
-
-function dayDistance(a: string, b: string): number {
-  return Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / DAY_MS;
 }
 
 function compareVersions(a: string, b: string): -1 | 0 | 1 | null {
@@ -62,129 +42,6 @@ function compareVersions(a: string, b: string): -1 | 0 | 1 | null {
     if (leftPart > rightPart) return 1;
   }
   return 0;
-}
-
-/** Derive device epochs, inheritance assignments, and software update events. */
-export function deriveEpochs(records: readonly EpochInput[]): EpochDerivation {
-  const dated = records.map((record) => ({
-    ...record,
-    day: utcToLocal(record.startAt, record.startOffsetMin ?? 0).localDay,
-  }));
-  const devicesBySource = new Map<string, Map<string, typeof dated>>();
-  for (const record of dated) {
-    if (record.deviceHw === null) continue;
-    const byDay = devicesBySource.get(record.sourceName) ?? new Map<string, typeof dated>();
-    const devicesOnDay = byDay.get(record.day) ?? [];
-    devicesOnDay.push(record);
-    byDay.set(record.day, devicesOnDay);
-    devicesBySource.set(record.sourceName, byDay);
-  }
-  const deviceDaysBySource = new Map(
-    [...devicesBySource].map(([source, byDay]) => [source, [...byDay.keys()].sort()]),
-  );
-
-  const resolved = dated.map((record) => {
-    let deviceHw = record.deviceHw;
-    if (deviceHw === null) {
-      const byDay = devicesBySource.get(record.sourceName);
-      const deviceDays = deviceDaysBySource.get(record.sourceName) ?? [];
-      let low = 0;
-      let high = deviceDays.length;
-      while (low < high) {
-        const middle = (low + high) >>> 1;
-        if ((deviceDays[middle] ?? "") < record.day) low = middle + 1;
-        else high = middle;
-      }
-
-      let nearest: (typeof dated)[number] | undefined;
-      let nearestDayDistance = Number.POSITIVE_INFINITY;
-      let nearestTimeDistance = Number.POSITIVE_INFINITY;
-      for (const dayIndex of [low - 1, low]) {
-        const candidateDay = deviceDays[dayIndex];
-        if (candidateDay === undefined) continue;
-        const distance = dayDistance(record.day, candidateDay);
-        if (distance > MAX_INHERITANCE_DAYS || distance > nearestDayDistance) continue;
-        for (const candidate of byDay?.get(candidateDay) ?? []) {
-          const timeDistance = Math.abs(Date.parse(record.startAt) - Date.parse(candidate.startAt));
-          if (
-            distance < nearestDayDistance ||
-            timeDistance < nearestTimeDistance ||
-            (timeDistance === nearestTimeDistance &&
-              (candidate.deviceHw ?? "").localeCompare(nearest?.deviceHw ?? "") < 0) ||
-            (timeDistance === nearestTimeDistance &&
-              candidate.deviceHw === nearest?.deviceHw &&
-              candidate.id < (nearest?.id ?? Infinity))
-          ) {
-            nearest = candidate;
-            nearestDayDistance = distance;
-            nearestTimeDistance = timeDistance;
-          }
-        }
-      }
-      deviceHw = nearest?.deviceHw ?? "";
-    }
-    return { ...record, deviceHw };
-  });
-
-  const byEpoch = new Map<string, typeof resolved>();
-  for (const record of resolved) {
-    const key = JSON.stringify([record.sourceName, record.deviceHw]);
-    const rows = byEpoch.get(key) ?? [];
-    rows.push(record);
-    byEpoch.set(key, rows);
-  }
-
-  const epochs: EpochRow[] = [];
-  const events: EpochEvent[] = [];
-  for (const rows of byEpoch.values()) {
-    const first = rows[0];
-    if (!first) continue;
-    const days = [...new Set(rows.map((row) => row.day))].sort();
-    epochs.push({
-      sourceName: first.sourceName,
-      deviceHw: first.deviceHw,
-      kind: kindOf(first.deviceHw),
-      firstDay: days[0] as string,
-      lastDay: days[days.length - 1] as string,
-      daysPresent: days.length,
-    });
-
-    const softwareRecords = rows
-      .filter((row) => row.deviceHw !== "" && row.deviceSw !== null)
-      .sort((a, b) => a.startAt.localeCompare(b.startAt) || a.id - b.id);
-    let newestSoftware: string | null = null;
-    for (const record of softwareRecords) {
-      const version = record.deviceSw;
-      if (version === null) continue;
-      if (newestSoftware === null) {
-        if (compareVersions(version, version) !== null) newestSoftware = version;
-        continue;
-      }
-      const order = compareVersions(version, newestSoftware);
-      if (order !== 1) continue;
-      events.push({
-        sourceName: record.sourceName,
-        deviceHw: record.deviceHw,
-        day: record.day,
-        kind: "os_update",
-        detail: `${newestSoftware} → ${version}`,
-      });
-      newestSoftware = version;
-    }
-  }
-
-  epochs.sort(
-    (a, b) => a.sourceName.localeCompare(b.sourceName) || a.deviceHw.localeCompare(b.deviceHw),
-  );
-  return {
-    epochs,
-    assignments: resolved.map(({ id, sourceName, deviceHw }) => ({
-      recordId: id,
-      sourceName,
-      deviceHw,
-    })),
-    events,
-  };
 }
 
 export interface PersistedEpochDerivation {
@@ -250,20 +107,34 @@ function nearestDevice(
   }
   let best: { deviceHw: string; dayDistance: number; timeDistance: number } | null = null;
   const targetDayMs = Date.parse(`${localDay}T00:00:00Z`);
-  for (const index of [low - 1, low]) {
+  const candidateIndexes: number[] = [];
+  for (let index = low - 1; index >= 0; index--) {
+    const candidateDay = sourceDays[index];
+    if (!candidateDay) continue;
+    const distance = Math.abs(Date.parse(`${candidateDay.day}T00:00:00Z`) - targetDayMs) / DAY_MS;
+    if (distance > MAX_INHERITANCE_DAYS) break;
+    candidateIndexes.push(index);
+  }
+  for (let index = low; index < sourceDays.length; index++) {
+    const candidateDay = sourceDays[index];
+    if (!candidateDay) continue;
+    const distance = Math.abs(Date.parse(`${candidateDay.day}T00:00:00Z`) - targetDayMs) / DAY_MS;
+    if (distance > MAX_INHERITANCE_DAYS) break;
+    candidateIndexes.push(index);
+  }
+  for (const index of candidateIndexes) {
     const candidateDay = sourceDays[index];
     if (!candidateDay) continue;
     const dayDistance =
       Math.abs(Date.parse(`${candidateDay.day}T00:00:00Z`) - targetDayMs) / DAY_MS;
-    if (dayDistance > MAX_INHERITANCE_DAYS) continue;
     for (const candidate of candidateDay.candidates) {
       const timeDistance = rangeDistance(firstAt, lastAt, candidate);
       if (
         best === null ||
-        dayDistance < best.dayDistance ||
-        (dayDistance === best.dayDistance && timeDistance < best.timeDistance) ||
-        (dayDistance === best.dayDistance &&
-          timeDistance === best.timeDistance &&
+        timeDistance < best.timeDistance ||
+        (timeDistance === best.timeDistance && dayDistance < best.dayDistance) ||
+        (timeDistance === best.timeDistance &&
+          dayDistance === best.dayDistance &&
           candidate.deviceHw < best.deviceHw)
       )
         best = { deviceHw: candidate.deviceHw, dayDistance, timeDistance };
@@ -280,7 +151,7 @@ export function rebuildEpochs(db: Database): PersistedEpochDerivation {
       `SELECT source_name AS sourceName, ${localDay} AS localDay,
             device_hw AS deviceHw, device_sw AS deviceSw,
             MIN(start_at) AS firstAt, MAX(start_at) AS lastAt, MIN(id) AS firstId
-     FROM records
+     FROM records WHERE device_hw IS NOT NULL
      GROUP BY source_name, 2, device_hw, device_sw
      ORDER BY source_name, 2, firstAt, firstId`,
     )
@@ -328,6 +199,15 @@ export function rebuildEpochs(db: Database): PersistedEpochDerivation {
     deviceDaysBySource.set(row.sourceName, days);
   }
 
+  for (const row of db
+    .query(
+      `SELECT id AS firstId, source_name AS sourceName, ${localDay} AS localDay,
+              device_sw AS deviceSw, start_at AS firstAt, end_at AS lastAt
+       FROM records WHERE device_hw IS NULL ORDER BY source_name, localDay, start_at, id`,
+    )
+    .iterate() as Iterable<EpochGroupRow>)
+    unresolved.push({ ...row, deviceHw: null });
+
   const orderedDeviceDays = new Map<string, DeviceDay[]>();
   for (const [sourceName, days] of deviceDaysBySource)
     orderedDeviceDays.set(
@@ -344,7 +224,7 @@ export function rebuildEpochs(db: Database): PersistedEpochDerivation {
       row.firstAt,
       row.lastAt,
     );
-    inheritedHardwareBySourceDay.set(`${row.sourceName}\0${row.localDay}`, deviceHw);
+    inheritedHardwareBySourceDay.set(`${row.sourceName}\0${row.firstId}`, deviceHw);
     const key = epochMapKey(row.sourceName, deviceHw);
     const epoch = accumulatorByKey.get(key) ?? {
       sourceName: row.sourceName,
@@ -427,12 +307,12 @@ export function rebuildEpochs(db: Database): PersistedEpochDerivation {
     throw error;
   }
   const inheritedEpochIds = new Map<string, number>();
-  for (const [sourceDay, hardware] of inheritedHardwareBySourceDay) {
-    const separator = sourceDay.lastIndexOf("\0");
-    const sourceName = sourceDay.slice(0, separator);
-    const day = sourceDay.slice(separator + 1);
+  for (const [sourceRecord, hardware] of inheritedHardwareBySourceDay) {
+    const separator = sourceRecord.lastIndexOf("\0");
+    const sourceName = sourceRecord.slice(0, separator);
+    const recordId = sourceRecord.slice(separator + 1);
     const epochId = epochIds.get(epochMapKey(sourceName, hardware));
-    if (epochId !== undefined) inheritedEpochIds.set(`${sourceName}\0${day}`, epochId);
+    if (epochId !== undefined) inheritedEpochIds.set(`${sourceName}\0${recordId}`, epochId);
   }
   return { epochs, events, epochIds, inheritedEpochIds };
 }

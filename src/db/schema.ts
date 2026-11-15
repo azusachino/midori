@@ -22,6 +22,9 @@ export const imports = sqliteTable("imports", {
   durationMs: integer("duration_ms"),
   exportDate: text("export_date"),
   olderThanStored: integer("older_than_stored"),
+  progressTotal: integer("progress_total"),
+  newUsableNights: integer("new_usable_nights"),
+  newEpochs: integer("new_epochs"),
 });
 
 export const sources = sqliteTable("sources", {
