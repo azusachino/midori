@@ -230,6 +230,20 @@ describe("daily metrics: sum family", () => {
 });
 
 describe("daily metrics: night-only filter (HRV)", () => {
+  test("uses negative record offsets to derive the local date and time", () => {
+    const { db, path } = freshDb();
+    paths.push(path);
+    const type = "HKQuantityTypeIdentifierHeartRateVariabilitySDNN";
+    insertRecords(db, 1, [{ type, source: "west", startLocal: "2026-01-11 09:00:00", value: 42 }]);
+    db.prepare(
+      "UPDATE records SET start_at = ?, end_at = ?, start_offset_min = ?, end_offset_min = ?",
+    ).run("2026-01-11T04:30:00.000Z", "2026-01-11T04:30:00.000Z", -300, -300);
+    computeDailyMetrics(db, 1);
+    expect(daily(db, "hrv_sdnn")).toMatchObject([
+      { day: "2026-01-10", value: 42, sample_count: 1 },
+    ]);
+    db.close();
+  });
   test("keeps 21:00–09:00 samples, drops daytime samples", () => {
     const { db, path } = freshDb();
     paths.push(path);
@@ -238,12 +252,14 @@ describe("daily metrics: night-only filter (HRV)", () => {
       // night of 01-10: 22:00 on the 10th and 02:00 on the 11th both count
       { type: T, source: "watch", startLocal: "2026-01-10 22:00:00", value: 50 },
       { type: T, source: "watch", startLocal: "2026-01-11 02:00:00", value: 60 },
-      // boundaries: exactly 21:00 kept, exactly 09:00 kept
+      // 21:00 is inclusive; 09:00 is exclusive.
       { type: T, source: "watch", startLocal: "2026-01-10 21:00:00", value: 45 },
-      { type: T, source: "watch", startLocal: "2026-01-11 09:00:00", value: 55 },
+      { type: T, source: "watch", startLocal: "2026-01-11 08:59:59", value: 55 },
+      { type: T, source: "watch", startLocal: "2026-01-11 09:00:00", value: 996 },
       // daytime dropped: 20:59 and 09:01
       { type: T, source: "watch", startLocal: "2026-01-10 20:59:00", value: 999 },
       { type: T, source: "watch", startLocal: "2026-01-11 09:01:00", value: 998 },
+      { type: T, source: "watch", startLocal: "2026-01-11 09:00:01", value: 997 },
       // daytime for a non-nightOnly metric stays: RHR at 12:00
       {
         type: "HKQuantityTypeIdentifierRestingHeartRate",
@@ -254,7 +270,7 @@ describe("daily metrics: night-only filter (HRV)", () => {
     ]);
     computeDailyMetrics(db, 1);
     const hrv = daily(db, "hrv_sdnn");
-    // day 01-10: 21:00(45), 22:00(50) -> median 47.5; day 01-11: 02:00(60), 09:00(55) -> 57.5
+    // day 01-10: 21:00(45), 22:00(50); day 01-11: 02:00(60), 08:59:59(55).
     expect(hrv.length).toBe(2);
     expect(hrv[0]).toMatchObject({ day: "2026-01-10", value: 47.5, sample_count: 2 });
     expect(hrv[1]).toMatchObject({ day: "2026-01-11", value: 57.5, sample_count: 2 });

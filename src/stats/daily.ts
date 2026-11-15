@@ -58,10 +58,13 @@ function* quantityGroups(db: Database, spec: MetricSpec): Generator<GroupRow> {
   const placeholders = spec.types.map(() => "?").join(",");
   // Local day/minute are derived in SQL from the stored UTC instant + offset;
   // rows without an offset (should not exist) yield NULL day and are dropped.
-  const timeExpr = "datetime(start_at, '+' || start_offset_min || ' minutes')";
+  const modifier = "start_offset_min || ' minutes'";
+  const timeExpr = `datetime(start_at, ${modifier})`;
   const dayExpr = `substr(${timeExpr}, 1, 10)`;
-  const hhmm = `substr(${timeExpr}, 12, 5)`;
-  const nightFilter = spec.nightOnly ? `AND (${hhmm} >= '21:00' OR ${hhmm} <= '09:00')` : "";
+  const localTime = `strftime('%H:%M:%f', start_at, ${modifier})`;
+  const nightFilter = spec.nightOnly
+    ? `AND (${localTime} >= '21:00:00.000' OR ${localTime} < '09:00:00.000')`
+    : "";
   const sql =
     `SELECT source_name AS src, ${dayExpr} AS day, value AS v ` +
     `FROM records WHERE type IN (${placeholders}) AND value IS NOT NULL ` +

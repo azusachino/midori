@@ -31,7 +31,7 @@ export const DEFAULT_ARCHIVE_DIR = "data/archive";
 export const DEFAULT_RETENTION_DAYS = 30;
 
 const SNAPSHOT_PREFIX = "midori-";
-const SNAPSHOT_NAME = /^midori-\d{8}-\d{6}\.db$/;
+const SNAPSHOT_NAME = /^midori-\d{8}-\d{6}(?:-\d+)?\.db$/;
 const SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
 const DAY_MS = 86_400_000;
 const MAX_ARCHIVE_SUFFIX = 1000;

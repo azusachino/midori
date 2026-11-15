@@ -198,17 +198,25 @@ describe("pruneBackups", () => {
       backupDir,
       now: new Date(cutoffMs - 1000),
     });
+    const sameSecondOlder = backupDatabase(live, {
+      backupDir,
+      now: new Date(cutoffMs - 1000),
+    });
     const newer = backupDatabase(live, { backupDir, now: new Date(now.getTime() - 1000) });
 
     utimesSync(atBoundary.snapshotPath, new Date(cutoffMs), new Date(cutoffMs));
     utimesSync(oneSecondOlder.snapshotPath, new Date(cutoffMs - 1000), new Date(cutoffMs - 1000));
+    utimesSync(sameSecondOlder.snapshotPath, new Date(cutoffMs - 1000), new Date(cutoffMs - 1000));
     utimesSync(newer.snapshotPath, new Date(now.getTime()), new Date(now.getTime()));
 
     // retentionDays omitted on purpose: the 30-day default must do this.
     const deleted = pruneBackups(backupDir, { now });
 
-    expect(deleted).toEqual([basename(oneSecondOlder.snapshotPath)]);
+    expect(deleted).toEqual(
+      [basename(sameSecondOlder.snapshotPath), basename(oneSecondOlder.snapshotPath)].sort(),
+    );
     expect(existsSync(oneSecondOlder.snapshotPath)).toBe(false);
+    expect(existsSync(sameSecondOlder.snapshotPath)).toBe(false);
     expect(existsSync(atBoundary.snapshotPath)).toBe(true);
     expect(existsSync(newer.snapshotPath)).toBe(true);
   });
