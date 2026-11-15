@@ -20,9 +20,11 @@ contract), [UI design](../docs/ui-design.md), decisions
 - **Behavior first.** Each `B-` rule gets a test or e2e check whose name starts with its id.
 - **Real data stays out of Git.** Real-export checks are recorded as pass/fail plus counts and
   shapes only; screenshots stay in `.tmp/`.
-- **Who does what.** The lead does slices 1–8 (engine and contract) and 17 (Devices). Slices
-  9–16 can be delegated to worker models with a brief. No UI slice merges until its real-data
-  screenshots have actually been looked at.
+- **Who does what** (owner, 2026-11-15). Herdr peers do the implementation: pi on
+  `magpie/codex/gpt-6-luna` takes the engine and API (slices 1–10), and agy on
+  `gemini-4-hydrogen-high` takes the UI (11–17). The lead writes briefs, reviews every diff,
+  runs gates and readouts, and merges; see `tasks/todo.md`. No UI slice merges until its
+  real-data screenshots have actually been looked at.
 - **Reviews.** Gate 0: Fable (done). Gate A: independent review of the engine against
   B-D/B-N/B-F/B-C. Gate C: independent J1–J5 walkthrough on real data.
 - **Ask first.** Any step that deletes stored data. Cluster apply (slice 18).

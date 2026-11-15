@@ -1,0 +1,380 @@
+# midori v1 — task ledger
+
+Source: [tasks/plan.md](plan.md) (merged in PR #1, `6b82101`). The contract is
+[docs/journeys.md](../docs/journeys.md): `B-` ids, with thresholds that live only there. The
+UI is defined in [docs/ui-design.md](../docs/ui-design.md).
+
+**Check a task only when every AC bullet is met and its verification result is recorded
+here** (command, exit code, commit). Real-data results are recorded as counts and pass/fail,
+never measurements.
+
+## Execution model (owner, 2026-11-15)
+
+- **Lead** (Claude Code session):
+  - writes and maintains this ledger
+  - dispatches briefs
+  - reviews every diff
+  - runs gates
+  - pushes and opens/merges PRs
+  - runs the owner-witnessed real-data readouts
+  - persists results here
+- **Engine writer**: Herdr peer `midori-engine`, pi on `magpie/codex/gpt-6-luna`. Takes slices
+  1–10, in order.
+- **UI writer**: Herdr peer `midori-ui`, agy on `gemini-4-hydrogen-high`. Takes slices 11–17.
+- **One writer per worktree.** Each slice runs in `vendor/midori/.worktrees/<slice>` on branch
+  `task/v1-<n>-<name>`, cut from current `main`. Writers commit locally and never push; the
+  lead pushes.
+- **Gates.** Gate A (after slice 8) and Gate C (after slice 17) go to a fresh verifier that
+  did not write the code.
+- **Every slice:**
+  - `bun run check` exits 0
+  - tests named `B-xx …` for each listed rule
+  - no tracked file outside the slice's Files list without a note in the hand-back
+  - no real data in Git
+- **UI slices also:** `make e2e` exits 0, and the lead inspects real-data screenshots before
+  merge.
+
+## Phase 1 — engine
+
+### Slice 1 — Capture `[midori-engine]`
+
+Goal: store device hardware/software and metadata on every record. Re-import fills them on
+existing rows.
+
+- Rules: B-I12 (upsert part), B-I8 (`export_date`), B-D2 groundwork (device-less rows stored
+  as NULL `device_hw`).
+- Files:
+  - `migrations/0002_capture.sql`
+  - `src/db/schema.ts`
+  - `src/ingest/parser.ts`
+  - `src/ingest/mapper.ts`
+  - `src/ingest/store.ts`
+  - `src/domain/types.ts`
+  - `tests/fixtures/model.ts` (+ snapshot), and the matching tests
+- AC:
+  - [ ] Columns `records.device_hw`, `records.device_sw`, `records.meta_json` (JSON object of
+    MetadataEntry key→value, NULL when there is none), and `imports.export_date`.
+  - [ ] The parser extracts `hardware:` and `software:` from the `device` attribute string
+    (`<<HKDevice: …>, name:…, hardware:Watch7,5, software:26.1, …>`). An absent attribute
+    gives NULLs.
+  - [ ] `export_date` is persisted from `<ExportDate value=…>`.
+  - [ ] The store upserts on the existing dedup key and fills `device_hw`, `device_sw` and
+    `meta_json` only where the stored value is NULL. Insert/dedup counts keep their v0
+    meaning.
+  - [ ] Test `B-I12 re-import fills device columns on pre-v1 rows`: import a fixture with the
+    columns stripped (simulating v0 rows), re-import the full fixture, and assert the columns
+    are filled with 0 new records.
+  - [ ] The fixture model gains a device attribute on sensor records, device-less sleep and
+    resting-HR records from a watch source, and `HKTimeZone` metadata on sleep records.
+  - [ ] The insert benchmark (`scripts/bench-insert.ts`) is re-run; throughput loss vs v0 is
+    reported in the hand-back.
+- Verify: `bun run check`; `bun test src/ingest`.
+- Hand-back extra: the expected db-size growth from `meta_json`, estimated by fixture scaling.
+  The lead measures the real number.
+
+### Slice 2 — Derived schema + epochs `[midori-engine]`
+
+Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-update events.
+
+- Rules: B-D1, B-D2, B-D2b, B-D8.
+- Files:
+  - `migrations/0003_derived.sql` (creates `epochs, epoch_events, stints, nights,
+    metric_values, findings` (v1 shape) and `seam_steps`; drops `daily_metrics`,
+    `device_events`, v0 `findings`)
+  - `src/db/schema.ts`
+  - `src/stats/epochs.ts` (+ test)
+  - `tests/fixtures/` additions
+- AC:
+  - [ ] Epoch = `(source_name, device_hw)`; kind from the hardware prefix (`Watch*`, `iPhone*`,
+    other), `app` for `device_hw` NULL with no inheritance.
+  - [ ] B-D2 inheritance exactly as specified (same/adjacent local day, else nearest ≤30
+    days). Tested with device-less sleep/RHR records.
+  - [ ] Fixture + test `B-D1 same-name replacement watch yields two epochs`, with the
+    device-less sleep records following the right epoch on each side of the change.
+  - [ ] `epoch_events` OS-update rows on `software` change within an epoch (B-D8).
+  - [ ] `days_present` counts distinct local days with any record.
+  - [ ] v0 stats modules that read the dropped tables are removed or stubbed so that `bun run
+    check` stays green. The v0 read routes may return 501 until slice 9; list them in the
+    hand-back.
+- Verify: `bun run check`.
+
+### Slice 3 — Minor + sticky primary + seams `[midori-engine]`
+
+- Rules: B-D3, B-D4, B-D4b, B-D5, B-D6, B-D7.
+- Files:
+  - `src/domain/metrics.ts` (add `kind: overnight|daytime|trendOnly`, `floor`, `minSamples`,
+    `sleep_hr`; SpO2 becomes overnight; `vo2max` becomes trendOnly; steps trust note mentions
+    primary-only sums)
+  - `src/stats/stints.ts` (+ test)
+  - `src/stats/seams.ts` (+ test)
+- AC:
+  - [ ] Minor per (metric, epoch) over all history, using the 6-of-28 rule.
+  - [ ] Sticky primary with kind priority and the (a)/(b)/(c) switch conditions. Stints are
+    persisted.
+  - [ ] Fixture `B-D3 minor app single sample → no seam`.
+  - [ ] Fixture `B-D4 alternating phone/watch step days → no seam`.
+  - [ ] Fixture `B-D4 watch replaced by same-kind watch → one seam at the first unit of the
+    7-run`.
+  - [ ] B-D4b: no fallback value on units the primary did not record.
+  - [ ] `seam_steps`: an offset when there are ≥7 shared usable units, else a step (≥7 per side,
+    up to 28). Values are never adjusted.
+  - [ ] Depends on usability from slice 4. Until then, stint and seam logic take a
+    `usable(unit)` predicate, and the tests pass explicit predicates.
+- Verify: `bun run check`.
+
+### Slice 4 — Nights `[midori-engine]`
+
+- Rules: B-N1–B-N9.
+- Files:
+  - `src/stats/nights.ts` (rewrite) + test
+  - `src/domain/dates.ts` (zone helpers)
+  - fixtures
+- AC:
+  - [ ] Night zone from `HKTimeZone` (IANA name) on that night's sleep records, else the
+    export offset. Local times are computed in that zone.
+  - [ ] Boundary tests: 14:59/15:00, 08:59/09:00, the 09:00–12:00 continuation (≤60 min after
+    the last asleep end vs a nap), and HRV at 21:00.
+  - [ ] Sleep stages from the `sleep_h` primary epoch only.
+  - [ ] `sleep_hr` = median HR inside asleep intervals.
+  - [ ] Export-cut partial (window to 12:00 the next day vs `export_date`). A short night is
+    **not** partial.
+  - [ ] `tz_change` when the zone differs from the previous night's.
+  - [ ] Fixture `B-N1 night abroad assigned in its own zone`.
+  - [ ] Daytime unit = local day in the export offset; the export day is not usable.
+- Verify: `bun run check`.
+
+### Slice 5 — Values + baselines `[midori-engine]`
+
+- Rules: B-N7, B-F1–B-F6, B-F8, B-F11.
+- Files: `src/stats/values.ts` (+ test), `src/stats/baselines.ts` (rewrite) + test,
+  `src/domain/stats.ts` (remove 1e-9 branch, add floor/cap).
+- AC:
+  - [ ] `metric_values` rows with `usable` from the two-level rule.
+  - [ ] Ordinal windows over usable units of the current stint. Recent gate includes the
+    14-day recency check. Baseline gate gives warming_up <7, early 7–13, full ≥14.
+  - [ ] σ = max(1.4826·MAD, floor); |z| capped at 10 for display and ranking.
+  - [ ] Fixture `B-F4 flat resp baseline → bounded z`.
+  - [ ] Confidence is an ordered decision list (B-F6), one test per branch.
+  - [ ] k-outside and onset ("since" vs "at least since"), with tests for the one-unit
+    tolerance and the open-ended run.
+  - [ ] The v0 spike fixture is updated: it now expects new stint → warming_up → (after 14
+    usable units) a low-confidence z, plus a seam step. Never a raw ≥4σ alert across the seam.
+- Verify: `bun run check`.
+
+### Slice 6 — Findings + checks `[midori-engine]`
+
+- Rules: B-F7, B-F9, B-F10, B-C1–B-C6.
+- Files:
+  - `src/stats/findings.ts` (rewrite) + test
+  - `src/stats/checks.ts` (+ test)
+  - `src/domain/api.ts` (finding/check types only)
+- AC:
+  - [ ] Ranking exactly per B-F7, including daytime only when notable/alert and trend-only
+    excluded.
+  - [ ] Each check has a test for clear and for flagged.
+  - [ ] Wording is emitted as keys plus params (e.g. `{dir: "lower"}`), not English sentences.
+    The UI copy module renders them. A test asserts that no finding text contains "caused",
+    "better" or "worse".
+- Verify: `bun run check`.
+
+### Slice 7 — Atomic derive + CLI + readout `[midori-engine, lead readout]`
+
+- Rules: B-I6, B-I9 (measurement).
+- Files:
+  - `src/stats/derive.ts` (+ test)
+  - `src/ingest/import.ts` (call derive)
+  - `src/cli.ts` (`changes [--json]`)
+- AC:
+  - [ ] Derive runs epochs → stints → nights → values → findings/checks/seam steps in one
+    transaction.
+  - [ ] Test: a derive that throws midway leaves the previous derived rows intact.
+  - [ ] Evidence queries are bounded to units ≤ as-of.
+  - [ ] `bun src/cli.ts changes --json` prints the ranked rows.
+- Readout (lead + owner, real data, recorded here without values):
+  - [ ] re-import over the existing db fills `device_hw` (count of NULL sensor rows → 0)
+  - [ ] end-to-end time
+  - [ ] the new watch is one epoch for all overnight metrics, including sleep and RHR
+  - [ ] seam count per metric (steps ≤ 2)
+  - [ ] no metric blank because of the seam
+  - [ ] † thresholds sane, or tuned with a note in journeys.md
+- Verify: `bun run check`; CLI on the fixture db.
+
+### Slice 8 — Import job hardening `[midori-engine]`
+
+- Rules: B-I1–B-I5, B-I7, B-I8, B-I10, B-I12 (backup cap).
+- Files:
+  - `src/http/import.ts`
+  - `src/ingest/zip.ts` (central-directory check)
+  - `migrations/0004_imports.sql` (stage, progress, status CHECK + `deriving`)
+  - `src/server.ts` (restart reconcile)
+  - `src/backup/backup.ts`
+  - `tests/integration/upload.test.ts`
+- AC:
+  - [ ] The non-export zip is rejected with 400 before any job row exists.
+  - [ ] 409 while an import is running.
+  - [ ] `POST /api/imports/:id/retry` works while the spool exists (24 h), and 410 after.
+  - [ ] `progress` is updated while parsing.
+  - [ ] Orphaned non-terminal rows are marked failed on boot.
+  - [ ] Backups keep ≤30 days and ≤10 snapshots.
+  - [ ] Each rule has an integration test through HTTP.
+- Verify: `bun run check`.
+
+**Gate A**: fresh verifier on slices 1–8 against B-D/B-N/B-F/B-C/B-I. Report persisted in
+`docs/reviews/`.
+
+## Phase 2 — read API + MCP
+
+### Slice 9 — REST v1 `[midori-engine]`
+
+- Rules: B-R1–B-R4 (payload side), B-I3, B-I4, B-A4 (`nights`).
+- Files:
+  - `src/http/queries.ts` (rewrite)
+  - `src/http/routes.ts`
+  - `src/domain/api.ts` (DTOs)
+  - `tests/integration/api.test.ts`
+  - `scripts/smoke-container.ts`
+  - `scripts/e2e/run.ts`
+- AC:
+  - [ ] The routes listed in design.md "Interfaces" are implemented, read-only over the
+    derived tables.
+  - [ ] Integration test: fixture zip → `/api/changes` (rank order, states, as-of, freshness,
+    notice, last usable night).
+  - [ ] `range=all` returns weekly medians.
+  - [ ] v0 read routes remain until slice 11.
+  - [ ] Smoke and e2e harness use `/api/changes`.
+- Verify: `bun run check`; `make e2e` (the v0 UI may show empty data, but the harness passes).
+
+### Slice 10 — MCP v1 `[midori-engine, lead checkpoint]`
+
+- Rules: B-A1–B-A4.
+- Files: `src/mcp/server.ts`, `src/mcp/server.test.ts`, `src/mcp/http.test.ts`.
+- AC:
+  - [ ] Tools `changes, metric_series, nights, epochs, list_imports`.
+  - [ ] A parity test shows `changes()` == `/api/changes` rows.
+  - [ ] Descriptions carry the B-A3 sentences.
+  - [ ] Unknown metric → `isError` with the known list.
+- Checkpoint B (lead): a fresh pi session answers "what changed recently, and could the device
+  explain it?" via MCP only. The transcript is reviewed for cause assertions and recorded here
+  without values.
+
+## Phase 3 — UI
+
+### Slice 11 — Foundation + v0 removal `[midori-ui]`
+
+May start right away in its own worktree. It merges after slice 9.
+
+- Files:
+  - `web/**` (rebuild)
+  - `package.json` (`tailwindcss`, `@tailwindcss/vite`, `echarts`, shadcn deps, the chosen
+    router; remove `uplot`)
+  - `components.json`
+  - `tests/web/*` (delete or replace)
+  - `e2e/*.spec.ts`
+  - at merge: v0 read routes removed from `src/http/routes.ts`
+- AC:
+  - [ ] Tailwind v4 + shadcn initialized, dark-first. Tokens come from ui-design §9, and the
+    contrast/colorblind check for the tints and the 6-color epoch palette is recorded in the
+    hand-back.
+  - [ ] Router chosen (TanStack Router or React Router), with the reason in the hand-back.
+    Routes `/`, `/metrics`, `/metrics/:key`, `/devices`, `/import` exist, with placeholder
+    bodies where needed.
+  - [ ] Shell: sidebar (top tabs under 768 px), top-bar freshness (B-R1), importing pill.
+  - [ ] `EChart` wrapper (init, resize, dispose, theme from CSS variables, per-module imports)
+    with a smoke render.
+  - [ ] Typed API client against the slice 9 DTOs. Until slice 9 merges, it is built against
+    `src/domain/api.ts` from the slice 9 branch, or stubbed with fixtures.
+  - [ ] Empty (B-R4), loading and read-error primitives.
+  - [ ] Bundle ≤300 KB gzipped, measured and reported.
+  - [ ] e2e: shell plus empty state at 1440 and 390 px.
+- Verify: `bun run check`; `make e2e`; screenshots in `.tmp/v1-ui/` (lead inspects).
+
+### Slice 12 — Import page `[midori-ui]`
+
+- Rules: B-I1–B-I5, B-I7, B-I10, B-I11 (UI side); ui-design §8.
+- AC:
+  - [ ] Every §8 state is implemented with its copy.
+  - [ ] XHR upload with byte progress and the "keep this tab open" line.
+  - [ ] Stepper driven by stage/progress.
+  - [ ] Summary card; history; Retry.
+- Tests (e2e):
+  - [ ] fixture upload → summary
+  - [ ] duplicate → "Nothing new"
+  - [ ] bad file → B-I1 copy
+  - [ ] 390 px upload through the file input
+- Verify: `bun run check`; `make e2e`; real-data screenshot inspection by the lead.
+
+### Slice 13 — Changes page `[midori-ui]`
+
+- Rules: B-F7–B-F11 (display), B-R1–B-R4; ui-design §4.
+- AC:
+  - [ ] `FindingRow` with every slot.
+  - [ ] Overnight list (all metrics); daytime list (notable/alert only).
+  - [ ] Warming-up notice; stale banner; last usable night card.
+  - [ ] Every §4 state.
+  - [ ] Copy rendered from finding keys through `web/src/copy.ts`.
+  - [ ] Each state has an e2e check at 1440 and 390 px.
+- Verify: as slice 12.
+
+### Slice 14 — Metric chart + detail shell `[midori-ui]`
+
+- ui-design §5 chart spec and states.
+- AC:
+  - [ ] `MetricChart`: polygon band via a `custom` series, recent `markArea`, seam `markLine`
+    with offset/step label, OS-update marks, hollow partial points, faint minor points,
+    `connectNulls:false`, legend outside.
+  - [ ] Range control and `dataZoom` synced to the URL.
+  - [ ] FindingRow header; recent-units table.
+  - [ ] Trend-only and not-found states; text summary plus hidden table.
+- Verify: as slice 12.
+
+### Slice 15 — Checks + evidence sheet `[midori-ui]`
+
+- AC:
+  - [ ] Checks panel (B-C1–B-C6).
+  - [ ] `?night=` opens the `Sheet` (full-screen under 768 px) with evidence from
+    `/units/:day`.
+  - [ ] Keyboard and Esc work.
+  - [ ] "No samples stored" state.
+- Verify: as slice 12.
+
+### Slice 16 — Long view + Metrics index `[midori-ui]`
+
+- AC:
+  - [ ] Calendar per year (`calendar` + `custom` series), with hatched partial cells and seam
+    marks.
+  - [ ] `/metrics` grid from `/api/metrics`, ordered overnight → daytime → trend-only.
+  - [ ] Every §6 state.
+- Verify: as slice 12.
+
+### Slice 17 — Devices page `[midori-ui]`
+
+- AC:
+  - [ ] Epoch timeline from days present (`custom` series; a sparse app shows as dots).
+  - [ ] Per-epoch cards with role, baseline state, offset/step labels and OS updates.
+  - [ ] Single-epoch and occasional-sources states.
+- Verify: as slice 12.
+
+**Gate C**: fresh verifier walks J1–J5 on real data and checks `make e2e`. Report persisted
+in `docs/reviews/`.
+
+## Phase 4 — ship
+
+### Slice 18 — Ship `[lead]`
+
+- Steps:
+  - README rewrite
+  - image + synthetic smoke
+  - harus-k3s tag bump PR (its gates)
+  - **owner-authorized** apply
+  - pre-deploy snapshot
+  - real export re-imported on the cluster through the upsert
+  - MCP check from the workstation
+  - backup CronJob fires
+- Rollback = previous tag + snapshot restore, which needs owner approval.
+
+## Dispatch log
+
+| Slice | Writer (peer, model) | Worktree / branch | Base | Status |
+| --- | --- | --- | --- | --- |
+| 1 | — | — | — | not started |
+| 11 | — | — | — | not started |
