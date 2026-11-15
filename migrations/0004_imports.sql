@@ -1,5 +1,5 @@
+-- midori:foreign-keys-off
 -- Persist import lifecycle details and allow the atomic derived-data phase.
-PRAGMA defer_foreign_keys = ON;
 
 CREATE TABLE imports_v4 (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,10 +21,10 @@ CREATE TABLE imports_v4 (
 );
 
 INSERT INTO imports_v4 (
-  id, created_at, zip_name, zip_size, status, error, export_version,
+  id, created_at, zip_name, zip_size, status, error, export_version, export_date,
   records_seen, records_inserted, records_deduped, duration_ms
 )
-SELECT id, created_at, zip_name, zip_size, status, error, export_version,
+SELECT id, created_at, zip_name, zip_size, status, error, export_version, export_date,
        records_seen, records_inserted, records_deduped, duration_ms
 FROM imports;
 
