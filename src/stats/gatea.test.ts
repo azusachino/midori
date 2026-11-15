@@ -25,20 +25,46 @@ function record(
   hardware: string | null,
   source = "Synthetic Source",
   minute = 20 * 60,
-  extra: { valueStr?: string; metaJson?: string } = {},
+  extra: { valueStr?: string; metaJson?: string; deviceSw?: string; offsetMin?: number } = {},
 ): void {
   const start = new Date(Date.parse(`${day}T00:00:00.000Z`) + minute * 60_000).toISOString();
   const end = new Date(Date.parse(start) + 60_000).toISOString();
   db.run(
     `INSERT INTO records (type, source_name, start_at, end_at, start_offset_min, end_offset_min,
-      value, value_str, import_id, device_hw, meta_json)
-     VALUES (?, ?, ?, ?, 0, 0, ?, ?, 1, ?, ?)`,
-    [type, source, start, end, value, extra.valueStr ?? null, hardware, extra.metaJson ?? null],
+      value, value_str, import_id, device_hw, device_sw, meta_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+    [
+      type,
+      source,
+      start,
+      end,
+      extra.offsetMin ?? 0,
+      extra.offsetMin ?? 0,
+      value,
+      extra.valueStr ?? null,
+      hardware,
+      extra.deviceSw ?? null,
+      extra.metaJson ?? null,
+    ],
   );
 }
 
-function addSteps(day: string, value: number, hw: string, source = "Synthetic Source"): void {
-  record("HKQuantityTypeIdentifierStepCount", day, value, hw, source, 12 * 60);
+function addSteps(
+  day: string,
+  value: number,
+  hw: string,
+  source = "Synthetic Source",
+  deviceSw?: string,
+): void {
+  record(
+    "HKQuantityTypeIdentifierStepCount",
+    day,
+    value,
+    hw,
+    source,
+    12 * 60,
+    deviceSw === undefined ? {} : { deviceSw },
+  );
 }
 
 function addSleep(day: string, hw: string | null = "Watch1,1", source = "Synthetic Watch"): void {
@@ -87,6 +113,66 @@ describe("Gate A production-path regressions", () => {
         )
         .get(),
     ).toEqual({ device_hw: "Watch1,1" });
+  });
+
+  test("B-C2 flags a recent OS update through the production derive", () => {
+    freshDb("2026-02-20 12:00:00 +0000");
+    const days = addSleepSpan("2026-01-01", 50);
+    for (const [index, day] of days.entries())
+      addSteps(
+        day,
+        index < 42 ? 1000 : 1800,
+        "Watch1,1",
+        "Synthetic Source",
+        index < 35 ? "10.0" : "11.0",
+      );
+    derive(db);
+    expect(finding("steps")?.checks.find((check) => check.key === "os_update")?.flagged).toBe(true);
+  });
+
+  test("B-C4 flags a recent timezone offset change through the production derive", () => {
+    freshDb("2026-02-20 12:00:00 +0000");
+    const days = Array.from({ length: 50 }, (_, i) => addDays("2026-01-01", i));
+    for (const [index, day] of days.entries()) {
+      if (index >= 44) {
+        record(
+          "HKCategoryTypeIdentifierSleepAnalysis",
+          day,
+          null,
+          "Watch1,1",
+          "Synthetic Watch",
+          23 * 60,
+          {
+            valueStr: "HKCategoryValueSleepAnalysisAsleepCore",
+            metaJson: JSON.stringify({ HKTimeZone: "Asia/Tokyo" }),
+            offsetMin: 540,
+          },
+        );
+      } else {
+        addSleep(day);
+      }
+      addSteps(day, index < 42 ? 1000 : 1800, "Watch1,1");
+    }
+    derive(db);
+    expect(finding("steps")?.checks.find((check) => check.key === "tz_change")?.flagged).toBe(true);
+  });
+
+  test("B-C6 flags low trust on a derived active-energy finding", () => {
+    freshDb("2026-02-20 12:00:00 +0000");
+    addSleepSpan("2026-01-01", 40);
+    for (let i = 0; i < 40; i++)
+      record(
+        "HKQuantityTypeIdentifierActiveEnergyBurned",
+        addDays("2026-01-01", i),
+        i < 33 ? 1000 : 5000,
+        "Watch1,1",
+      );
+    const result = derive(db);
+    expect(
+      result.findings
+        .find((row) => row.metric === "active_kj")
+        ?.checks.find((check) => check.key === "low_trust")?.flagged,
+    ).toBe(true);
   });
 
   test("B-C3 M2 flags metric-level unusable units skipped around the recent window", () => {
