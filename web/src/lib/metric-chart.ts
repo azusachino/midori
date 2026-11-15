@@ -278,8 +278,36 @@ function zToneFor(z: number | null): RecentUnitRow["zTone"] {
   return "within";
 }
 
+/** True only when the current stint has an established baseline (not warming/insufficient/trend-only). */
+export function hasEstablishedBaseline(series: MetricSeriesDTO): boolean {
+  if (series.kind === "trendOnly") return false;
+  const f = series.finding;
+  if (!f) return false;
+  if (f.state === "warming_up" || f.state === "insufficient") return false;
+  return f.baselineMedian !== null;
+}
+
+/**
+ * Filters `series.band` to only the current stint's baseline ranks (ui-design §5).
+ * Returns [] when there is no established baseline (warming_up, insufficient, trend-only),
+ * and excludes any points from earlier stints.
+ */
+export function currentStintBandPoints(series: MetricSeriesDTO): BandPointDTO[] {
+  if (!hasEstablishedBaseline(series) || series.band.length === 0) {
+    return [];
+  }
+  const currentStint = [...series.stints].sort((a, b) =>
+    a.endDay < b.endDay ? 1 : a.endDay > b.endDay ? -1 : 0,
+  )[0];
+  if (!currentStint) {
+    return [...series.band];
+  }
+  return series.band.filter((b) => b.day >= currentStint.startDay && b.day <= currentStint.endDay);
+}
+
 /** Builds up to `limit` newest non-minor units for the recent-units table below the chart. */
 export function buildRecentUnitRows(series: MetricSeriesDTO, limit = 7): RecentUnitRow[] {
+  const baselined = hasEstablishedBaseline(series);
   const epochById = new Map(series.epochs.map((e) => [e.id, e]));
   const nonMinorUnits = series.units
     .filter((u) => {
@@ -299,12 +327,13 @@ export function buildRecentUnitRows(series: MetricSeriesDTO, limit = 7): RecentU
         : unitLabel
           ? `${formatMetricNumber(u.value, series.metric, series.unit)} ${unitLabel}`
           : formatMetricNumber(u.value, series.metric, series.unit);
+    const effectiveZ = baselined ? u.z : null;
     return {
       day: u.day,
       dayLabel: formatDayWithWeekday(u.day),
       valueText: valStr,
-      zText: formatZScore(u.z),
-      zTone: zToneFor(u.z),
+      zText: formatZScore(effectiveZ),
+      zTone: zToneFor(effectiveZ),
       deviceLabel: epoch?.label ?? `#${u.epochId}`,
       partialNote: !u.usable
         ? (formatPartialReason(u.partialReason) ?? copy.chart.partialGeneric)
@@ -323,6 +352,7 @@ export function buildBaselineSummary(series: MetricSeriesDTO): string {
   }
   const f = series.finding;
   if (
+    !hasEstablishedBaseline(series) ||
     !f ||
     f.baselineMedian === null ||
     f.baselineLow === null ||
@@ -337,7 +367,9 @@ export function buildBaselineSummary(series: MetricSeriesDTO): string {
   const medianText = unitLabel
     ? `${formatVal(f.baselineMedian)} ${unitLabel}`
     : formatVal(f.baselineMedian);
-  const bandDays = series.band.map((b) => b.day).sort();
+  const bandDays = currentStintBandPoints(series)
+    .map((b) => b.day)
+    .sort();
   const firstBandDay = bandDays[0];
   const lastBandDay = bandDays[bandDays.length - 1];
   const spanText =
@@ -395,7 +427,7 @@ export function buildMetricChartSummary(series: MetricSeriesDTO): string {
 /** Builds an accessible hidden table mirror for screen readers (`EChart` `table` prop). */
 export function buildMetricChartTable(series: MetricSeriesDTO): ChartTableData {
   const epochById = new Map(series.epochs.map((e) => [e.id, e]));
-  const bandByDay = new Map(series.band.map((b) => [b.day, b]));
+  const bandByDay = new Map(currentStintBandPoints(series).map((b) => [b.day, b]));
   const unitLabel = displayUnit(series.metric, series.unit);
 
   return {

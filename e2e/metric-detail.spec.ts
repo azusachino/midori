@@ -86,10 +86,24 @@ test("Metric detail: wrist_temp negative values + step seam + OS update + partia
   await expect(srTable).toContainText("Synthetic Phone App");
   const rows180d = await srTable.locator("tbody tr").count();
 
-  // Recent units table shows 7 non-minor rows, partial flags, tz note, and warming baseline summary
+  // Recent units table shows 7 non-minor rows, partial flags, tz note, '—' vs usual (no baseline), and no band columns
   const recentTable = page.getByTestId("recent-units-table");
   await expect(recentTable).toBeVisible();
   await expect(recentTable.locator("tbody tr")).toHaveCount(7);
+  await expect(recentTable.locator("tbody tr td:nth-child(3)")).toHaveText([
+    "—",
+    "—",
+    "—",
+    "—",
+    "—",
+    "—",
+    "—",
+  ]);
+  // Warming_up wrist_temp must have no baseline band anywhere (all Baseline low/high cells are '—')
+  const bandCells = await srTable
+    .locator("tbody tr td:nth-child(5), tbody tr td:nth-child(6)")
+    .allTextContents();
+  expect(bandCells.every((t) => t === "—")).toBe(true);
   await expect(recentTable).toContainText(copy.chart.partialExportCut);
   await expect(recentTable).toContainText(copy.chart.partialBelowMin);
   await expect(recentTable).toContainText(copy.chart.tzShiftNote);
@@ -148,7 +162,7 @@ test("Metric detail §5 states: computed HRV baseline, trend-only vo2max, insuff
   const errors = trackErrors(page, { allow500: true });
   await stubChangesAndMetrics(page);
 
-  // 1. Computed HRV with Watch A+B band, offset seam, FindingRow header, baseline summary
+  // 1. Computed HRV with current-stint-only band (Watch B baseline only, no Watch A band), offset seam, FindingRow header
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/metrics/hrv_sdnn?range=90d&tab=chart");
   await expect(page.getByTestId("finding-row-hrv_sdnn")).toContainText("lower than usual");
@@ -156,6 +170,16 @@ test("Metric detail §5 states: computed HRV baseline, trend-only vo2max, insuff
   await expect(page.getByTestId("baseline-summary")).toContainText(
     "Baseline: 21 nights · median 55 ms (49–61)",
   );
+  const hrvWatchABandCells = await page
+    .getByTestId("metric-echart")
+    .locator('table tbody tr:has-text("2026-01-10") td:nth-child(5)')
+    .allTextContents();
+  expect(hrvWatchABandCells).toEqual(["—"]);
+  const hrvWatchBBandCells = await page
+    .getByTestId("metric-echart")
+    .locator('table tbody tr:has-text("2026-02-01") td:nth-child(5)')
+    .allTextContents();
+  expect(hrvWatchBBandCells).toEqual(["48"]);
   await snap(page, "s14-hrv-1440.png");
   await assertNoHorizontalOverflow(page);
 

@@ -10,6 +10,7 @@ import {
   buildCalendarDays,
   buildMetricChartSummary,
   buildMetricChartTable,
+  currentStintBandPoints,
   findRecentWindow,
   formatPartialReason,
   formatSeamLabel,
@@ -81,9 +82,10 @@ export function MetricChart({
     return map;
   }, [days]);
 
+  const currentBand = useMemo(() => currentStintBandPoints(series), [series]);
   const bandSegments = useMemo(
-    () => buildBandPolygons(series.band, dayIndex),
-    [series.band, dayIndex],
+    () => buildBandPolygons(currentBand, dayIndex),
+    [currentBand, dayIndex],
   );
   const recentWindow = useMemo(() => findRecentWindow(series.units), [series.units]);
   const summary = useMemo(() => buildMetricChartSummary(series), [series]);
@@ -112,7 +114,7 @@ export function MetricChart({
       for (const u of series.units) {
         unitByEpochDay.set(`${u.epochId}:${u.day}`, u);
       }
-      const bandByDay = new Map(series.band.map((b) => [b.day, b]));
+      const bandByDay = new Map(currentBand.map((b) => [b.day, b]));
       const seamsByDay = new Map(series.seams.map((s) => [s.seamDay, s]));
       const osUpdatesByDay = new Map(series.osUpdates.map((u) => [u.day, u]));
 
@@ -519,7 +521,7 @@ export function MetricChart({
         series: echartsSeries,
       };
     },
-    [bandSegments, dayIndex, days, recentWindow, series, zoomWindow],
+    [bandSegments, currentBand, dayIndex, days, recentWindow, series, zoomWindow],
   );
 
   return (

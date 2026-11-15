@@ -7,7 +7,9 @@ import {
   buildMetricChartSummary,
   buildMetricChartTable,
   buildRecentUnitRows,
+  currentStintBandPoints,
   formatSeamLabel,
+  hasEstablishedBaseline,
   nextWiderRange,
   resolveZoomWindow,
   shouldIncludeZero,
@@ -37,23 +39,26 @@ describe("metric-chart helpers", () => {
     ]);
   });
 
-  test("buildBandPolygons handles negative wrist_temp values and splits gaps cleanly", () => {
+  test("buildBandPolygons handles negative wrist_temp coordinates and splits gaps cleanly", () => {
     const series = metricSeriesStub("wrist_temp", "180d");
-    expect(series.band.length).toBeGreaterThan(20);
-    expect(series.band.every((b) => b.low < 0 && b.high < 0)).toBe(true);
-
     const days = buildCalendarDays(series);
     const dayIndex = new Map(days.map((d, idx) => [d, idx]));
-    const polygons = buildBandPolygons(series.band, dayIndex);
-    expect(polygons.length).toBe(1);
-    expect(polygons[0]?.minLow).toBeLessThan(0);
-    expect(polygons[0]?.maxHigh).toBeLessThan(0);
-
     const d0 = days[0];
     const d1 = days[1];
+    const d2 = days[2];
     const d5 = days[5];
     const d6 = days[6];
-    if (!d0 || !d1 || !d5 || !d6) throw new Error("expected calendar days");
+    if (!d0 || !d1 || !d2 || !d5 || !d6) throw new Error("expected calendar days");
+
+    const negBand = [
+      { day: d0, low: -0.46, high: -0.1, median: -0.28 },
+      { day: d1, low: -0.44, high: -0.08, median: -0.26 },
+      { day: d2, low: -0.45, high: -0.09, median: -0.27 },
+    ];
+    const negPolygons = buildBandPolygons(negBand, dayIndex);
+    expect(negPolygons).toHaveLength(1);
+    expect(negPolygons[0]?.minLow).toBeCloseTo(-0.46);
+    expect(negPolygons[0]?.maxHigh).toBeCloseTo(-0.08);
 
     // Split across a gap in days
     const withGap = [
@@ -66,6 +71,36 @@ describe("metric-chart helpers", () => {
     expect(splitPolygons).toHaveLength(2);
     expect(splitPolygons[0]?.points).toHaveLength(2);
     expect(splitPolygons[1]?.points).toHaveLength(2);
+  });
+
+  test("currentStintBandPoints draws band only for current stint when baseline exists", () => {
+    const wt = metricSeriesStub("wrist_temp", "180d");
+    expect(hasEstablishedBaseline(wt)).toBe(false);
+    expect(wt.band).toEqual([]);
+    expect(currentStintBandPoints(wt)).toEqual([]);
+
+    // Even if server/stub sent an earlier-stint band while warming_up, client suppresses it
+    const wtWithStaleBand = {
+      ...wt,
+      band: [{ day: "2026-01-15", low: -0.4, high: -0.1, median: -0.25 }],
+    };
+    expect(currentStintBandPoints(wtWithStaleBand)).toEqual([]);
+
+    // Computed HRV draws band only on current Watch B stint (not Watch A before seam)
+    const hrv = metricSeriesStub("hrv_sdnn", "90d");
+    expect(hasEstablishedBaseline(hrv)).toBe(true);
+    const currentHrvBand = currentStintBandPoints(hrv);
+    expect(currentHrvBand.length).toBeGreaterThan(15);
+    expect(currentHrvBand.every((b) => b.day >= "2026-01-24")).toBe(true);
+
+    // Even if Watch A points leaked into series.band, currentStintBandPoints filters them out
+    const hrvWithLeakedWatchABand = {
+      ...hrv,
+      band: [{ day: "2025-12-10", low: 52, high: 66, median: 60 }, ...hrv.band],
+    };
+    expect(
+      currentStintBandPoints(hrvWithLeakedWatchABand).every((b) => b.day >= "2026-01-24"),
+    ).toBe(true);
   });
 
   test("formatSeamLabel distinguishes offset (B-D6) from non-separable step (B-D7)", () => {
@@ -119,11 +154,22 @@ describe("metric-chart helpers", () => {
     expect(full).toBeNull();
   });
 
-  test("buildRecentUnitRows skips minor epochs, preserves partial/tz flags, and limits to 7 rows", () => {
+  test("buildRecentUnitRows skips minor epochs, preserves partial/tz flags, and suppresses z without baseline", () => {
     const wt = metricSeriesStub("wrist_temp", "180d");
     const rows = buildRecentUnitRows(wt, 7);
     expect(rows).toHaveLength(7);
     expect(rows.every((r) => r.deviceLabel !== "Synthetic Phone App")).toBe(true);
+    // No established baseline on warming_up wrist_temp -> 'vs usual' is always '—'
+    expect(rows.every((r) => r.zText === "—" && r.zTone === "none")).toBe(true);
+
+    // Even if raw unit z numbers were provided during warming_up or insufficient, zText stays '—'
+    const spo2 = metricSeriesStub("spo2", "90d");
+    const spo2WithFakeZ = {
+      ...spo2,
+      units: spo2.units.map((u) => ({ ...u, z: 2.3 })),
+    };
+    const spo2Rows = buildRecentUnitRows(spo2WithFakeZ, 7);
+    expect(spo2Rows.every((r) => r.zText === "—" && r.zTone === "none")).toBe(true);
 
     const mar1 = rows.find((r) => r.day === "2026-03-01");
     expect(mar1?.partialNote).toBe("partial (export cut)");
@@ -136,7 +182,7 @@ describe("metric-chart helpers", () => {
   test("baseline summary, chart summary, hidden table, and nextWiderRange reflect metric state", () => {
     const hrv = metricSeriesStub("hrv_sdnn", "90d");
     expect(buildBaselineSummary(hrv)).toContain("Baseline: 21 nights · median 55 ms (49–61)");
-    expect(buildMetricChartSummary(hrv)).toContain("1 device seam (Feb 22)");
+    expect(buildMetricChartSummary(hrv)).toContain("1 device seam (Jan 24)");
     const hrvTable = buildMetricChartTable(hrv);
     expect(hrvTable.columns.map((c) => c.key)).toEqual([
       "day",

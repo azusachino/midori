@@ -502,11 +502,12 @@ interface MetricFixtureSpec {
   baseB: number;
   recentShift: number;
   spread: number;
+  seamDay: string;
   seamKind: "offset" | "step";
   seamValue: number;
   bandLowOffset: number;
   bandHighOffset: number;
-  bandMode: "both" | "watchAOnly" | "none";
+  bandMode: "currentStint" | "none";
 }
 
 function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): MetricFixtureSpec {
@@ -516,11 +517,12 @@ function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): Me
       baseB: 0.24,
       recentShift: 0.04,
       spread: 0.14,
+      seamDay: "2026-02-22",
       seamKind: "step",
       seamValue: 0.52,
       bandLowOffset: -0.18,
       bandHighOffset: 0.17,
-      bandMode: "watchAOnly",
+      bandMode: "none",
     };
   }
   if (metric === "hrv_sdnn") {
@@ -529,11 +531,12 @@ function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): Me
       baseB: 55,
       recentShift: -13,
       spread: 6.5,
+      seamDay: "2026-01-24",
       seamKind: "offset",
       seamValue: -5,
       bandLowOffset: -7,
       bandHighOffset: 7,
-      bandMode: "both",
+      bandMode: "currentStint",
     };
   }
   if (metric === "spo2" || metric === "hrv_rmssd") {
@@ -542,6 +545,7 @@ function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): Me
       baseB: metric === "spo2" ? 97.6 : 44,
       recentShift: 0.2,
       spread: metric === "spo2" ? 0.6 : 5,
+      seamDay: "2026-02-22",
       seamKind: "offset",
       seamValue: 0.2,
       bandLowOffset: -1,
@@ -555,6 +559,7 @@ function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): Me
       baseB: 45.2,
       recentShift: 0.8,
       spread: 1.1,
+      seamDay: "2026-02-22",
       seamKind: "step",
       seamValue: 2.7,
       bandLowOffset: -1.5,
@@ -568,11 +573,12 @@ function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): Me
       baseB: 6000,
       recentShift: 3100,
       spread: 1100,
+      seamDay: "2026-01-24",
       seamKind: "offset",
       seamValue: -200,
       bandLowOffset: -1800,
       bandHighOffset: 1800,
-      bandMode: "both",
+      bandMode: "currentStint",
     };
   }
   if (metric === "active_kj") {
@@ -581,11 +587,12 @@ function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): Me
       baseB: 1650,
       recentShift: 150,
       spread: 260,
+      seamDay: "2026-01-24",
       seamKind: "offset",
       seamValue: -50,
       bandLowOffset: -450,
       bandHighOffset: 450,
-      bandMode: "both",
+      bandMode: "currentStint",
     };
   }
   const defaults: Record<string, { base: number; spread: number; shift: number }> = {
@@ -603,11 +610,12 @@ function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): Me
     baseB: d.base,
     recentShift: d.shift,
     spread: d.spread,
+    seamDay: "2026-01-24",
     seamKind: "offset",
     seamValue: 0,
     bandLowOffset: -d.spread * 1.4,
     bandHighOffset: d.spread * 1.4,
-    bandMode: "both",
+    bandMode: "currentStint",
   };
 }
 
@@ -617,15 +625,28 @@ function roundMetricVal(value: number, metric: string): number {
   return Number(value.toFixed(1));
 }
 
+function countDaysInclusive(startDay: string, endDay: string): number {
+  const diff = Math.round(
+    (Date.parse(`${endDay}T00:00:00Z`) - Date.parse(`${startDay}T00:00:00Z`)) / 86_400_000,
+  );
+  return Math.max(1, diff + 1);
+}
+
 export function metricSeriesStub(metric: string, range: MetricRange = "180d"): MetricSeriesDTO {
   const spec = METRICS[metric];
   const kind = metricKindFor(metric);
   const asOfDay = "2026-03-01";
-  const seamDay = "2026-02-22";
+  const fx = metricFixtureSpecFor(metric, kind);
+  const seamDay = fx.seamDay;
   const totalDays = 210;
   const visibleDays = rangeWindowDays(range);
   const cutoffDay = isoDayOffset(asOfDay, -(Math.min(visibleDays, totalDays) - 1));
-  const fx = metricFixtureSpecFor(metric, kind);
+  const finding = kind === "trendOnly" ? null : buildStubFinding(metric);
+  const hasBaseline =
+    finding !== null &&
+    finding.state !== "warming_up" &&
+    finding.state !== "insufficient" &&
+    fx.bandMode === "currentStint";
 
   const epochs: MetricSeriesDTO["epochs"] = [
     {
@@ -692,7 +713,7 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
       const usable = !(isExportCut || isBelowMin);
       const partialReason = isExportCut ? "export_cut" : isBelowMin ? "below_minimum" : null;
       const sigmaEst = Math.max(0.05, fx.spread * 0.65);
-      const z = fx.bandMode === "none" ? null : Number(((value - base) / sigmaEst).toFixed(2));
+      const z = hasBaseline ? Number(((value - base) / sigmaEst).toFixed(2)) : null;
 
       units.push({
         day,
@@ -707,14 +728,13 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
       });
     }
 
-    const includeBandForDay = fx.bandMode === "both" || (fx.bandMode === "watchAOnly" && !isWatchB);
-    if (includeBandForDay) {
-      const medianBase = isWatchB ? fx.baseB : fx.baseA;
+    // Current stint baseline band only (excludes earlier stints and recent/warming states)
+    if (hasBaseline && isWatchB && !isRecent) {
       band.push({
         day,
-        low: roundMetricVal(medianBase + fx.bandLowOffset, metric),
-        high: roundMetricVal(medianBase + fx.bandHighOffset, metric),
-        median: roundMetricVal(medianBase, metric),
+        low: roundMetricVal(fx.baseB + fx.bandLowOffset, metric),
+        high: roundMetricVal(fx.baseB + fx.bandHighOffset, metric),
+        median: roundMetricVal(fx.baseB, metric),
       });
     }
 
@@ -741,7 +761,7 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
     kind: fx.seamKind,
     value: fx.seamValue,
     nOld: 28,
-    nNew: 8,
+    nNew: countDaysInclusive(seamDay, asOfDay),
   } as const;
 
   const allOsUpdates = [
@@ -749,8 +769,13 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
     { epochId: 2, day: "2026-02-26", fromSw: "10.4", toSw: "11.0" },
   ];
 
+  const prevStintEnd = isoDayOffset(seamDay, -1);
   const stints = [
-    { epochId: 1, startDay: cutoffDay < seamDay ? cutoffDay : "2026-02-15", endDay: "2026-02-21" },
+    {
+      epochId: 1,
+      startDay: cutoffDay < seamDay ? cutoffDay : prevStintEnd,
+      endDay: prevStintEnd,
+    },
     { epochId: 2, startDay: seamDay, endDay: asOfDay },
   ].filter((s) => s.endDay >= cutoffDay);
 
@@ -762,7 +787,7 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
     trustNote: spec?.trustNote ?? "Trend metric.",
     range,
     asOfDay,
-    finding: kind === "trendOnly" ? null : buildStubFinding(metric),
+    finding,
     epochs,
     units,
     band,
