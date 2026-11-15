@@ -86,11 +86,15 @@ test("Metric detail: wrist_temp negative values + step seam + OS update + partia
   await expect(srTable).toContainText("Synthetic Phone App");
   const rows180d = await srTable.locator("tbody tr").count();
 
-  // Recent units table shows 7 non-minor rows, partial flags, tz note, '—' vs usual (no baseline), and no band columns
+  // Recent units table lists 7 usable non-minor rows plus skipped partial rows with '—' vs usual
   const recentTable = page.getByTestId("recent-units-table");
   await expect(recentTable).toBeVisible();
-  await expect(recentTable.locator("tbody tr")).toHaveCount(7);
+  await expect(recentTable.locator("tbody tr")).toHaveCount(9);
+  await expect(recentTable.locator('tbody tr[data-usable="true"]')).toHaveCount(7);
+  await expect(recentTable.locator('tbody tr[data-usable="false"]')).toHaveCount(2);
   await expect(recentTable.locator("tbody tr td:nth-child(3)")).toHaveText([
+    "—",
+    "—",
     "—",
     "—",
     "—",

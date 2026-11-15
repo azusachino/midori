@@ -154,10 +154,34 @@ describe("metric-chart helpers", () => {
     expect(full).toBeNull();
   });
 
-  test("buildRecentUnitRows skips minor epochs, preserves partial/tz flags, and suppresses z without baseline", () => {
+  test("buildRecentUnitRows collects 7 usable units, grays out skipped partial rows with '—' in vs usual, and suppresses z without baseline", () => {
+    const hrv = metricSeriesStub("hrv_sdnn", "90d");
+    const hrvWithFakePartialZ = {
+      ...hrv,
+      units: hrv.units.map((u) => (u.usable ? u : { ...u, z: -2.8 })),
+    };
+    const hrvRows = buildRecentUnitRows(hrvWithFakePartialZ, 7);
+    expect(hrvRows.filter((r) => r.usable)).toHaveLength(7);
+    expect(hrvRows).toHaveLength(9);
+
+    const mar1Hrv = hrvRows.find((r) => r.day === "2026-03-01");
+    expect(mar1Hrv?.usable).toBe(false);
+    expect(mar1Hrv?.zText).toBe("—");
+    expect(mar1Hrv?.zTone).toBe("none");
+    expect(mar1Hrv?.partialNote).toBe("partial (export cut)");
+
+    const feb24Hrv = hrvRows.find((r) => r.day === "2026-02-24");
+    expect(feb24Hrv?.usable).toBe(false);
+    expect(feb24Hrv?.zText).toBe("—");
+    expect(feb24Hrv?.partialNote).toBe("partial (too few samples)");
+
+    const feb25Hrv = hrvRows.find((r) => r.day === "2026-02-25");
+    expect(feb25Hrv?.usable).toBe(true);
+    expect(feb25Hrv?.zText).not.toBe("—");
+
     const wt = metricSeriesStub("wrist_temp", "180d");
     const rows = buildRecentUnitRows(wt, 7);
-    expect(rows).toHaveLength(7);
+    expect(rows.filter((r) => r.usable)).toHaveLength(7);
     expect(rows.every((r) => r.deviceLabel !== "Synthetic Phone App")).toBe(true);
     // No established baseline on warming_up wrist_temp -> 'vs usual' is always '—'
     expect(rows.every((r) => r.zText === "—" && r.zTone === "none")).toBe(true);

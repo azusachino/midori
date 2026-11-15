@@ -331,8 +331,12 @@ export function MetricDetailPage() {
                         {recentRows.map((row) => (
                           <TableRow
                             key={`${row.day}-${row.deviceLabel}`}
+                            data-usable={row.usable ? "true" : "false"}
                             data-selected={search.night === row.day ? "true" : undefined}
-                            className={cn(search.night === row.day && "bg-muted/40")}
+                            className={cn(
+                              search.night === row.day && "bg-muted/40",
+                              !row.usable && "bg-muted/20 text-muted-foreground opacity-75",
+                            )}
                           >
                             <TableCell className="px-2 tabular-nums sm:px-3">
                               <button
@@ -340,12 +344,20 @@ export function MetricDetailPage() {
                                 data-day={row.day}
                                 data-testid={`recent-row-btn-${row.day}`}
                                 onClick={handleRowButtonClick}
-                                className="text-left font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring cursor-pointer tabular-nums"
+                                className={cn(
+                                  "text-left font-medium underline decoration-border-strong underline-offset-4 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring cursor-pointer tabular-nums",
+                                  row.usable ? "text-foreground" : "text-muted-foreground",
+                                )}
                               >
                                 {row.dayLabel}
                               </button>
                             </TableCell>
-                            <TableCell className="px-2 font-medium tabular-nums sm:px-3">
+                            <TableCell
+                              className={cn(
+                                "px-2 tabular-nums sm:px-3",
+                                row.usable ? "font-medium" : "text-muted-foreground",
+                              )}
+                            >
                               {row.valueText}
                             </TableCell>
                             <TableCell

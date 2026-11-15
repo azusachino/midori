@@ -713,7 +713,7 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
       const usable = !(isExportCut || isBelowMin);
       const partialReason = isExportCut ? "export_cut" : isBelowMin ? "below_minimum" : null;
       const sigmaEst = Math.max(0.05, fx.spread * 0.65);
-      const z = hasBaseline ? Number(((value - base) / sigmaEst).toFixed(2)) : null;
+      const z = hasBaseline && usable ? Number(((value - base) / sigmaEst).toFixed(2)) : null;
 
       units.push({
         day,
@@ -724,7 +724,7 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
         partialReason,
         tzChange: day === "2026-02-27",
         z,
-        isRecent,
+        isRecent: usable && day >= "2026-02-21",
       });
     }
 

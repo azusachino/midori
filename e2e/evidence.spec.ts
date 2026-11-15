@@ -101,6 +101,22 @@ test("checks panel (B-C1–B-C6), evidence sheet interactions, URL sync, Esc, co
   await expect(page.getByTestId("check-row-low_trust")).toHaveAttribute("data-status", "clear");
   await expect(page.getByTestId("check-row-low_trust")).toContainText("Trust: moderate");
 
+  const recentTable = page.getByTestId("recent-units-table");
+  await expect(recentTable.locator('tbody tr[data-usable="true"]')).toHaveCount(7);
+  await expect(recentTable.locator('tbody tr[data-usable="false"]')).toHaveCount(2);
+  const mar1Row = recentTable.locator("tbody tr", {
+    has: page.getByTestId("recent-row-btn-2026-03-01"),
+  });
+  await expect(mar1Row).toHaveAttribute("data-usable", "false");
+  await expect(mar1Row.locator("td").nth(2)).toHaveText("—");
+  await expect(mar1Row.locator("td").nth(4)).toContainText("partial (export cut)");
+  const feb24Row = recentTable.locator("tbody tr", {
+    has: page.getByTestId("recent-row-btn-2026-02-24"),
+  });
+  await expect(feb24Row).toHaveAttribute("data-usable", "false");
+  await expect(feb24Row.locator("td").nth(2)).toHaveText("—");
+  await expect(feb24Row.locator("td").nth(4)).toContainText("partial (too few samples)");
+
   await assertNoHorizontalOverflow(page);
   await snap(page, "s15-hrv-checks-1440.png");
 

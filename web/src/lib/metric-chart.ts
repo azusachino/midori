@@ -305,21 +305,40 @@ export function currentStintBandPoints(series: MetricSeriesDTO): BandPointDTO[] 
   return series.band.filter((b) => b.day >= currentStint.startDay && b.day <= currentStint.endDay);
 }
 
-/** Builds up to `limit` newest non-minor units for the recent-units table below the chart. */
-export function buildRecentUnitRows(series: MetricSeriesDTO, limit = 7): RecentUnitRow[] {
+/**
+ * Builds the recent-units table below the chart (B-F1: recent window counts
+ * `usableLimit` usable non-minor units only; skipped partial units between/before
+ * them appear as muted rows with "—" in vs-usual and partial reason in Notes).
+ */
+export function buildRecentUnitRows(series: MetricSeriesDTO, usableLimit = 7): RecentUnitRow[] {
   const baselined = hasEstablishedBaseline(series);
   const epochById = new Map(series.epochs.map((e) => [e.id, e]));
-  const nonMinorUnits = series.units
+  const sortedNonMinor = series.units
     .filter((u) => {
       const epoch = epochById.get(u.epochId);
       return !epoch?.minor;
     })
-    .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0))
-    .slice(0, limit);
+    .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
+
+  const selectedUnits: MetricUnitPointDTO[] = [];
+  let usableCount = 0;
+  for (const unit of sortedNonMinor) {
+    const isUsableUnit = unit.usable && unit.value !== null;
+    if (!isUsableUnit && unit.value === null && unit.partialReason === "missing") {
+      continue;
+    }
+    selectedUnits.push(unit);
+    if (isUsableUnit) {
+      usableCount += 1;
+      if (usableCount >= usableLimit) break;
+    } else if (selectedUnits.length >= usableLimit + 7) {
+      break;
+    }
+  }
 
   const unitLabel = displayUnit(series.metric, series.unit);
 
-  return nonMinorUnits.map((u) => {
+  return selectedUnits.map((u) => {
     const epoch = epochById.get(u.epochId);
     const valStr =
       u.value === null
@@ -327,7 +346,7 @@ export function buildRecentUnitRows(series: MetricSeriesDTO, limit = 7): RecentU
         : unitLabel
           ? `${formatMetricNumber(u.value, series.metric, series.unit)} ${unitLabel}`
           : formatMetricNumber(u.value, series.metric, series.unit);
-    const effectiveZ = baselined ? u.z : null;
+    const effectiveZ = baselined && u.usable ? u.z : null;
     return {
       day: u.day,
       dayLabel: formatDayWithWeekday(u.day),
