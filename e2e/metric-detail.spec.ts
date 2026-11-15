@@ -90,6 +90,11 @@ test("Metric detail against real server: hrv_sdnn baseline band, seam, OS update
 
   // Range segmented controls: 90d, all (weekly), and reload with URL zoom
   const baseline180d = await page.getByTestId("baseline-summary").textContent();
+  // M5: baseline band covers ranks 8-35 only, stopping before the 'last 7' recent window
+  expect(baseline180d).not.toContain("Nov 14");
+  const nov14SrCells = srTable.locator("tbody tr", { hasText: "2026-11-14" }).locator("td");
+  await expect(nov14SrCells.nth(4)).toHaveText("—");
+  await expect(nov14SrCells.nth(5)).toHaveText("—");
 
   await page.getByRole("button", { name: "90d" }).click();
   await expect(page).toHaveURL(/range=90d/);

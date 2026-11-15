@@ -587,14 +587,16 @@ export function ImportPage() {
                 (row) => row.id !== completedJob.id && row.status === "done",
               );
               const showNewEpochs = completedJob.newEpochs.length > 0 && hasPriorDoneImport;
-              if (!completedJob.exportDate && !showNewEpochs) return null;
+              const dataThroughDay =
+                completedJob.asOfDay !== undefined
+                  ? completedJob.asOfDay
+                  : (completedJob.exportDate?.slice(0, 10) ?? null);
+              if (!dataThroughDay && !showNewEpochs) return null;
               return (
                 <p className="text-xs text-muted-foreground tabular-nums">
                   {[
-                    completedJob.exportDate
-                      ? copy.pages.import.summary.dataThrough(
-                          formatDayWithWeekday(completedJob.exportDate.slice(0, 10)),
-                        )
+                    dataThroughDay
+                      ? copy.pages.import.summary.dataThrough(formatDayWithWeekday(dataThroughDay))
                       : null,
                     showNewEpochs
                       ? copy.pages.import.summary.newEpochs(completedJob.newEpochs)

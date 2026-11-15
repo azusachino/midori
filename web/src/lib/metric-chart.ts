@@ -603,11 +603,15 @@ export function currentStintBandPoints(series: MetricSeriesDTO): BandPointDTO[] 
     return [];
   }
   const bounds = getSeriesRangeBounds(series);
+  const recentWindow = findRecentWindow(series.units);
   const currentStint = [...series.stints].sort((a, b) =>
     a.endDay < b.endDay ? 1 : a.endDay > b.endDay ? -1 : 0,
   )[0];
   const filtered = series.band.filter((b) => {
     if (currentStint && (b.day < currentStint.startDay || b.day > currentStint.endDay)) {
+      return false;
+    }
+    if (recentWindow && b.day >= recentWindow.startDay) {
       return false;
     }
     return isDayInRangeBounds(b.day, bounds);
@@ -787,9 +791,12 @@ export function buildBaselineSummary(series: MetricSeriesDTO): string {
   const currentStint = [...series.stints].sort((a, b) =>
     a.endDay < b.endDay ? 1 : a.endDay > b.endDay ? -1 : 0,
   )[0];
+  const recentWindow = findRecentWindow(series.units);
   const bandDays = series.band
     .filter(
-      (b) => !currentStint || (b.day >= currentStint.startDay && b.day <= currentStint.endDay),
+      (b) =>
+        (!currentStint || (b.day >= currentStint.startDay && b.day <= currentStint.endDay)) &&
+        (!recentWindow || b.day < recentWindow.startDay),
     )
     .map((b) => b.day)
     .sort();

@@ -745,8 +745,8 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
       });
     }
 
-    // Current stint baseline band only (excludes earlier stints and recent/warming states)
-    if (hasBaseline && isWatchB && !isRecent) {
+    // Current stint baseline band only (ranks 8–35 of current stint, excluding recent window and unusable gap day)
+    if (hasBaseline && isWatchB && day < "2026-02-21" && day !== gapDay) {
       band.push({
         day,
         low: roundMetricVal(fx.baseB + fx.bandLowOffset, metric),

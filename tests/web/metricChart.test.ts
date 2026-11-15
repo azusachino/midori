@@ -454,7 +454,7 @@ describe("metric-chart helpers", () => {
     expect(allRows.some((r) => r.day === "2024-01-01")).toBe(false);
     expect(allRows.every((r) => r.zText !== "—")).toBe(true);
     expect(buildBaselineSummary(allWeeklySteps)).toBe(
-      "Baseline: 28 days · median 6.0k (4.5k–7.5k) · Jan 24–Feb 22",
+      "Baseline: 28 days · median 6.0k (4.5k–7.5k) · Jan 24–Feb 20",
     );
 
     const days100Weeks = Array.from({ length: 100 }, (_, i) => {
@@ -541,5 +541,17 @@ describe("metric-chart helpers", () => {
         expect(layout.spanEnd).toBeLessThanOrEqual(300);
       }
     }
+  });
+
+  test("currentStintBandPoints and buildBaselineSummary exclude 'last 7' days even if present in band (M5)", () => {
+    const hrv = metricSeriesStub("hrv_sdnn", "180d");
+    const injected = {
+      ...hrv,
+      band: [...hrv.band, { day: "2026-02-25", low: 52, high: 66, median: 59 }],
+    };
+    const pts = currentStintBandPoints(injected);
+    expect(pts.every((b) => b.day < "2026-02-21")).toBe(true);
+    expect(buildBaselineSummary(injected)).toContain("Jan 24–Feb 20");
+    expect(buildBaselineSummary(injected)).not.toContain("Feb 25");
   });
 });

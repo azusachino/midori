@@ -73,6 +73,7 @@ test("real server 1440px: fixture upload -> summary", async ({ page }) => {
   await expect(summary).toBeVisible({ timeout: 15_000 });
   await expect(summary).not.toContainText(copy.pages.import.summary.nothingNew);
   await expect(summary).toContainText("new records");
+  await expect(summary).toContainText("Data through Nov 14 (Sat)");
   await expect(
     summary.getByRole("link", { name: copy.pages.import.summary.seeChangesCta }),
   ).toHaveAttribute("href", "/");
@@ -230,6 +231,7 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
           error: null,
           exportVersion: "11",
           exportDate: "2026-03-02",
+          asOfDay: "2026-03-01",
           recordsSeen: 432,
           recordsInserted: 420,
           recordsDeduped: 12,
@@ -307,6 +309,7 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
         error: null,
         exportVersion: "11",
         exportDate: "2026-03-02",
+        asOfDay: "2026-03-01",
         recordsSeen: 432,
         recordsInserted: 420,
         recordsDeduped: 12,
@@ -349,6 +352,7 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
   await expect(summary).toContainText("420 new records");
   await expect(summary).toContainText("12 already known");
   await expect(summary).toContainText("3 new usable nights");
+  await expect(summary).toContainText("Data through Mar 1 (Sun)");
   await expect(summary).toContainText("New device: Synthetic Watch C");
   expect(errors).toEqual([]);
 });
