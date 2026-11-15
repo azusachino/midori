@@ -66,6 +66,16 @@ function jsonError(error: string, status: ErrorStatus, retryable: boolean, impor
   return { body, status } as const;
 }
 
+function parseEpochLabels(value: string | null): string[] {
+  if (value === null) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function sanitizeName(raw: string | undefined): string {
   const name = basename((raw ?? "").trim());
   return name.length > 0 && name.length <= 255 ? name : "upload.zip";
@@ -137,7 +147,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       progress: number | null;
       progress_total: number | null;
       new_usable_nights: number | null;
-      new_epochs: number | null;
+      new_epochs: string | null;
       error: string | null;
       export_version: string | null;
       export_date: string | null;
@@ -158,7 +168,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       progress: row.progress,
       progressTotal: row.progress_total,
       newUsableNights: row.new_usable_nights,
-      newEpochs: row.new_epochs,
+      newEpochs: parseEpochLabels(row.new_epochs),
       error: row.error,
       exportVersion: row.export_version,
       exportDate: row.export_date,

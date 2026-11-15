@@ -21,7 +21,7 @@ export interface ImportSummary extends WriteCounters {
   exportDate: string | null;
   malformedDates: number;
   newUsableNights: number;
-  newEpochs: number;
+  newEpochs: string[];
   durationMs: number;
   status: "done" | "failed";
 }
@@ -131,8 +131,13 @@ export async function runImport(
           .get() as { count: number }
       ).count,
     );
-    const priorEpochs = Number(
-      (db.query("SELECT COUNT(*) AS count FROM epochs").get() as { count: number }).count,
+    const priorEpochs = new Set(
+      (
+        db.query("SELECT source_name, device_hw FROM epochs").all() as Array<{
+          source_name: string;
+          device_hw: string;
+        }>
+      ).map((epoch) => JSON.stringify([epoch.source_name, epoch.device_hw])),
     );
     setStatus("deriving");
     derive(db);
@@ -145,11 +150,20 @@ export async function runImport(
           .get() as { count: number }
       ).count,
     );
-    const nextEpochs = Number(
-      (db.query("SELECT COUNT(*) AS count FROM epochs").get() as { count: number }).count,
-    );
+    const nextEpochs = db.query("SELECT source_name, device_hw, kind FROM epochs").all() as Array<{
+      source_name: string;
+      device_hw: string;
+      kind: string;
+    }>;
     const newUsableNights = Math.max(0, nextUsableNights - priorUsableNights);
-    const newEpochs = Math.max(0, nextEpochs - priorEpochs);
+    const newEpochs = nextEpochs
+      .filter((epoch) => !priorEpochs.has(JSON.stringify([epoch.source_name, epoch.device_hw])))
+      .map((epoch) => {
+        const device =
+          epoch.device_hw || `${epoch.kind.slice(0, 1).toUpperCase()}${epoch.kind.slice(1)}`;
+        return `${epoch.source_name} (${device})`;
+      })
+      .sort((a, b) => a.localeCompare(b));
 
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");
@@ -163,7 +177,7 @@ export async function runImport(
         counters.inserted,
         counters.deduped,
         newUsableNights,
-        newEpochs,
+        JSON.stringify(newEpochs),
         durationMs,
         stats.exportVersion,
         stats.exportDate,

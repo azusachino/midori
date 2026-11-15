@@ -165,7 +165,7 @@ describe("POST /api/imports", () => {
       expect(dto.progress).toBeGreaterThan(0);
       expect(dto.progressTotal).toBeGreaterThanOrEqual(dto.progress as number);
       expect(dto.newUsableNights).toBeGreaterThanOrEqual(0);
-      expect(dto.newEpochs).toBeGreaterThanOrEqual(0);
+      expect(Array.isArray(dto.newEpochs)).toBe(true);
       expect(dto.exportDate).toBe("2026-01-07 08:00:00 +0900");
       expect(dto.retryable).toBe(false);
     } finally {
@@ -187,24 +187,60 @@ describe("POST /api/imports", () => {
     }
   });
 
-  test("B-I8 M6 exposes the uncompressed progress total and newly derived counts over HTTP", async () => {
+  test("B-I8 M6 exposes uncompressed progress and per-import new usable nights and epoch labels", async () => {
     const h = harness();
     try {
-      const response = await upload(h.app, validZip());
-      const { importId } = (await response.json()) as UploadAcceptedDTO;
+      const first = await upload(h.app, validZip());
+      const firstId = ((await first.json()) as UploadAcceptedDTO).importId;
+      expect((await waitForTerminal(h, firstId)).status).toBe("done");
+      const priorEpochs = new Set(
+        (
+          h.db.query("SELECT source_name, device_hw FROM epochs").all() as Array<{
+            source_name: string;
+            device_hw: string;
+          }>
+        ).map((epoch) => JSON.stringify([epoch.source_name, epoch.device_hw])),
+      );
+      const priorUsableNights = (
+        h.db
+          .query(
+            "SELECT COUNT(DISTINCT unit_day) AS count FROM metric_values WHERE metric='sleep_h' AND usable=1",
+          )
+          .get() as { count: number }
+      ).count;
+      const expandedXml = general.xml.replace(
+        "</HealthData>",
+        '<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic New Watch" unit="count" startDate="2026-01-06 12:00:00 +0000" endDate="2026-01-06 12:00:00 +0000" value="1200" device="&lt;&lt;HKDevice: 0x3&gt;, name:Synthetic New Watch, hardware:Watch9,1, software:26.2, model:Watch&gt;"/></HealthData>',
+      );
+      const second = await upload(
+        h.app,
+        buildStoredZip([{ name: "apple_health_export/export.xml", data: expandedXml }]),
+      );
+      const { importId } = (await second.json()) as UploadAcceptedDTO;
       expect((await waitForTerminal(h, importId)).status).toBe("done");
       const detail = await h.app.request(`/api/imports/${importId}`);
       const dto = (await detail.json()) as Record<string, unknown>;
       expect(dto.progressTotal).toBeGreaterThan(0);
       expect(dto.progress).toBe(dto.progressTotal);
-      const usableNights = h.db
-        .query(
-          "SELECT COUNT(DISTINCT unit_day) AS count FROM metric_values WHERE metric='sleep_h' AND usable=1",
-        )
-        .get() as { count: number };
-      const epochs = h.db.query("SELECT COUNT(*) AS count FROM epochs").get() as { count: number };
-      expect(dto.newUsableNights).toBe(usableNights.count);
-      expect(dto.newEpochs).toBe(epochs.count);
+      const usableNights = (
+        h.db
+          .query(
+            "SELECT COUNT(DISTINCT unit_day) AS count FROM metric_values WHERE metric='sleep_h' AND usable=1",
+          )
+          .get() as { count: number }
+      ).count;
+      expect(dto.newUsableNights).toBe(Math.max(0, usableNights - priorUsableNights));
+      const newEpochs = dto.newEpochs as string[];
+      expect(newEpochs).toEqual(["Synthetic New Watch (Watch9,1)"]);
+      const persisted = h.db.query("SELECT new_epochs FROM imports WHERE id = ?").get(importId) as {
+        new_epochs: string;
+      };
+      expect(persisted.new_epochs).toBe(JSON.stringify(newEpochs));
+      const listed = (await (await h.app.request("/api/imports")).json()) as Array<
+        Record<string, unknown>
+      >;
+      expect(listed.find((row) => row.id === importId)?.newEpochs).toEqual(newEpochs);
+      expect(priorEpochs.has(JSON.stringify(["Synthetic New Watch", "Watch9,1"]))).toBe(false);
     } finally {
       h.close();
     }

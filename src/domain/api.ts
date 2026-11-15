@@ -34,8 +34,6 @@ export interface ImportDTO {
   stage?: string | null;
   progress?: number | null;
   progressTotal?: number | null;
-  newUsableNights?: number | null;
-  newEpochs?: number | null;
   error: string | null;
   exportDate?: string | null;
   retryable?: boolean;
@@ -44,8 +42,8 @@ export interface ImportDTO {
   recordsSeen: number | null;
   recordsInserted: number | null;
   recordsDeduped: number | null;
-  newUsableNights?: number | null;
-  newEpochs?: string[];
+  newUsableNights: number | null;
+  newEpochs: string[];
   durationMs: number | null;
   createdAt: string;
 }
