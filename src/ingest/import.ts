@@ -1,7 +1,5 @@
 import { openDb } from "../db/db";
-import { computeDailyMetrics } from "../stats/daily";
-import { persistDeviceEvents } from "../stats/events";
-import { recomputeFindings } from "../stats/findings";
+import { rebuildEpochs } from "../stats/epochs";
 import { mapRecord } from "./mapper";
 import { parseExportXml } from "./parser";
 import type { WriteCounters } from "./store";
@@ -91,12 +89,8 @@ export async function runImport(
     const counters = writer.finish();
     refreshSources(db, id);
 
-    // Stats are a derived cache, recomputed on every import (design.md).
-    // Runs within the storing phase (~1s on 2M records): 'analyzing' is not a
-    // user-visible lifecycle state worth a schema CHECK update.
-    computeDailyMetrics(db, id);
-    persistDeviceEvents(db, id);
-    recomputeFindings(db, id);
+    // Epochs are the first v1 derived stage. Later slices add downstream tables.
+    rebuildEpochs(db);
 
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");

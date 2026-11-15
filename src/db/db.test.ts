@@ -19,10 +19,10 @@ afterAll(() => {
 });
 
 describe("migrations", () => {
-  test("applies 0001 and is idempotent on re-run", () => {
+  test("applies all migrations and is idempotent on re-run", () => {
     const db = new Database(":memory:");
     const first = applyMigrations(db);
-    expect(first).toEqual(["0001_init.sql", "0002_capture.sql"]);
+    expect(first).toEqual(["0001_init.sql", "0002_capture.sql", "0003_derived.sql"]);
     const second = applyMigrations(db);
     expect(second).toEqual([]);
     db.close();
@@ -99,16 +99,19 @@ describe("records dedup unique key", () => {
 });
 
 describe("check constraints", () => {
-  test("device_events.kind only allows first_seen|last_seen|switch", () => {
+  test("epoch_events.kind only allows OS update events", () => {
     const db = new Database(":memory:");
     applyMigrations(db);
     db.prepare(
       `INSERT INTO imports (created_at, zip_name, zip_size, status) VALUES ('2026-11-14T00:00:00Z', 'z', 1, 'done')`,
     ).run();
     const ins = db.prepare(
-      `INSERT INTO device_events (kind, source_name, metric, occurred_on, import_id) VALUES (?, 's', NULL, '2026-11-01', 1)`,
+      `INSERT INTO epoch_events (epoch_id, day, kind, detail) VALUES (1, '2026-11-01', ?, 'test')`,
     );
-    for (const kind of ["first_seen", "last_seen", "switch"]) {
+    db.prepare(
+      `INSERT INTO epochs (source_name, device_hw, kind, first_day, last_day, days_present) VALUES ('s', 'Watch1,1', 'watch', '2026-11-01', '2026-11-01', 1)`,
+    ).run();
+    for (const kind of ["os_update"]) {
       expect(() => ins.run(kind)).not.toThrow();
     }
     expect(() => ins.run("rebooted")).toThrow(/CHECK/);
@@ -124,9 +127,13 @@ describe("schema.ts mirrors the SQL migrations", () => {
       imports: schema.imports,
       sources: schema.sources,
       records: schema.records,
-      daily_metrics: schema.dailyMetrics,
-      device_events: schema.deviceEvents,
+      epochs: schema.epochs,
+      epoch_events: schema.epochEvents,
+      stints: schema.stints,
+      nights: schema.nights,
+      metric_values: schema.metricValues,
       findings: schema.findings,
+      seam_steps: schema.seamSteps,
     };
     for (const [name, table] of Object.entries(tables)) {
       const sqlCols = (

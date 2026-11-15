@@ -1,4 +1,4 @@
-import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
 /**
  * Typed mirror of the SQL migrations for drizzle-orm queries.
@@ -46,45 +46,87 @@ export const records = sqliteTable("records", {
   metaJson: text("meta_json"),
 });
 
-export const dailyMetrics = sqliteTable(
-  "daily_metrics",
+export const epochs = sqliteTable(
+  "epochs",
   {
-    metric: text("metric").notNull(),
+    id: integer("id").primaryKey({ autoIncrement: true }),
     sourceName: text("source_name").notNull(),
-    day: text("day").notNull(),
-    method: text("method").notNull(),
-    unit: text("unit"),
-    value: real("value").notNull(),
-    sampleCount: integer("sample_count").notNull(),
-    computedAt: text("computed_at").notNull(),
-    importId: integer("import_id").notNull(),
+    deviceHw: text("device_hw").notNull(),
+    kind: text("kind").notNull(),
+    firstDay: text("first_day").notNull(),
+    lastDay: text("last_day").notNull(),
+    daysPresent: integer("days_present").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.metric, t.sourceName, t.day] })],
+  (t) => [unique().on(t.sourceName, t.deviceHw)],
 );
 
-export const deviceEvents = sqliteTable("device_events", {
+export const epochEvents = sqliteTable("epoch_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  epochId: integer("epoch_id").notNull(),
+  day: text("day").notNull(),
   kind: text("kind").notNull(),
-  sourceName: text("source_name").notNull(),
-  metric: text("metric"),
-  occurredOn: text("occurred_on").notNull(),
-  details: text("details"),
-  importId: integer("import_id").notNull(),
+  detail: text("detail").notNull(),
 });
 
-export const findings = sqliteTable("findings", {
+export const stints = sqliteTable("stints", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  importId: integer("import_id").notNull(),
-  anchorDay: text("anchor_day").notNull(),
-  kind: text("kind").notNull(),
   metric: text("metric").notNull(),
-  sourceName: text("source_name").notNull(),
-  windowDays: integer("window_days").notNull(),
-  baseline: real("baseline"),
-  recent: real("recent"),
-  unit: text("unit"),
-  z: real("z"),
-  severity: text("severity").notNull(),
-  evidence: text("evidence").notNull(),
-  createdAt: text("created_at").notNull(),
+  epochId: integer("epoch_id").notNull(),
+  startDay: text("start_day").notNull(),
+  endDay: text("end_day"),
 });
+
+export const nights = sqliteTable("nights", {
+  date: text("date").primaryKey(),
+  zone: text("zone").notNull(),
+  tzChange: integer("tz_change").notNull().default(0),
+  partialReason: text("partial_reason"),
+  asleepS: real("asleep_s").notNull().default(0),
+  coreS: real("core_s").notNull().default(0),
+  deepS: real("deep_s").notNull().default(0),
+  remS: real("rem_s").notNull().default(0),
+  inBedS: real("in_bed_s").notNull().default(0),
+});
+
+export const metricValues = sqliteTable(
+  "metric_values",
+  {
+    metric: text("metric").notNull(),
+    epochId: integer("epoch_id").notNull(),
+    unitDay: text("unit_day").notNull(),
+    unitKind: text("unit_kind").notNull(),
+    value: real("value").notNull(),
+    n: integer("n").notNull(),
+    usable: integer("usable").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.metric, t.epochId, t.unitDay] })],
+);
+
+export const findings = sqliteTable("findings", {
+  metric: text("metric").primaryKey(),
+  state: text("state").notNull(),
+  z: real("z"),
+  severity: text("severity"),
+  confidence: text("confidence"),
+  onsetDay: text("onset_day"),
+  onsetOpen: integer("onset_open"),
+  recent: real("recent"),
+  baseline: real("baseline"),
+  kOutside: integer("k_outside"),
+  checksJson: text("checks_json").notNull().default("[]"),
+  asofDay: text("asof_day").notNull(),
+  stintId: integer("stint_id"),
+});
+
+export const seamSteps = sqliteTable(
+  "seam_steps",
+  {
+    metric: text("metric").notNull(),
+    seamDay: text("seam_day").notNull(),
+    kind: text("kind").notNull(),
+    value: real("value").notNull(),
+    nOld: integer("n_old").notNull(),
+    nNew: integer("n_new").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.metric, t.seamDay] })],
+);
