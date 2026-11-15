@@ -63,15 +63,10 @@ export interface ZonedDateTime {
 }
 
 const ZONE_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+const ZONE_DAY_OFFSETS = new Map<string, number | null>();
+const DAY_MS = 86_400_000;
 
-/** Gets the wall-clock day and minute for an instant in an IANA timezone. */
-export function instantInZone(utcIso: string, timeZone: string): ZonedDateTime {
-  const fixedOffset = /^UTC([+-])(\d{2}):(\d{2})$/.exec(timeZone);
-  if (fixedOffset) {
-    const offset =
-      (fixedOffset[1] === "-" ? -1 : 1) * (Number(fixedOffset[2]) * 60 + Number(fixedOffset[3]));
-    return utcToLocal(utcIso, offset);
-  }
+function zoneFormatter(timeZone: string): Intl.DateTimeFormat {
   let formatter = ZONE_FORMATTERS.get(timeZone);
   if (!formatter) {
     formatter = new Intl.DateTimeFormat("en-CA", {
@@ -85,12 +80,52 @@ export function instantInZone(utcIso: string, timeZone: string): ZonedDateTime {
     });
     ZONE_FORMATTERS.set(timeZone, formatter);
   }
-  const parts = formatter.formatToParts(new Date(utcIso));
+  return formatter;
+}
+
+function localParts(utcMs: number, formatter: Intl.DateTimeFormat): ZonedDateTime {
+  const parts = formatter.formatToParts(new Date(utcMs));
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return {
     localDay: `${values.year}-${values.month}-${values.day}`,
     localMinute: Number(values.hour) * 60 + Number(values.minute),
   };
+}
+
+function offsetAt(utcMs: number, formatter: Intl.DateTimeFormat): number {
+  const parts = formatter.formatToParts(new Date(utcMs));
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const wallMs = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+  );
+  return (wallMs - Math.floor(utcMs / 60_000) * 60_000) / 60_000;
+}
+
+/** Gets the wall-clock day and minute for an instant in an IANA timezone. */
+export function instantInZone(utcIso: string, timeZone: string): ZonedDateTime {
+  const fixedOffset = /^UTC([+-])(\d{2}):(\d{2})$/.exec(timeZone);
+  if (fixedOffset) {
+    const offset =
+      (fixedOffset[1] === "-" ? -1 : 1) * (Number(fixedOffset[2]) * 60 + Number(fixedOffset[3]));
+    return utcToLocal(utcIso, offset);
+  }
+  const utcMs = Date.parse(utcIso);
+  const formatter = zoneFormatter(timeZone);
+  const utcDay = utcIso.slice(0, 10);
+  const cacheKey = `${timeZone}\0${utcDay}`;
+  let offset = ZONE_DAY_OFFSETS.get(cacheKey);
+  if (offset === undefined) {
+    const dayStart = Date.parse(`${utcDay}T00:00:00.000Z`);
+    const firstOffset = offsetAt(dayStart, formatter);
+    const lastOffset = offsetAt(dayStart + DAY_MS - 60_000, formatter);
+    offset = firstOffset === lastOffset ? firstOffset : null;
+    ZONE_DAY_OFFSETS.set(cacheKey, offset);
+  }
+  return offset === null ? localParts(utcMs, formatter) : utcToLocal(utcIso, offset);
 }
 
 /** Converts a local wall-clock time to an instant using the zone's offset at that time. */

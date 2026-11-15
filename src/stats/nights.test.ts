@@ -101,6 +101,17 @@ describe("night timezone and completeness (B-N1, B-N6, B-N8)", () => {
     );
   });
 
+  test("cached IANA offsets preserve the DST transition hour", () => {
+    expect(instantInZone("2026-03-08T09:30:00.000Z", "America/Los_Angeles")).toEqual({
+      localDay: "2026-03-08",
+      localMinute: 90,
+    });
+    expect(instantInZone("2026-03-08T10:30:00.000Z", "America/Los_Angeles")).toEqual({
+      localDay: "2026-03-08",
+      localMinute: 210,
+    });
+  });
+
   test("B-N6 only an export cut makes a night partial; short nights stay complete", () => {
     expect(exportCutReason("2026-01-10", "UTC+09:00", "2026-01-11T02:59:59.000Z")).toBe(
       "export_cut",

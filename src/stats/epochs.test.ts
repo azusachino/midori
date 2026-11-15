@@ -194,6 +194,9 @@ describe("epoch derivation", () => {
       );
     }
     const derived = rebuildEpochs(db);
+    const expected = deriveEpochs(fixtureRecords());
+    expect(derived.epochs).toEqual(expected.epochs);
+    expect(derived.events).toEqual(expected.events);
     expect(derived.epochs).toHaveLength(2);
     expect(db.query("SELECT COUNT(*) AS count FROM epochs").get()).toEqual({ count: 2 });
     expect(db.query("SELECT kind, detail FROM epoch_events").all()).toEqual([
