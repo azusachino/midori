@@ -1,3 +1,4 @@
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   archiveZip,
   backupDatabase,
@@ -5,10 +6,15 @@ import {
   DEFAULT_BACKUP_DIR,
   pruneBackups,
 } from "./backup/backup";
+import { openDb } from "./db/db";
 import { runImport } from "./ingest/import";
+import { createMcpServer } from "./mcp/server";
 
 /**
- * midori CLI (T6). `bun src/cli.ts import <export.zip> [--db <path>]`.
+ * midori CLI. Subcommands:
+ *   import <export.zip> [--db <path>] [--backup-dir <dir>] [--archive-dir <dir>] [--keep-zip]
+ *   mcp [--db <path>] — read-only MCP server over stdio (T20)
+ *
  * After a successful import (design: "backups are owned by midori"): WAL-checkpointed
  * snapshot into the backup dir, retention prune, and the zip moves into the archive
  * dir unless --keep-zip. Prints a JSON summary; non-zero exit on failure.
@@ -17,50 +23,73 @@ import { runImport } from "./ingest/import";
 function usage(): never {
   console.error(
     "usage: bun src/cli.ts import <export.zip> [--db <path>] [--backup-dir <dir>] " +
-      "[--archive-dir <dir>] [--keep-zip]",
+      "[--archive-dir <dir>] [--keep-zip]\n" +
+      "       bun src/cli.ts mcp [--db <path>]",
   );
   process.exit(2);
 }
 
 const args = process.argv.slice(2);
 const command = args[0];
-if (command !== "import") usage();
 
-let zipPath: string | null = null;
-let dbPath = "data/midori.db";
-let backupDir = DEFAULT_BACKUP_DIR;
-let archiveDir = DEFAULT_ARCHIVE_DIR;
-let keepZip = false;
-for (let i = 1; i < args.length; i++) {
-  const a = args[i];
-  if (a === undefined) break;
-  if (a === "--db") {
-    dbPath = args[i + 1] ?? usage();
-    i += 1;
-  } else if (a === "--backup-dir") {
-    backupDir = args[i + 1] ?? usage();
-    i += 1;
-  } else if (a === "--archive-dir") {
-    archiveDir = args[i + 1] ?? usage();
-    i += 1;
-  } else if (a === "--keep-zip") {
-    keepZip = true;
-  } else if (!zipPath) {
-    zipPath = a;
-  } else {
-    usage();
+if (command === "mcp") {
+  // stdio MCP server: JSON-RPC over stdin/stdout. Logs must go to stderr only.
+  let dbPath = "data/midori.db";
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--db") {
+      dbPath = args[i + 1] ?? usage();
+      i += 1;
+    } else {
+      usage();
+    }
   }
-}
-if (!zipPath) usage();
-
-const summary = await runImport(dbPath, zipPath);
-
-let backupPath: string | null = null;
-let archivedPath: string | null = null;
-if (summary.status === "done") {
-  backupPath = backupDatabase(dbPath, { backupDir }).snapshotPath;
-  pruneBackups(backupDir, { now: new Date() });
-  if (!keepZip) archivedPath = archiveZip(zipPath, { archiveDir });
+  const db = openDb(dbPath, { readonly: true });
+  const server = createMcpServer({ db });
+  await server.connect(new StdioServerTransport());
+} else if (command === "import") {
+  await runImportCommand(args);
+} else {
+  usage();
 }
 
-console.log(JSON.stringify({ ...summary, backupPath, archivedPath }, null, 2));
+async function runImportCommand(args: string[]): Promise<void> {
+  let zipPath: string | null = null;
+  let dbPath = "data/midori.db";
+  let backupDir = DEFAULT_BACKUP_DIR;
+  let archiveDir = DEFAULT_ARCHIVE_DIR;
+  let keepZip = false;
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (a === undefined) break;
+    if (a === "--db") {
+      dbPath = args[i + 1] ?? usage();
+      i += 1;
+    } else if (a === "--backup-dir") {
+      backupDir = args[i + 1] ?? usage();
+      i += 1;
+    } else if (a === "--archive-dir") {
+      archiveDir = args[i + 1] ?? usage();
+      i += 1;
+    } else if (a === "--keep-zip") {
+      keepZip = true;
+    } else if (!zipPath) {
+      zipPath = a;
+    } else {
+      usage();
+    }
+  }
+  if (!zipPath) usage();
+
+  const summary = await runImport(dbPath, zipPath);
+
+  let backupPath: string | null = null;
+  let archivedPath: string | null = null;
+  if (summary.status === "done") {
+    backupPath = backupDatabase(dbPath, { backupDir }).snapshotPath;
+    pruneBackups(backupDir, { now: new Date() });
+    if (!keepZip) archivedPath = archiveZip(zipPath, { archiveDir });
+  }
+
+  console.log(JSON.stringify({ ...summary, backupPath, archivedPath }, null, 2));
+}
