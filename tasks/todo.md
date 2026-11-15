@@ -415,88 +415,116 @@ May start right away in its own worktree. It merges after slice 9.
   - `e2e/*.spec.ts`
   - at merge: v0 read routes removed from `src/http/routes.ts`
 - AC:
-  - [ ] Tailwind v4 + shadcn initialized, dark-first. Tokens come from ui-design §9, and the
+  - [x] Tailwind v4 + shadcn initialized, dark-first. Tokens come from ui-design §9, and the
     contrast/colorblind check for the tints and the 6-color epoch palette is recorded in the
     hand-back.
-  - [ ] Router chosen (TanStack Router or React Router), with the reason in the hand-back.
+  - [x] Router chosen (TanStack Router or React Router), with the reason in the hand-back.
     Routes `/`, `/metrics`, `/metrics/:key`, `/devices`, `/import` exist, with placeholder
     bodies where needed.
-  - [ ] Shell: sidebar (top tabs under 768 px), top-bar freshness (B-R1), importing pill.
-  - [ ] `EChart` wrapper (init, resize, dispose, theme from CSS variables, per-module imports)
+  - [x] Shell: sidebar (top tabs under 768 px), top-bar freshness (B-R1), importing pill.
+  - [x] `EChart` wrapper (init, resize, dispose, theme from CSS variables, per-module imports)
     with a smoke render.
-  - [ ] Typed API client against the slice 9 DTOs. Until slice 9 merges, it is built against
+  - [x] Typed API client against the slice 9 DTOs. Until slice 9 merges, it is built against
     `src/domain/api.ts` from the slice 9 branch, or stubbed with fixtures.
-  - [ ] Empty (B-R4), loading and read-error primitives.
-  - [ ] Bundle ≤300 KB gzipped, measured and reported.
-  - [ ] e2e: shell plus empty state at 1440 and 390 px.
+  - [x] Empty (B-R4), loading and read-error primitives.
+  - [x] Bundle ≤300 KB gzipped, measured and reported.
+  - [x] e2e: shell plus empty state at 1440 and 390 px.
 - Verify: `bun run check`; `make e2e`; screenshots in `.tmp/v1-ui/` (lead inspects).
 
 ### Slice 12 — Import page `[midori-ui]`
 
 - Rules: B-I1–B-I5, B-I7, B-I10, B-I11 (UI side); ui-design §8.
 - AC:
-  - [ ] Every §8 state is implemented with its copy.
-  - [ ] XHR upload with byte progress and the "keep this tab open" line.
-  - [ ] Stepper driven by stage/progress.
-  - [ ] Summary card; history; Retry.
+  - [x] Every §8 state is implemented with its copy.
+  - [x] XHR upload with byte progress and the "keep this tab open" line.
+  - [x] Stepper driven by stage/progress.
+  - [x] Summary card; history; Retry.
 - Tests (e2e):
-  - [ ] fixture upload → summary
-  - [ ] duplicate → "Nothing new"
-  - [ ] bad file → B-I1 copy
-  - [ ] 390 px upload through the file input
+  - [x] fixture upload → summary
+  - [x] duplicate → "Nothing new"
+  - [x] bad file → B-I1 copy
+  - [x] 390 px upload through the file input
 - Verify: `bun run check`; `make e2e`; real-data screenshot inspection by the lead.
 
 ### Slice 13 — Changes page `[midori-ui]`
 
 - Rules: B-F7–B-F11 (display), B-R1–B-R4; ui-design §4.
 - AC:
-  - [ ] `FindingRow` with every slot.
-  - [ ] Overnight list (all metrics); daytime list (notable/alert only).
-  - [ ] Warming-up notice; stale banner; last usable night card.
-  - [ ] Every §4 state.
-  - [ ] Copy rendered from finding keys through `web/src/copy.ts`.
-  - [ ] Each state has an e2e check at 1440 and 390 px.
+  - [x] `FindingRow` with every slot.
+  - [x] Overnight list (all metrics); daytime list (notable/alert only).
+  - [x] Warming-up notice; stale banner; last usable night card.
+  - [x] Every §4 state.
+  - [x] Copy rendered from finding keys through `web/src/copy.ts`.
+  - [x] Each state has an e2e check at 1440 and 390 px.
 - Verify: as slice 12.
 
 ### Slice 14 — Metric chart + detail shell `[midori-ui]`
 
 - ui-design §5 chart spec and states.
 - AC:
-  - [ ] `MetricChart`: polygon band via a `custom` series, recent `markArea`, seam `markLine`
+  - [x] `MetricChart`: polygon band via a `custom` series, recent `markArea`, seam `markLine`
     with offset/step label, OS-update marks, hollow partial points, faint minor points,
     `connectNulls:false`, legend outside.
-  - [ ] Range control and `dataZoom` synced to the URL.
-  - [ ] FindingRow header; recent-units table.
-  - [ ] Trend-only and not-found states; text summary plus hidden table.
+  - [x] Range control and `dataZoom` synced to the URL.
+  - [x] FindingRow header; recent-units table.
+  - [x] Trend-only and not-found states; text summary plus hidden table.
 - Verify: as slice 12.
 
 ### Slice 15 — Checks + evidence sheet `[midori-ui]`
 
 - AC:
-  - [ ] Checks panel (B-C1–B-C6).
-  - [ ] `?night=` opens the `Sheet` (full-screen under 768 px) with evidence from
+  - [x] Checks panel (B-C1–B-C6).
+  - [x] `?night=` opens the `Sheet` (full-screen under 768 px) with evidence from
     `/units/:day`.
-  - [ ] Keyboard and Esc work.
-  - [ ] "No samples stored" state.
+  - [x] Keyboard and Esc work.
+  - [x] "No samples stored" state.
 - Verify: as slice 12.
 
 ### Slice 16 — Long view + Metrics index `[midori-ui]`
 
 - AC:
-  - [ ] Calendar per year (`calendar` + `custom` series), with hatched partial cells and seam
+  - [x] Calendar per year (`calendar` + `custom` series), with hatched partial cells and seam
     marks.
-  - [ ] `/metrics` grid from `/api/metrics`, ordered overnight → daytime → trend-only.
-  - [ ] Every §6 state.
+  - [x] `/metrics` grid from `/api/metrics`, ordered overnight → daytime → trend-only.
+  - [x] Every §6 state.
 - Verify: as slice 12.
 
 ### Slice 17 — Devices page `[midori-ui]`
 
 - AC:
-  - [ ] Epoch timeline from days present (`custom` series; a sparse app shows as dots).
-  - [ ] Per-epoch cards with role, baseline state, offset/step labels and OS updates.
-  - [ ] Single-epoch and occasional-sources states.
+  - [x] Epoch timeline from days present (`custom` series; a sparse app shows as dots).
+  - [x] Per-epoch cards with role, baseline state, offset/step labels and OS updates.
+  - [x] Single-epoch and occasional-sources states.
 - Verify: as slice 12.
 
+
+**Slices 11–17 done 2026-11-16** — `midori-ui` (agy, gemini-4-hydrogen-high). Built as stacked
+branches, then integrated on `task/v1-ui-integrate` against the real v1 API, with v0 read
+routes and legacy DTOs deleted.
+
+- Per-slice lead review, with the carried fixes:
+  - dev-only fixture fallback
+  - initial-load bundle budget with route splitting
+  - neutral sparklines and a stage legend
+  - baseline band on the current stint only
+  - no σ without a baseline
+  - partial units excluded from recent-7
+  - calendar diverging scale
+- Integration exposed server defects, fixed server-side in slices 9b–9d instead of worked
+  around in the UI.
+- Lead real-data screenshot passes (3 rounds) found:
+  - chart axis not clamped to the range
+  - 40 overlapping OS labels
+  - clipped seam labels
+  - OS-version walls on Devices
+  - SpO2 fraction scale (server)
+  - daytime baseline states and findings missing (server)
+  - recent table built from weekly buckets
+  - overlapping seam labels
+
+  All fixed and re-inspected. Screenshots stay in workstation scratch, never committed.
+- Final (lead, on the integration head): `bun run check` exit 0, 248 tests; `make e2e`
+  exit 0, 26 specs against the real server with a synthetic corpus that includes sleep.
 **Gate C**: fresh verifier walks J1–J5 on real data and checks `make e2e`. Report persisted
 in `docs/reviews/`.
 
