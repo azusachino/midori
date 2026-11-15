@@ -69,7 +69,10 @@ export function buildMiniChartSummary(entry: MetricIndexEntryDTO): string {
   return copy.pages.metrics.weeklySummary(label, entry.weeklySeries.length, entry.seams.length);
 }
 
-export function buildMiniChartTable(entry: MetricIndexEntryDTO): ChartAccessibleTable {
+export function buildMiniChartTable(
+  entry: MetricIndexEntryDTO,
+  epochLabels?: ReadonlyMap<number, string>,
+): ChartAccessibleTable {
   const unitLabel = displayUnit(entry.metric, entry.unit);
   const seamWeekByDay = new Map<string, string>();
   for (const s of entry.seams) {
@@ -84,16 +87,24 @@ export function buildMiniChartTable(entry: MetricIndexEntryDTO): ChartAccessible
       { key: "epochId", label: copy.chart.epochCol },
       { key: "seam", label: copy.pages.metricDetail.longView.colSeam },
     ],
-    rows: entry.weeklySeries.map((pt) => ({
-      weekStart: pt.weekStart,
-      median:
-        pt.median === null
+    rows: entry.weeklySeries.map((pt) => {
+      const epochLabel =
+        pt.epochId === null
           ? "—"
-          : unitLabel
-            ? `${formatMetricNumber(pt.median, entry.metric, entry.unit)} ${unitLabel}`
-            : formatMetricNumber(pt.median, entry.metric, entry.unit),
-      epochId: pt.epochId !== null ? `Epoch ${pt.epochId}` : "—",
-      seam: seamWeekByDay.get(pt.weekStart) ?? "—",
-    })),
+          : (epochLabels?.get(pt.epochId) ??
+            (entry.finding?.epochId === pt.epochId ? entry.finding.epochLabel : null) ??
+            `Epoch ${pt.epochId}`);
+      return {
+        weekStart: pt.weekStart,
+        median:
+          pt.median === null
+            ? "—"
+            : unitLabel
+              ? `${formatMetricNumber(pt.median, entry.metric, entry.unit)} ${unitLabel}`
+              : formatMetricNumber(pt.median, entry.metric, entry.unit),
+        epochId: epochLabel,
+        seam: seamWeekByDay.get(pt.weekStart) ?? "—",
+      };
+    }),
   };
 }

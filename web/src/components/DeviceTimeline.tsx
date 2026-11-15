@@ -40,10 +40,12 @@ export function DeviceTimeline({ epochs }: DeviceTimelineProps) {
   const height = Math.max(120, model.totalRows * 38 + 44);
 
   const buildOption = useCallback(
-    (theme: ChartTheme): EChartsCoreOption => {
+    (theme: ChartTheme, chartWidth = 800): EChartsCoreOption => {
       if (!model.minDay || !model.maxDay || model.totalRows === 0) {
         return { series: [] };
       }
+
+      const isNarrow = chartWidth < 420;
 
       const rawMinTs = parseUtcDayMs(model.minDay);
       const rawMaxTs = parseUtcDayMs(model.maxDay) + DAY_MS;
@@ -122,9 +124,9 @@ export function DeviceTimeline({ epochs }: DeviceTimelineProps) {
         },
         grid: {
           top: 12,
-          right: 16,
+          right: isNarrow ? 10 : 16,
           bottom: 26,
-          left: 62,
+          left: isNarrow ? 48 : 62,
         },
         xAxis: {
           type: "time",
@@ -325,16 +327,14 @@ export function DeviceTimeline({ epochs }: DeviceTimelineProps) {
         </div>
       </CardHeader>
       <CardContent className="pt-1">
-        <div className="overflow-x-auto">
-          <div className="min-w-[520px]">
-            <EChart
-              data-testid="device-timeline-echart"
-              height={height}
-              buildOption={buildOption}
-              summary={summary}
-              table={table}
-            />
-          </div>
+        <div className="w-full min-w-0">
+          <EChart
+            data-testid="device-timeline-echart"
+            height={height}
+            buildOption={buildOption}
+            summary={summary}
+            table={table}
+          />
         </div>
       </CardContent>
     </Card>

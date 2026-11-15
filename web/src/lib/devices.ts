@@ -346,18 +346,20 @@ export function buildDeviceTimelineModel(epochs: readonly EpochCardDTO[]): Devic
       }
     });
 
-    for (const os of ep.osUpdates) {
-      trackDay(os.day);
-      osMarks.push({
-        epochId: ep.id,
-        epochLabel: ep.label,
-        colorIndex: ep.colorIndex,
-        minor: ep.minor,
-        day: os.day,
-        fromSw: os.fromSw,
-        toSw: os.toSw,
-        rowY,
-      });
+    if (!ep.minor) {
+      for (const os of ep.osUpdates) {
+        trackDay(os.day);
+        osMarks.push({
+          epochId: ep.id,
+          epochLabel: ep.label,
+          colorIndex: ep.colorIndex,
+          minor: ep.minor,
+          day: os.day,
+          fromSw: os.fromSw,
+          toSw: os.toSw,
+          rowY,
+        });
+      }
     }
   }
 

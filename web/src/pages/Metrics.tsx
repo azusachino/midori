@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { apiClient } from "@/api/client";
 import type {
+  EpochsDTO,
   FindingRowDTO,
   FindingSeverity,
   MetricIndexEntryDTO,
@@ -80,12 +82,30 @@ function CompactFindingLine({ entry }: { entry: MetricIndexEntryDTO }) {
   );
 }
 
+interface MetricsPageData {
+  index: MetricsIndexDTO;
+  epochs: EpochsDTO | null;
+}
+
 /** Metrics index (/metrics): ordered groups, compact status, and 1-year weekly mini charts. */
 export function MetricsPage() {
-  const query = useAsyncQuery<MetricsIndexDTO>(
-    (signal) => apiClient.metricsIndex(signal),
-    "metrics",
-  );
+  const query = useAsyncQuery<MetricsPageData>(async (signal) => {
+    const [index, epochs] = await Promise.all([
+      apiClient.metricsIndex(signal),
+      apiClient.epochs(signal).catch(() => null),
+    ]);
+    return { index, epochs };
+  }, "metrics");
+
+  const epochLabels = useMemo(() => {
+    const map = new Map<number, string>();
+    if (query.status === "ready" && query.data.epochs) {
+      for (const ep of query.data.epochs.epochs) {
+        map.set(ep.id, ep.label);
+      }
+    }
+    return map;
+  }, [query]);
 
   if (query.status === "loading") {
     return <LoadingState variant="cards" count={6} />;
@@ -97,7 +117,7 @@ export function MetricsPage() {
     );
   }
 
-  if (!query.data.hasImports) {
+  if (!query.data.index.hasImports) {
     return <EmptyState />;
   }
 
@@ -109,7 +129,7 @@ export function MetricsPage() {
       </div>
 
       {KIND_GROUPS.map((kind) => {
-        const items = query.data.metrics.filter((m) => m.kind === kind);
+        const items = query.data.index.metrics.filter((m) => m.kind === kind);
         if (items.length === 0) return null;
         return (
           <section key={kind} data-testid={`metrics-group-${kind}`} className="space-y-3">
@@ -121,54 +141,56 @@ export function MetricsPage() {
                 const label = copy.metrics[item.metric] ?? item.metric;
                 const unitLabel = displayUnit(item.metric, item.unit) || item.unit;
                 return (
-                  <Link
+                  <Card
                     key={item.metric}
-                    to="/metrics/$key"
-                    params={{ key: item.metric }}
-                    search={{ range: "180d", tab: "chart" }}
                     data-testid={`metric-card-${item.metric}`}
-                    className="block rounded-lg no-underline focus-visible:outline-2 focus-visible:outline-ring"
+                    className="relative flex h-full overflow-hidden transition-colors hover:border-border-strong"
                   >
-                    <Card className="relative flex h-full overflow-hidden transition-colors hover:border-border-strong">
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "w-[3px] shrink-0 self-stretch",
-                          item.hasData ? barTintClass(item.finding?.severity) : "bg-transparent",
-                        )}
-                      />
-                      <div className="flex min-w-0 flex-1 flex-col">
-                        <CardHeader className="space-y-1.5 pb-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="flex flex-wrap items-baseline gap-1.5 text-sm">
-                              <span>{label}</span>
-                              {unitLabel ? (
-                                <span className="text-xs font-normal text-muted-foreground">
-                                  {unitLabel}
-                                </span>
-                              ) : null}
-                            </CardTitle>
-                            <Badge variant="secondary" className="shrink-0">
-                              {copy.trust[item.trust]}
-                            </Badge>
-                          </div>
-                          <CompactFindingLine entry={item} />
-                        </CardHeader>
-                        <CardContent className="mt-auto pt-1">
-                          {item.hasData && item.weeklySeries.length > 0 ? (
-                            <MetricMiniChart entry={item} />
-                          ) : (
-                            <div
-                              data-testid={`metric-no-data-${item.metric}`}
-                              className="flex h-[112px] items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground"
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "w-[3px] shrink-0 self-stretch",
+                        item.hasData ? barTintClass(item.finding?.severity) : "bg-transparent",
+                      )}
+                    />
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <CardHeader className="space-y-1.5 pb-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="flex flex-wrap items-baseline gap-1.5 text-sm">
+                            <Link
+                              to="/metrics/$key"
+                              params={{ key: item.metric }}
+                              search={{ range: "180d", tab: "chart" }}
+                              className="text-foreground no-underline after:absolute after:inset-0 after:z-10 after:content-[''] focus-visible:outline-none focus-visible:after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
                             >
-                              {copy.pages.metrics.noDataYet}
-                            </div>
-                          )}
-                        </CardContent>
-                      </div>
-                    </Card>
-                  </Link>
+                              {label}
+                            </Link>
+                            {unitLabel ? (
+                              <span className="text-xs font-normal text-muted-foreground">
+                                {unitLabel}
+                              </span>
+                            ) : null}
+                          </CardTitle>
+                          <Badge variant="secondary" className="shrink-0">
+                            {copy.trust[item.trust]}
+                          </Badge>
+                        </div>
+                        <CompactFindingLine entry={item} />
+                      </CardHeader>
+                      <CardContent className="mt-auto pt-1">
+                        {item.hasData && item.weeklySeries.length > 0 ? (
+                          <MetricMiniChart entry={item} epochLabels={epochLabels} />
+                        ) : (
+                          <div
+                            data-testid={`metric-no-data-${item.metric}`}
+                            className="flex h-[112px] items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground"
+                          >
+                            {copy.pages.metrics.noDataYet}
+                          </div>
+                        )}
+                      </CardContent>
+                    </div>
+                  </Card>
                 );
               })}
             </div>

@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useId, useRef, useState } from "react";
 import { apiClient } from "@/api/client";
 import type { MetricKind, UnitEvidenceDTO } from "@/api/types";
 import { ReadError } from "@/components/ReadError";
@@ -28,16 +28,46 @@ export interface EvidenceSheetProps {
   unit: string;
   kind: MetricKind;
   day: string | null;
+  returnFocusTo?: RefObject<HTMLElement | null>;
   onClose: () => void;
 }
 
 /**
  * Right-hand (full-screen on <768 px) unit evidence drawer wired to ?night=YYYY-MM-DD.
  */
-export function EvidenceSheet({ metric, unit, kind, day, onClose }: EvidenceSheetProps) {
+export function EvidenceSheet({
+  metric,
+  unit,
+  kind,
+  day,
+  returnFocusTo,
+  onClose,
+}: EvidenceSheetProps) {
   const unitKind: UnitEvidenceDTO["unitKind"] = kind === "daytime" ? "day" : "night";
   const evCopy = copy.pages.metricDetail.evidence;
   const heading = day ? formatEvidenceHeading(unitKind, day, metric) : "";
+
+  const fallbackFocusRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (day && !wasOpenRef.current) {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body) {
+        fallbackFocusRef.current = active;
+      }
+      wasOpenRef.current = true;
+      return;
+    }
+    if (!day && wasOpenRef.current) {
+      wasOpenRef.current = false;
+      const target = returnFocusTo?.current ?? fallbackFocusRef.current;
+      fallbackFocusRef.current = null;
+      if (target?.isConnected) {
+        queueMicrotask(() => target.focus());
+      }
+    }
+  }, [day, returnFocusTo]);
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
@@ -46,9 +76,24 @@ export function EvidenceSheet({ metric, unit, kind, day, onClose }: EvidenceShee
     [onClose],
   );
 
+  const handleCloseAutoFocus = useCallback(
+    (event: Event) => {
+      const target = returnFocusTo?.current ?? fallbackFocusRef.current;
+      if (target?.isConnected) {
+        event.preventDefault();
+        target.focus();
+      }
+    },
+    [returnFocusTo],
+  );
+
   return (
     <Sheet open={Boolean(day)} onOpenChange={handleOpenChange}>
-      <SheetContent data-testid="evidence-sheet" closeLabel={evCopy.closeLabel}>
+      <SheetContent
+        data-testid="evidence-sheet"
+        closeLabel={evCopy.closeLabel}
+        onCloseAutoFocus={handleCloseAutoFocus}
+      >
         <SheetHeader>
           <SheetTitle data-testid="evidence-sheet-title">{heading}</SheetTitle>
           <SheetDescription className="sr-only">{evCopy.sheetDescription}</SheetDescription>

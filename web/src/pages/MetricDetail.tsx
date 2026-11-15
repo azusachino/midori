@@ -1,10 +1,11 @@
 import { METRICS } from "@midori/domain/metrics";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { type MouseEvent, useCallback } from "react";
+import { type MouseEvent, useCallback, useRef } from "react";
 import { apiClient } from "@/api/client";
 import type { MetricRange, MetricSeriesDTO, MetricTab } from "@/api/types";
 import { ChecksPanel } from "@/components/ChecksPanel";
+import { EmptyState } from "@/components/EmptyState";
 import { EvidenceSheet } from "@/components/EvidenceSheet";
 import { FindingRow } from "@/components/FindingRow";
 import { LoadingState } from "@/components/LoadingState";
@@ -27,6 +28,7 @@ import { copy } from "@/copy";
 import { displayUnit, unitNounFor } from "@/lib/finding-format";
 import { buildBaselineSummary, buildRecentUnitRows, nextWiderRange } from "@/lib/metric-chart";
 import { isKnownMetric, OVERNIGHT_ORDER } from "@/lib/metrics";
+import { useShell } from "@/lib/shell-context";
 import { useAsyncQuery } from "@/lib/useAsyncQuery";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,8 @@ export function MetricDetailPage() {
   const { key } = useParams({ from: "/metrics/$key" });
   const search = useSearch({ from: "/metrics/$key" });
   const navigate = useNavigate({ from: "/metrics/$key" });
+  const shell = useShell();
+  const evidenceTriggerRef = useRef<HTMLElement | null>(null);
 
   const known = isKnownMetric(key);
   const seriesRange: MetricRange = search.tab === "long" ? "1y" : search.range;
@@ -104,7 +108,15 @@ export function MetricDetailPage() {
   }, [navigate]);
 
   const handleSelectDay = useCallback(
-    (day: string) => {
+    (day: string, trigger?: HTMLElement) => {
+      if (trigger) {
+        evidenceTriggerRef.current = trigger;
+      } else if (
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement !== document.body
+      ) {
+        evidenceTriggerRef.current = document.activeElement;
+      }
       void navigate({
         search: (prev) => ({ ...prev, night: day }),
       });
@@ -127,7 +139,7 @@ export function MetricDetailPage() {
   const handleRowButtonClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       const day = event.currentTarget.dataset.day;
-      if (day) handleSelectDay(day);
+      if (day) handleSelectDay(day, event.currentTarget);
     },
     [handleSelectDay],
   );
@@ -162,6 +174,10 @@ export function MetricDetailPage() {
     );
   }
 
+  if (shell.status === "ready" && shell.changes && !shell.changes.hasImports) {
+    return <EmptyState />;
+  }
+
   if (query.status === "loading") {
     return <LoadingState variant="chart" />;
   }
@@ -173,6 +189,9 @@ export function MetricDetailPage() {
   }
 
   const data = query.data;
+  if (data.asOfDay === null && data.units.length === 0 && shell.status === "loading") {
+    return <LoadingState variant="chart" />;
+  }
   const label = copy.metrics[data.metric] ?? data.metric;
   const unitDisplay = displayUnit(data.metric, data.unit) || data.unit;
   const noun = unitNounFor(data.kind);
@@ -415,6 +434,7 @@ export function MetricDetailPage() {
         unit={data.unit}
         kind={data.kind}
         day={search.night ?? null}
+        returnFocusTo={evidenceTriggerRef}
         onClose={handleCloseEvidence}
       />
     </div>

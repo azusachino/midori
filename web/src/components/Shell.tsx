@@ -3,6 +3,8 @@ import { type ReactNode, useId } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { copy } from "@/copy";
+import { formatDayWithWeekday } from "@/lib/finding-format";
+import { computeImportProgressPct } from "@/lib/import-helpers";
 import { useShell } from "@/lib/shell-context";
 import { epochColor } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -34,7 +36,10 @@ export function Shell({ children }: { children: ReactNode }) {
     if (!changes.hasImports || !freshness?.asOfDay || freshness.daysSinceImport === null) {
       freshnessLabel = copy.topbar.noImports;
     } else {
-      freshnessLabel = copy.topbar.freshness(freshness.asOfDay, freshness.daysSinceImport);
+      freshnessLabel = copy.topbar.freshness(
+        formatDayWithWeekday(freshness.asOfDay),
+        freshness.daysSinceImport,
+      );
     }
   }
 
@@ -71,7 +76,7 @@ export function Shell({ children }: { children: ReactNode }) {
                   />
                   {copy.topbar.importingPill(
                     activeImport.stage ?? activeImport.status,
-                    activeImport.progress ?? null,
+                    computeImportProgressPct(activeImport.progress, activeImport.progressTotal),
                   )}
                 </Badge>
               </Link>

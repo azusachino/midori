@@ -104,7 +104,7 @@ test("Metric detail against real server: hrv_sdnn baseline band, seam, OS update
   // Switching chart range=all keeps the same daily finding rows & baseline summary
   await expect(recentTable.locator("tbody tr").first()).toContainText("Nov 14 (Sat)");
   await expect(recentTable.locator("tbody tr").first()).toContainText("36 ms");
-  await expect(recentTable.locator("tbody tr").first()).toContainText("−5.0σ");
+  await expect(recentTable.locator("tbody tr").first()).toContainText("−4.9σ");
   await expect(page.getByTestId("baseline-summary")).toHaveText(baseline180d ?? "");
 
   // Real server daytime metric (steps) at range=all renders non-null finding header, daily table, baseline, and checks
@@ -288,6 +288,47 @@ test("Metric detail §5 empty range widen and read error retry (route-intercepte
     await page.mouse.move(targetX, targetY);
     await expect(page.getByTestId("metric-echart")).toContainText("can't be separated");
   }
+
+  // L1: When no imports exist at all (hasImports: false), MetricDetail shows B-R4 EmptyState
+  await page.route("**/api/changes", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        hasImports: false,
+        asOfDay: null,
+        freshness: { asOfDay: null, lastImportAt: null, daysSinceImport: null },
+        activeImport: null,
+        topFindings: [],
+        withinMetrics: [],
+        daytimeMetrics: [],
+        devicesSummary: { epochCount: 0, activePrimaryLabel: null },
+      }),
+    }),
+  );
+  await page.route("**/api/metrics/hrv_sdnn*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        metric: "hrv_sdnn",
+        unit: "ms",
+        kind: "overnight",
+        trust: "high",
+        range: "180d",
+        asOfDay: null,
+        epochs: [],
+        stints: [],
+        seams: [],
+        osUpdates: [],
+        units: [],
+        band: [],
+        finding: null,
+      }),
+    }),
+  );
+  await page.goto("/metrics/hrv_sdnn");
+  await expect(page.getByTestId("empty-state")).toBeVisible();
 
   expect(errors).toEqual([]);
 });

@@ -92,6 +92,13 @@ test("Metrics index /metrics against real server shows ordered groups, mini char
   ]);
 
   await expect(page.getByTestId("metric-mini-chart-hrv_sdnn").locator("canvas")).toBeVisible();
+  // L3: sr-only table is outside card link and shows epoch labels instead of raw "Epoch <id>"
+  const hrvSrTable = page.getByTestId("metric-mini-chart-hrv_sdnn").locator("table");
+  await expect(hrvSrTable).toContainText("Synthetic Watch B");
+  await expect(hrvSrTable).not.toContainText(/Epoch \d+/);
+  const hrvLinkText =
+    (await page.getByTestId("metric-card-hrv_sdnn").getByRole("link").textContent()) ?? "";
+  expect(hrvLinkText.trim()).toBe("HRV (SDNN)");
   await expect(page.getByTestId("metric-no-data-hrv_rmssd")).toHaveText(
     copy.pages.metrics.noDataYet,
   );

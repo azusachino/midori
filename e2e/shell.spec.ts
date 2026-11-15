@@ -43,7 +43,7 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render against real server",
   await expect(page.getByRole("main")).toBeVisible();
   await expect(page.getByTestId("sidebar-nav")).toBeVisible();
   await expect(page.getByTestId("mobile-nav")).toBeHidden();
-  await expect(page.getByTestId("topbar-freshness")).toContainText("Data through 2026-11-14");
+  await expect(page.getByTestId("topbar-freshness")).toContainText("Data through Nov 14 (Sat)");
   await expect(page.getByTestId("sidebar-watch")).toContainText("Synthetic Watch B");
 
   await assertNoHorizontalOverflow(page);
@@ -155,6 +155,7 @@ test("top bar importing pill, loading skeletons, and read-error retry primitive 
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page, { allow500: true });
   let attempts = 0;
+  let finishImport = false;
   await page.route("**/api/changes", async (route) => {
     attempts += 1;
     if (attempts === 1) {
@@ -169,27 +170,30 @@ test("top bar importing pill, loading skeletons, and read-error retry primitive 
     const stub = {
       ...emptyChangesStub(),
       hasImports: true,
-      asOfDay: "2026-03-01",
+      asOfDay: finishImport ? "2026-03-02" : "2026-03-01",
       freshness: {
-        asOfDay: "2026-03-01",
+        asOfDay: finishImport ? "2026-03-02" : "2026-03-01",
         lastImportAt: "2026-03-02T08:00:00Z",
-        daysSinceImport: 2,
+        daysSinceImport: finishImport ? 0 : 2,
       },
-      activeImport: {
-        id: 9,
-        zipName: "export.zip",
-        zipSize: 1024,
-        status: "parsing",
-        stage: "parsing",
-        progress: 62,
-        error: null,
-        exportVersion: null,
-        recordsSeen: null,
-        recordsInserted: null,
-        recordsDeduped: null,
-        durationMs: null,
-        createdAt: "2026-03-02T08:00:00Z",
-      },
+      activeImport: finishImport
+        ? null
+        : {
+            id: 9,
+            zipName: "export.zip",
+            zipSize: 1_000_000,
+            status: "parsing",
+            stage: "parsing",
+            progress: 620_000,
+            progressTotal: 1_000_000,
+            error: null,
+            exportVersion: null,
+            recordsSeen: null,
+            recordsInserted: null,
+            recordsDeduped: null,
+            durationMs: null,
+            createdAt: "2026-03-02T08:00:00Z",
+          },
     };
     await route.fulfill({
       status: 200,
@@ -206,5 +210,10 @@ test("top bar importing pill, loading skeletons, and read-error retry primitive 
   await page.getByRole("button", { name: copy.error.retry }).click();
   await expect(page.getByTestId("importing-pill")).toContainText("Import running · parsing 62%");
   await expect(page.getByTestId("topbar-freshness")).toContainText("imported 2 days ago");
+
+  // M2: activeImport triggers /api/changes polling every 1.5s and clears pill on completion
+  finishImport = true;
+  await expect(page.getByTestId("importing-pill")).toHaveCount(0, { timeout: 5_000 });
+  await expect(page.getByTestId("topbar-freshness")).toContainText("Data through Mar 2 (Mon)");
   expect(errors).toEqual([]);
 });

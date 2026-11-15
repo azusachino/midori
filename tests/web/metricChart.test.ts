@@ -10,7 +10,9 @@ import {
   clampSeamLabel,
   currentStintBandPoints,
   deduplicateUnitsByDay,
+  estimateLegendRows,
   formatSeamLabel,
+  formatZScore,
   hasEstablishedBaseline,
   nextWiderRange,
   resolveSeamLabelLayouts,
@@ -496,5 +498,48 @@ describe("metric-chart helpers", () => {
       { isWeekly: true, gridWidth: 800 },
     );
     expect(desktopLayouts.map((l) => l.showLabel)).toEqual([false, true, true]);
+  });
+
+  test("formatZScore truncates toward zero so |z| < 1.5 never prints +/-1.5 sigma", () => {
+    expect(formatZScore(-1.46)).toBe("−1.4σ");
+    expect(formatZScore(1.49)).toBe("+1.4σ");
+    expect(formatZScore(-1.5)).toBe("−1.5σ");
+    expect(formatZScore(-0.04)).toBe("0.0σ");
+  });
+
+  test("estimateLegendRows wraps legend items at 390 px and narrow seam layouts stay inside grid", () => {
+    expect(
+      estimateLegendRows(["Synthetic Watch A", "Synthetic Watch B", "Synthetic Phone"], 318),
+    ).toBeGreaterThanOrEqual(2);
+
+    const base = metricSeriesStub("hrv_sdnn", "180d");
+    const epoch1 = base.epochs[0];
+    const epoch2 = base.epochs[1];
+    if (!epoch1 || !epoch2) throw new Error("expected 2 epochs");
+    const calDays = buildCalendarDays(base);
+    const narrowLayouts = resolveSeamLabelLayouts(
+      [
+        {
+          seamDay: calDays[20] ?? base.units[10]?.day ?? "2026-01-20",
+          fromEpochId: epoch1.id,
+          toEpochId: epoch2.id,
+          kind: "offset",
+          value: -4,
+          nOld: 20,
+          nNew: 20,
+        },
+      ],
+      base.epochs,
+      calDays,
+      "hrv_sdnn",
+      "ms",
+      { isWeekly: false, gridWidth: 300 },
+    );
+    expect(narrowLayouts).toHaveLength(1);
+    for (const layout of narrowLayouts) {
+      if (layout.showLabel) {
+        expect(layout.spanEnd).toBeLessThanOrEqual(300);
+      }
+    }
   });
 });

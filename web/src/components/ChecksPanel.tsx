@@ -9,7 +9,7 @@ import { formatShortDay } from "@/lib/finding-format";
 
 export interface ChecksPanelProps {
   series: MetricSeriesDTO;
-  onSelectDay?: (day: string) => void;
+  onSelectDay?: (day: string, trigger?: HTMLElement) => void;
 }
 
 /** Confounder checks panel (B-C1–B-C6) rendered beside Recent nights on MetricDetail. */
@@ -20,7 +20,7 @@ export function ChecksPanel({ series, onSelectDay }: ChecksPanelProps) {
     (event: MouseEvent<HTMLButtonElement>) => {
       if (!onSelectDay) return;
       const day = event.currentTarget.dataset.day;
-      if (day) onSelectDay(day);
+      if (day) onSelectDay(day, event.currentTarget);
     },
     [onSelectDay],
   );
