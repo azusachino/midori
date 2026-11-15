@@ -159,9 +159,11 @@ export function rebuildFindings(
   return rankFindings(rows);
 }
 
-function rankFindings(rows: FindingRowDTO[]): FindingRowDTO[] {
+function rankFindings(rows: FindingRowDTO[], includeWithinDaytime = false): FindingRowDTO[] {
   const overnight = rows.filter((row) => row.kind === "overnight");
-  const daytime = rows.filter((row) => row.kind === "daytime" && row.severity !== "within");
+  const daytime = rows.filter(
+    (row) => row.kind === "daytime" && (includeWithinDaytime || row.severity !== "within"),
+  );
   const rank = (a: FindingRowDTO, b: FindingRowDTO) => {
     const order = Object.keys(METRICS);
     const stateRank = (row: FindingRowDTO) =>
@@ -184,8 +186,12 @@ function rankFindings(rows: FindingRowDTO[]): FindingRowDTO[] {
   return [...overnight.sort(rank), ...daytime.sort(rank)];
 }
 
-/** Read and rank the persisted finding snapshot without writing to the database. */
-export function readFindings(db: Database): FindingRowDTO[] {
+/**
+ * Read and rank the persisted finding snapshot without writing to the database.
+ * `includeWithinDaytime` keeps within-usual daytime rows, which the Changes list
+ * omits (B-F7) but per-metric reads need.
+ */
+export function readFindings(db: Database, includeWithinDaytime = false): FindingRowDTO[] {
   const persisted = db
     .query(
       `SELECT metric, state, z, severity, confidence, onset_day AS onsetDay,
@@ -241,5 +247,6 @@ export function readFindings(db: Database): FindingRowDTO[] {
   }
   return rankFindings(
     results.map((row) => toFinding(db, row)).filter((row): row is FindingRowDTO => row !== null),
+    includeWithinDaytime,
   );
 }
