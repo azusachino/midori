@@ -222,7 +222,7 @@ export interface MetricSeriesDTO {
   stints: Array<{ epochId: number; startDay: string; endDay: string }>;
   seams: Array<{
     seamDay: string;
-    fromEpochId: number;
+    fromEpochId: number | null;
     toEpochId: number;
     kind: "offset" | "step";
     value: number;

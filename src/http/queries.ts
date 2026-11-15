@@ -11,6 +11,7 @@ import type {
 } from "../domain/api";
 import { METRICS } from "../domain/metrics";
 import { readFindings } from "../stats/findings";
+import { type MetricUnit, minorEpochs } from "../stats/stints";
 
 export interface SourceDTO {
   name: string;
@@ -118,6 +119,77 @@ const asOf = (db: Database) =>
   ).day;
 const addDays = (day: string, n: number) =>
   new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+type EpochTrait = { colorIndex: number | null };
+type EpochTraits = {
+  byEpoch: Map<number, EpochTrait>;
+  minorByMetric: Map<string, Set<number>>;
+};
+
+function apiFindings(db: Database) {
+  const rows = readFindings(db);
+  const names = new Map(
+    (
+      db.query("SELECT id,source_name FROM epochs").all() as Array<{
+        id: number;
+        source_name: string;
+      }>
+    ).map((epoch) => [epoch.id, epoch.source_name]),
+  );
+  return rows.map((row) => ({
+    ...row,
+    epochLabel: row.epochId === null ? null : (names.get(row.epochId) ?? row.epochLabel),
+  }));
+}
+
+function getEpochTraits(db: Database): EpochTraits {
+  const rows = db
+    .query(
+      `SELECT v.metric,v.epoch_id,v.unit_day,v.unit_kind,v.value,v.n,e.kind
+       FROM metric_values v JOIN epochs e ON e.id=v.epoch_id
+       ORDER BY v.metric,v.unit_day`,
+    )
+    .all() as Array<{
+    metric: string;
+    epoch_id: number;
+    unit_day: string;
+    unit_kind: "night" | "day";
+    value: number;
+    n: number;
+    kind: "watch" | "phone" | "app" | "other";
+  }>;
+  const unitsByMetric = new Map<string, MetricUnit[]>();
+  for (const row of rows) {
+    const units = unitsByMetric.get(row.metric) ?? [];
+    units.push({
+      metric: row.metric,
+      epochId: row.epoch_id,
+      epochKind: row.kind,
+      unitDay: row.unit_day,
+      unitKind: row.unit_kind,
+      value: row.value,
+      n: row.n,
+    });
+    unitsByMetric.set(row.metric, units);
+  }
+  const minorByMetric = new Map<string, Set<number>>();
+  const nonMinorEpochs = new Set<number>();
+  for (const [metric, units] of unitsByMetric) {
+    const minor = minorEpochs(units);
+    minorByMetric.set(metric, minor);
+    for (const unit of units) if (!minor.has(unit.epochId)) nonMinorEpochs.add(unit.epochId);
+  }
+  const epochs = db.query("SELECT id FROM epochs ORDER BY first_day,id").all() as Array<{
+    id: number;
+  }>;
+  const byEpoch = new Map<number, EpochTrait>();
+  let colorIndex = 0;
+  for (const epoch of epochs) {
+    const isNonMinor = nonMinorEpochs.has(epoch.id);
+    byEpoch.set(epoch.id, { colorIndex: isNonMinor ? colorIndex++ : null });
+  }
+  return { byEpoch, minorByMetric };
+}
+
 const median = (v: number[]) => {
   const a = [...v].sort((x, y) => x - y);
   const middle = Math.floor(a.length / 2);
@@ -142,7 +214,7 @@ function freshness(db: Database, day: string | null) {
 export function getChanges(db: Database): ChangesDTO {
   const day = asOf(db),
     imported = hasImports(db),
-    rows = readFindings(db);
+    rows = apiFindings(db);
   const days = freshness(db, day).daysSinceImport;
   const warming = rows.find((r) => r.state === "warming_up" && r.warmup !== null);
   const active = db
@@ -174,10 +246,17 @@ export function getChanges(db: Database): ChangesDTO {
   const primary = day
     ? (db
         .query(
-          `SELECT e.id,e.device_hw,e.kind FROM stints s JOIN epochs e ON e.id=s.epoch_id WHERE s.metric='sleep_h' AND s.start_day<=? AND (s.end_day IS NULL OR s.end_day>=?) ORDER BY s.start_day DESC LIMIT 1`,
+          `SELECT e.id,e.source_name,e.device_hw,e.kind FROM stints s JOIN epochs e ON e.id=s.epoch_id WHERE s.metric='sleep_h' AND s.start_day<=? AND (s.end_day IS NULL OR s.end_day>=?) ORDER BY s.start_day DESC LIMIT 1`,
         )
-        .get(day, day) as { id: number; device_hw: string; kind: string } | null)
+        .get(day, day) as {
+        id: number;
+        source_name: string;
+        device_hw: string;
+        kind: string;
+      } | null)
     : null;
+  const primaryColorIndex =
+    primary?.kind === "watch" ? (getEpochTraits(db).byEpoch.get(primary.id)?.colorIndex ?? 0) : 0;
   return {
     hasImports: imported,
     asOfDay: day,
@@ -187,9 +266,9 @@ export function getChanges(db: Database): ChangesDTO {
       primary?.kind === "watch"
         ? {
             epochId: primary.id,
-            label: primary.device_hw,
+            label: primary.source_name,
             hardware: primary.device_hw,
-            colorIndex: primary.id % 8,
+            colorIndex: primaryColorIndex,
             warmingUp:
               rows.find((r) => r.epochId === primary.id && r.warmup !== null)?.warmup ?? null,
           }
@@ -256,8 +335,45 @@ function weekly(db: Database, metric: string) {
     hasPartial: b.hasPartial,
   }));
 }
+function weeklyByEpoch(db: Database, metric: string) {
+  const rows = db
+    .query(
+      `SELECT v.unit_day,v.value,v.epoch_id,v.usable,n.partial_reason
+       FROM metric_values v LEFT JOIN nights n ON n.date=v.unit_day
+       WHERE v.metric=? ORDER BY v.unit_day,v.epoch_id`,
+    )
+    .all(metric) as Array<{
+    unit_day: string;
+    value: number;
+    epoch_id: number;
+    usable: number;
+    partial_reason: string | null;
+  }>;
+  const buckets = new Map<
+    string,
+    { weekStart: string; epochId: number; values: number[]; hasPartial: boolean }
+  >();
+  for (const row of rows) {
+    const date = new Date(`${row.unit_day}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+    const weekStart = date.toISOString().slice(0, 10);
+    const key = `${weekStart}:${row.epoch_id}`;
+    const bucket = buckets.get(key) ?? {
+      weekStart,
+      epochId: row.epoch_id,
+      values: [],
+      hasPartial: false,
+    };
+    if (row.usable === 1) bucket.values.push(row.value);
+    bucket.hasPartial ||= row.partial_reason !== null;
+    buckets.set(key, bucket);
+  }
+  return [...buckets.values()]
+    .map((bucket) => ({ ...bucket, median: median(bucket.values) }))
+    .sort((a, b) => a.weekStart.localeCompare(b.weekStart) || a.epochId - b.epochId);
+}
 export function getMetrics(db: Database): MetricsIndexDTO {
-  const rows = readFindings(db);
+  const rows = apiFindings(db);
   return {
     hasImports: hasImports(db),
     asOfDay: asOf(db),
@@ -287,6 +403,8 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
   const spec = METRICS[metric];
   if (!spec) return null;
   const day = asOf(db);
+  const epochTraits = getEpochTraits(db);
+  const metricMinor = epochTraits.minorByMetric.get(metric) ?? new Set<number>();
   const from =
     range === "all" || !day
       ? null
@@ -297,7 +415,7 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
           : addDays(day, -179);
   const epochs = db
     .query(
-      "SELECT DISTINCT e.id,e.source_name,e.device_hw,e.kind,e.first_day,e.last_day FROM epochs e JOIN metric_values v ON v.epoch_id=e.id WHERE v.metric=? ORDER BY e.first_day",
+      "SELECT DISTINCT e.id,e.source_name,e.device_hw,e.kind,e.first_day,e.last_day FROM epochs e JOIN metric_values v ON v.epoch_id=e.id WHERE v.metric=? ORDER BY e.first_day,e.id",
     )
     .all(metric) as {
     id: number;
@@ -323,7 +441,7 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
     partialReason: string | null;
     tzChange: number;
   }[];
-  const rows = readFindings(db);
+  const rows = apiFindings(db);
   const row = rows.find((r) => r.metric === metric) ?? null;
   const recentDays = new Set(
     row?.sparkline
@@ -351,7 +469,7 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
   const seams = db
     .query(
       `SELECT s.seam_day seamDay,s.kind,s.value,s.n_old nOld,s.n_new nNew,
-        (SELECT epoch_id FROM stints WHERE metric=s.metric AND start_day < s.seam_day AND (end_day IS NULL OR end_day >= s.seam_day) ORDER BY start_day DESC LIMIT 1) fromEpochId,
+        (SELECT epoch_id FROM stints WHERE metric=s.metric AND start_day < s.seam_day ORDER BY start_day DESC LIMIT 1) fromEpochId,
         (SELECT epoch_id FROM stints WHERE metric=s.metric AND start_day = s.seam_day ORDER BY start_day DESC LIMIT 1) toEpochId
        FROM seam_steps s WHERE s.metric=? ORDER BY s.seam_day`,
     )
@@ -361,7 +479,7 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
     value: number;
     nOld: number;
     nNew: number;
-    fromEpochId: number;
+    fromEpochId: number | null;
     toEpochId: number;
   }[];
   const updateRows = db
@@ -382,19 +500,19 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
       id: e.id,
       sourceName: e.source_name,
       deviceHw: e.device_hw,
-      label: e.device_hw,
+      label: e.source_name,
       kind: e.kind as MetricSeriesDTO["epochs"][number]["kind"],
-      colorIndex: e.id % 8,
-      minor: false,
+      colorIndex: epochTraits.byEpoch.get(e.id)?.colorIndex ?? null,
+      minor: metricMinor.has(e.id),
     })),
     units:
       range === "all"
-        ? weekly(db, metric).map((p) => ({
-            day: p.weekStart,
-            epochId: p.epochId ?? 0,
-            value: p.median,
+        ? weeklyByEpoch(db, metric).map((point) => ({
+            day: point.weekStart,
+            epochId: point.epochId,
+            value: point.median,
             n: 0,
-            usable: p.median !== null,
+            usable: point.median !== null,
             partialReason: null,
             tzChange: false,
             z: null,
@@ -460,15 +578,16 @@ export function getUnitEvidence(db: Database, metric: string, day: string): Unit
         kind: string;
       } | null)
     : null;
+  const epochTraits = getEpochTraits(db);
   const primaryEpoch = ep
     ? {
         id: ep.id,
         sourceName: ep.source_name,
         deviceHw: ep.device_hw,
-        label: ep.device_hw,
+        label: ep.source_name,
         kind: ep.kind as NonNullable<UnitEvidenceDTO["primaryEpoch"]>["kind"],
-        colorIndex: ep.id % 8,
-        minor: false,
+        colorIndex: epochTraits.byEpoch.get(ep.id)?.colorIndex ?? null,
+        minor: epochTraits.minorByMetric.get(metric)?.has(ep.id) ?? true,
       }
     : null;
   const samples = spec.types.length
@@ -573,16 +692,17 @@ export function getUnitEvidence(db: Database, metric: string, day: string): Unit
       id: other.id,
       sourceName: other.source_name,
       deviceHw: other.device_hw,
-      label: other.device_hw,
+      label: other.source_name,
       kind: other.kind as NonNullable<UnitEvidenceDTO["primaryEpoch"]>["kind"],
-      colorIndex: other.id % 8,
-      minor: false,
+      colorIndex: epochTraits.byEpoch.get(other.id)?.colorIndex ?? null,
+      minor: epochTraits.minorByMetric.get(metric)?.has(other.id) ?? true,
     })),
   };
 }
 export function getEpochs(db: Database): EpochsDTO {
   const day = asOf(db);
-  const findings = readFindings(db);
+  const findings = apiFindings(db);
+  const epochTraits = getEpochTraits(db);
   const epochs = db.query("SELECT * FROM epochs ORDER BY first_day,id").all() as {
     id: number;
     source_name: string;
@@ -601,52 +721,56 @@ export function getEpochs(db: Database): EpochsDTO {
           "SELECT unit_day FROM metric_values WHERE epoch_id=? AND unit_day<=? GROUP BY unit_day ORDER BY unit_day",
         )
         .all(e.id, day ?? "9999-12-31") as { unit_day: string }[];
-      const metrics = Object.values(METRICS).map((s) => {
-        const stint = db
-          .query(
-            "SELECT start_day,end_day FROM stints WHERE metric=? AND epoch_id=? AND start_day<=? AND (end_day IS NULL OR end_day>=?) ORDER BY start_day DESC LIMIT 1",
-          )
-          .get(s.key, e.id, day ?? "9999-12-31", day ?? "9999-12-31") as {
-          start_day: string;
-          end_day: string | null;
-        } | null;
-        const metricFinding = findings.find(
-          (finding) => finding.metric === s.key && finding.epochId === e.id,
-        );
-        const count = Number(
-          (
-            db
-              .query(
-                "SELECT COUNT(*) n FROM metric_values WHERE metric=? AND epoch_id=? AND usable=1 AND unit_day<=?",
-              )
-              .get(s.key, e.id, day ?? "9999-12-31") as { n: number }
-          ).n,
-        );
-        const seam = db
-          .query(`SELECT ss.seam_day seamDay,ss.kind,ss.value,ss.n_old nOld,ss.n_new nNew,
+      const recordedMetrics = new Set(
+        (
+          db
+            .query("SELECT metric FROM metric_values WHERE epoch_id=? GROUP BY metric")
+            .all(e.id) as Array<{ metric: string }>
+        ).map((row) => row.metric),
+      );
+      const metrics = Object.values(METRICS)
+        .filter((spec) => recordedMetrics.has(spec.key))
+        .map((s) => {
+          const stint = db
+            .query(
+              "SELECT start_day,end_day FROM stints WHERE metric=? AND epoch_id=? AND start_day<=? AND (end_day IS NULL OR end_day>=?) ORDER BY start_day DESC LIMIT 1",
+            )
+            .get(s.key, e.id, day ?? "9999-12-31", day ?? "9999-12-31") as {
+            start_day: string;
+            end_day: string | null;
+          } | null;
+          const metricFinding = findings.find(
+            (finding) => finding.metric === s.key && finding.epochId === e.id,
+          );
+          const seam = db
+            .query(`SELECT ss.seam_day seamDay,ss.kind,ss.value,ss.n_old nOld,ss.n_new nNew,
           (SELECT epoch_id FROM stints WHERE metric=ss.metric AND start_day<ss.seam_day ORDER BY start_day DESC LIMIT 1) fromEpochId,
           (SELECT epoch_id FROM stints WHERE metric=ss.metric AND start_day=ss.seam_day LIMIT 1) toEpochId
           FROM seam_steps ss JOIN stints target ON target.metric=ss.metric AND target.start_day=ss.seam_day
           WHERE ss.metric=? AND target.epoch_id=? AND ss.seam_day<=? ORDER BY ss.seam_day DESC LIMIT 1`)
-          .get(s.key, e.id, day ?? "9999-12-31") as EpochMetricRoleDTO["seamFromPrevious"];
-        return {
-          metric: s.key,
-          role: (stint ? "primary" : count ? "candidate" : "minor") as EpochMetricRoleDTO["role"],
-          baselineState: (s.kind === "trendOnly"
-            ? "trend_only"
-            : metricFinding?.state === "warming_up"
-              ? "warming_up"
-              : metricFinding?.state === "computed"
-                ? metricFinding.baselineCount >= 14
-                  ? "full"
-                  : "early"
-                : "insufficient") as EpochMetricRoleDTO["baselineState"],
-          warmup: metricFinding?.warmup
-            ? { current: metricFinding.warmup.current, target: metricFinding.warmup.target }
-            : null,
-          seamFromPrevious: seam,
-        };
-      });
+            .get(s.key, e.id, day ?? "9999-12-31") as EpochMetricRoleDTO["seamFromPrevious"];
+          return {
+            metric: s.key,
+            role: (stint
+              ? "primary"
+              : epochTraits.minorByMetric.get(s.key)?.has(e.id)
+                ? "minor"
+                : "candidate") as EpochMetricRoleDTO["role"],
+            baselineState: (s.kind === "trendOnly"
+              ? "trend_only"
+              : metricFinding?.state === "warming_up"
+                ? "warming_up"
+                : metricFinding?.state === "computed"
+                  ? metricFinding.baselineCount >= 14
+                    ? "full"
+                    : "early"
+                  : "insufficient") as EpochMetricRoleDTO["baselineState"],
+            warmup: metricFinding?.warmup
+              ? { current: metricFinding.warmup.current, target: metricFinding.warmup.target }
+              : null,
+            seamFromPrevious: seam,
+          };
+        });
       const events = db
         .query(
           "SELECT epoch_id epochId,day,detail FROM epoch_events WHERE epoch_id=? AND day<=? ORDER BY day",
@@ -656,9 +780,9 @@ export function getEpochs(db: Database): EpochsDTO {
         id: e.id,
         sourceName: e.source_name,
         deviceHw: e.device_hw,
-        label: e.device_hw,
+        label: e.source_name,
         kind: e.kind as EpochsDTO["epochs"][number]["kind"],
-        colorIndex: e.id % 8,
+        colorIndex: epochTraits.byEpoch.get(e.id)?.colorIndex ?? null,
         minor: metrics.every((m) => m.role === "minor"),
         firstDay: e.first_day,
         lastDay: e.last_day,
