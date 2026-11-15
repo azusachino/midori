@@ -196,17 +196,28 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
 - Files: `src/stats/values.ts` (+ test), `src/stats/baselines.ts` (rewrite) + test,
   `src/domain/stats.ts` (remove 1e-9 branch, add floor/cap).
 - AC:
-  - [ ] `metric_values` rows with `usable` from the two-level rule.
-  - [ ] Ordinal windows over usable units of the current stint. Recent gate includes the
+  - [x] `metric_values` rows with `usable` from the two-level rule.
+  - [x] Ordinal windows over usable units of the current stint. Recent gate includes the
     14-day recency check. Baseline gate gives warming_up <7, early 7–13, full ≥14.
-  - [ ] σ = max(1.4826·MAD, floor); |z| capped at 10 for display and ranking.
-  - [ ] Fixture `B-F4 flat resp baseline → bounded z`.
-  - [ ] Confidence is an ordered decision list (B-F6), one test per branch.
-  - [ ] k-outside and onset ("since" vs "at least since"), with tests for the one-unit
+  - [x] σ = max(1.4826·MAD, floor); |z| capped at 10 for display and ranking.
+  - [x] Fixture `B-F4 flat resp baseline → bounded z`.
+  - [x] Confidence is an ordered decision list (B-F6), one test per branch.
+  - [x] k-outside and onset ("since" vs "at least since"), with tests for the one-unit
     tolerance and the open-ended run.
-  - [ ] The v0 spike fixture is updated: it now expects new stint → warming_up → (after 14
+  - [x] The v0 spike fixture is updated: it now expects new stint → warming_up → (after 14
     usable units) a low-confidence z, plus a seam step. Never a raw ≥4σ alert across the seam.
 - Verify: `bun run check`.
+- **Done 2026-11-15** — `midori-engine-s5` (pi, gpt-6-luna high), commits `e00e4c2` and `32dcc22`
+  (rebased onto `dd98e81` by the lead).
+  - `bun run check` (lead): exit 0, 193 tests.
+  - Real-data readout (lead; states only, no values):
+    - pipeline + values + baselines took 3.5 s + 5 ms + 29 ms, 136 MB peak RSS
+    - all 13 non-trend metrics are `computed` on the current watch stint (medium confidence;
+      low for active energy's low trust)
+    - **no metric is blank because of the device change** (success criterion 2)
+    - `vo2max` reports `warming_up`; slice 6 excludes trend-only metrics from findings
+  - Follow-up for slice 6: severity is named `info`, but B-F5 and the UI types use `within`.
+    Rename it.
 
 ### Slice 6 — Findings + checks `[midori-engine]`
 
