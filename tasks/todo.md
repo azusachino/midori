@@ -131,19 +131,27 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - `src/stats/stints.ts` (+ test)
   - `src/stats/seams.ts` (+ test)
 - AC:
-  - [ ] Minor per (metric, epoch) over all history, using the 6-of-28 rule.
-  - [ ] Sticky primary with kind priority and the (a)/(b)/(c) switch conditions. Stints are
+  - [x] Minor per (metric, epoch) over all history, using the 6-of-28 rule.
+  - [x] Sticky primary with kind priority and the (a)/(b)/(c) switch conditions. Stints are
     persisted.
-  - [ ] Fixture `B-D3 minor app single sample → no seam`.
-  - [ ] Fixture `B-D4 alternating phone/watch step days → no seam`.
-  - [ ] Fixture `B-D4 watch replaced by same-kind watch → one seam at the first unit of the
+  - [x] Fixture `B-D3 minor app single sample → no seam`.
+  - [x] Fixture `B-D4 alternating phone/watch step days → no seam`.
+  - [x] Fixture `B-D4 watch replaced by same-kind watch → one seam at the first unit of the
     7-run`.
-  - [ ] B-D4b: no fallback value on units the primary did not record.
-  - [ ] `seam_steps`: an offset when there are ≥7 shared usable units, else a step (≥7 per side,
+  - [x] B-D4b: no fallback value on units the primary did not record.
+  - [x] `seam_steps`: an offset when there are ≥7 shared usable units, else a step (≥7 per side,
     up to 28). Values are never adjusted.
-  - [ ] Depends on usability from slice 4. Until then, stint and seam logic take a
+  - [x] Depends on usability from slice 4. Until then, stint and seam logic take a
     `usable(unit)` predicate, and the tests pass explicit predicates.
 - Verify: `bun run check`.
+- **Done 2026-11-15** — `midori-engine` (pi, magpie/codex/gpt-6-luna high), commit `dd77267`.
+  - `bun run check` (lead): exit 0, 180 tests.
+  - Real-data probe (lead, counts only; per-day presence from records, all units treated as
+    usable):
+    - steps: 4 stints following the device history (phone → watch → watch → watch), 1 seam
+      in the last 180 days. Fable's measurement under sample-count primary was 6.
+    - hrv_sdnn and resp_rate: 3 stints each
+    - active_kj: 4 stints, with 2 minor epochs excluded
 
 ### Slice 4 — Nights `[midori-engine]`
 
