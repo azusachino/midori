@@ -161,18 +161,34 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - `src/domain/dates.ts` (zone helpers)
   - fixtures
 - AC:
-  - [ ] Night zone from `HKTimeZone` (IANA name) on that night's sleep records, else the
+  - [x] Night zone from `HKTimeZone` (IANA name) on that night's sleep records, else the
     export offset. Local times are computed in that zone.
-  - [ ] Boundary tests: 14:59/15:00, 08:59/09:00, the 09:00–12:00 continuation (≤60 min after
+  - [x] Boundary tests: 14:59/15:00, 08:59/09:00, the 09:00–12:00 continuation (≤60 min after
     the last asleep end vs a nap), and HRV at 21:00.
-  - [ ] Sleep stages from the `sleep_h` primary epoch only.
-  - [ ] `sleep_hr` = median HR inside asleep intervals.
-  - [ ] Export-cut partial (window to 12:00 the next day vs `export_date`). A short night is
+  - [x] Sleep stages from the `sleep_h` primary epoch only.
+  - [x] `sleep_hr` = median HR inside asleep intervals.
+  - [x] Export-cut partial (window to 12:00 the next day vs `export_date`). A short night is
     **not** partial.
-  - [ ] `tz_change` when the zone differs from the previous night's.
-  - [ ] Fixture `B-N1 night abroad assigned in its own zone`.
-  - [ ] Daytime unit = local day in the export offset; the export day is not usable.
+  - [x] `tz_change` when the zone differs from the previous night's.
+  - [x] Fixture `B-N1 night abroad assigned in its own zone`.
+  - [x] Daytime unit = local day in the export offset; the export day is not usable.
 - Verify: `bun run check`.
+- **Done 2026-11-15** — `midori-engine` (pi, magpie/codex/gpt-6-luna high), commits `ba55829`,
+  `3c28acc` and `39e97e8`.
+  - `bun run check` (lead): exit 0, 186 tests.
+  - Real-data readout (lead, counts only) on a db copy:
+    - 1,407 nights; 1 partial (`export_cut`); 9 `tz_change` nights over 2 zones
+    - `metric_values` for all 14 metrics; 3 stints per watch metric, 4 for steps and active
+      energy
+  - Two rework rounds came from the lead's real-data runs:
+    - The first version left `metric_values` empty on a fresh db (a stints↔nights cycle). Now
+      presence → stints → nights.
+    - The full pipeline took 383 s and 4.5 GB. Slice 2's per-record epoch derivation alone
+      took 348 s; it now aggregates in SQL.
+    - After both fixes: `rebuildNightPipeline` on real data takes **3.5 s, 150 MB peak RSS**
+      (pod limit 2 GiB).
+  - Lesson: time every derive stage on the real db, not only synthetic benchmarks. Slice 2's
+    cost was missed at its review.
 
 ### Slice 5 — Values + baselines `[midori-engine]`
 
