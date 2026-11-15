@@ -9,8 +9,28 @@ export function isActiveImportStatus(status: ImportStatus): boolean {
 }
 
 /**
+ * Computes a clamped 0..100 percentage from `progress / progressTotal`,
+ * returning `null` when either field is absent, non-finite, or `progressTotal <= 0`.
+ */
+export function computeImportProgressPct(
+  progress: number | null | undefined,
+  progressTotal: number | null | undefined,
+): number | null {
+  if (
+    typeof progress !== "number" ||
+    !Number.isFinite(progress) ||
+    typeof progressTotal !== "number" ||
+    !Number.isFinite(progressTotal) ||
+    progressTotal <= 0
+  ) {
+    return null;
+  }
+  return Math.max(0, Math.min(100, (progress / progressTotal) * 100));
+}
+
+/**
  * Resolves the 0..4 stepper index and optional 0..100 progress percentage,
- * tolerating v0 ImportDTO rows where `stage` and `progress` are absent.
+ * tolerating v0 ImportDTO rows where `stage`, `progress`, and `progressTotal` are absent.
  */
 export function resolveJobStage(row: ImportDTO): {
   stageIndex: number;
@@ -23,14 +43,11 @@ export function resolveJobStage(row: ImportDTO): {
   const stageIndex = row.status === "done" ? IMPORT_STAGES.length : Math.max(idx, 0);
   const stageKey = IMPORT_STAGES[Math.min(stageIndex, IMPORT_STAGES.length - 1)] ?? "queued";
 
-  const progressPct =
-    typeof row.progress === "number" && Number.isFinite(row.progress)
-      ? Math.max(0, Math.min(100, row.progress))
-      : null;
+  const progressPct = computeImportProgressPct(row.progress, row.progressTotal);
 
   const barValue =
     progressPct !== null
-      ? progressPct
+      ? Math.round(progressPct)
       : row.status === "done"
         ? 100
         : Math.round(((stageIndex + 0.5) / IMPORT_STAGES.length) * 100);

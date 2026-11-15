@@ -86,10 +86,19 @@ test("checks panel (B-C1–B-C6), evidence sheet interactions, URL sync, Esc, co
     copy.pages.metricDetail.evidence.copiedLink,
   );
 
-  // Escape closes sheet and clears ?night=
+  // Escape closes sheet, clears ?night=, and restores focus to trigger (L2)
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await expect(page).not.toHaveURL(/night=/);
+  await expect(rowBtn).toBeFocused();
+
+  // Close button also restores focus to trigger
+  const rowBtn13 = page.getByTestId("recent-row-btn-2026-11-13");
+  await rowBtn13.click();
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole("button", { name: copy.pages.metricDetail.evidence.closeLabel }).click();
+  await expect(sheet).toBeHidden();
+  await expect(rowBtn13).toBeFocused();
 
   // Clicking a plotted point column on the chart opens that day's sheet
   const canvasBox = await page.getByTestId("metric-echart").locator("canvas").boundingBox();

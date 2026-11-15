@@ -13,14 +13,19 @@ export interface EpochWeeklySeriesSegment {
   }>;
 }
 
-/** Deterministic palette slot assignment for an epoch ID on the /metrics index. */
+/** Resolves the app-wide palette slot for each epoch ID (preferring server `colorIndex`). */
 export function miniChartColorIndexMap(
   weeklySeries: readonly WeeklySeriesPointDTO[],
+  epochColorIndices?: ReadonlyMap<number, number | null>,
 ): Map<number, number> {
   const map = new Map<number, number>();
   for (const pt of weeklySeries) {
     if (pt.epochId !== null && !map.has(pt.epochId)) {
-      map.set(pt.epochId, Math.max(0, pt.epochId - 1) % 6);
+      const serverIndex = epochColorIndices?.get(pt.epochId);
+      map.set(
+        pt.epochId,
+        typeof serverIndex === "number" ? serverIndex : Math.max(0, pt.epochId - 1) % 6,
+      );
     }
   }
   return map;
@@ -29,8 +34,9 @@ export function miniChartColorIndexMap(
 /** Splits weekly series by epochId with nulls elsewhere so lines never bridge a seam. */
 export function buildEpochWeeklySegments(
   weeklySeries: readonly WeeklySeriesPointDTO[],
+  epochColorIndices?: ReadonlyMap<number, number | null>,
 ): EpochWeeklySeriesSegment[] {
-  const colorMap = miniChartColorIndexMap(weeklySeries);
+  const colorMap = miniChartColorIndexMap(weeklySeries, epochColorIndices);
   const epochIds = Array.from(colorMap.keys());
 
   return epochIds.map((epochId) => ({
@@ -69,7 +75,10 @@ export function buildMiniChartSummary(entry: MetricIndexEntryDTO): string {
   return copy.pages.metrics.weeklySummary(label, entry.weeklySeries.length, entry.seams.length);
 }
 
-export function buildMiniChartTable(entry: MetricIndexEntryDTO): ChartAccessibleTable {
+export function buildMiniChartTable(
+  entry: MetricIndexEntryDTO,
+  epochLabels?: ReadonlyMap<number, string>,
+): ChartAccessibleTable {
   const unitLabel = displayUnit(entry.metric, entry.unit);
   const seamWeekByDay = new Map<string, string>();
   for (const s of entry.seams) {
@@ -84,16 +93,24 @@ export function buildMiniChartTable(entry: MetricIndexEntryDTO): ChartAccessible
       { key: "epochId", label: copy.chart.epochCol },
       { key: "seam", label: copy.pages.metricDetail.longView.colSeam },
     ],
-    rows: entry.weeklySeries.map((pt) => ({
-      weekStart: pt.weekStart,
-      median:
-        pt.median === null
+    rows: entry.weeklySeries.map((pt) => {
+      const epochLabel =
+        pt.epochId === null
           ? "—"
-          : unitLabel
-            ? `${formatMetricNumber(pt.median, entry.metric, entry.unit)} ${unitLabel}`
-            : formatMetricNumber(pt.median, entry.metric, entry.unit),
-      epochId: pt.epochId !== null ? `Epoch ${pt.epochId}` : "—",
-      seam: seamWeekByDay.get(pt.weekStart) ?? "—",
-    })),
+          : (epochLabels?.get(pt.epochId) ??
+            (entry.finding?.epochId === pt.epochId ? entry.finding.epochLabel : null) ??
+            `Epoch ${pt.epochId}`);
+      return {
+        weekStart: pt.weekStart,
+        median:
+          pt.median === null
+            ? "—"
+            : unitLabel
+              ? `${formatMetricNumber(pt.median, entry.metric, entry.unit)} ${unitLabel}`
+              : formatMetricNumber(pt.median, entry.metric, entry.unit),
+        epochId: epochLabel,
+        seam: seamWeekByDay.get(pt.weekStart) ?? "—",
+      };
+    }),
   };
 }

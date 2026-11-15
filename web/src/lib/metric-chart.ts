@@ -285,12 +285,31 @@ export interface SeamLabelLayout {
 const SEAM_MIN_SPACING_PX = 120;
 const SEAM_LABEL_PADDING_PX = 16;
 
-function estimateTextWidthPx(text: string): number {
+export function estimateTextWidthPx(text: string): number {
   let width = 0;
   for (const ch of text) {
     width += ch.charCodeAt(0) > 0x7f ? 11.5 : 6.4;
   }
   return width;
+}
+
+/** Estimates how many wrapped rows the epoch legend occupies at a given chart width. */
+export function estimateLegendRows(labels: readonly string[], chartWidth: number): number {
+  if (labels.length === 0) return 0;
+  const available = Math.max(120, chartWidth - 8);
+  const itemOverhead = 8 + 6 + 14; // icon + text gap + itemGap
+  let rows = 1;
+  let currentX = 0;
+  for (const label of labels) {
+    const itemWidth = Math.ceil(estimateTextWidthPx(label)) + itemOverhead;
+    if (currentX > 0 && currentX + itemWidth > available) {
+      rows += 1;
+      currentX = itemWidth;
+    } else {
+      currentX += itemWidth;
+    }
+  }
+  return rows;
 }
 
 function clampSeamLabelToWidth(label: string, maxChars: number, maxWidthPx: number): string {
@@ -301,9 +320,11 @@ function clampSeamLabelToWidth(label: string, maxChars: number, maxWidthPx: numb
   return out;
 }
 
+const MIN_SEAM_LABEL_WIDTH_PX = 72;
+
 /**
- * Places seam markLine labels inside the grid and suppresses overlapping labels when seams
- * fall within ~120 px (or bounding boxes collide), keeping a marker on the line and full text in tooltip.
+ * Places seam markLine labels inside the grid and suppresses overlapping or clipped labels
+ * (keeping a top marker on the line and full text in tooltip).
  */
 export function resolveSeamLabelLayouts(
   seams: readonly SeamStepDTO[],
@@ -318,7 +339,7 @@ export function resolveSeamLabelLayouts(
     viewEndIdx?: number | undefined;
     minSpacingPx?: number | undefined;
   },
-): SeamLabelLayout[] {
+): (SeamLabelLayout & { spanEnd: number })[] {
   if (seams.length === 0 || days.length === 0) return [];
 
   const isWeekly = options?.isWeekly ?? false;
@@ -327,7 +348,6 @@ export function resolveSeamLabelLayouts(
   const viewEnd = Math.min(days.length - 1, options?.viewEndIdx ?? days.length - 1);
   const span = Math.max(1, viewEnd - viewStart);
   const minSpacingPx = options?.minSpacingPx ?? SEAM_MIN_SPACING_PX;
-  const maxBoxWidthPx = Math.max(110, gridWidth - 20);
 
   const dayIndex = new Map<string, number>();
   days.forEach((d, idx) => {
@@ -339,11 +359,31 @@ export function resolveSeamLabelLayouts(
     const seamIdx = dayIndex.get(seamDay);
     if (seamIdx === undefined) return [];
     const ratio = (seamIdx - viewStart) / span;
-    const align: "left" | "center" | "right" =
-      ratio < 0.35 ? "left" : ratio > 0.65 ? "right" : "center";
-    const fullLabel = formatSeamLabel(seam, epochs, metric, unit);
-    const displayLabel = clampSeamLabelToWidth(fullLabel, 44, maxBoxWidthPx);
     const xPx = ratio * gridWidth;
+    const fullLabel = formatSeamLabel(seam, epochs, metric, unit);
+    const fullBoxPx = estimateTextWidthPx(fullLabel) + SEAM_LABEL_PADDING_PX;
+
+    let align: "left" | "center" | "right";
+    let availWidthPx: number;
+    if (ratio < 0.35) {
+      align = "left";
+      availWidthPx = gridWidth - xPx - 6;
+    } else if (ratio > 0.65) {
+      align = "right";
+      availWidthPx = xPx - 6;
+    } else if (fullBoxPx / 2 <= Math.min(xPx, gridWidth - xPx) - 6) {
+      align = "center";
+      availWidthPx = 2 * Math.min(xPx, gridWidth - xPx) - 12;
+    } else if (gridWidth - xPx >= xPx) {
+      align = "left";
+      availWidthPx = gridWidth - xPx - 6;
+    } else {
+      align = "right";
+      availWidthPx = xPx - 6;
+    }
+
+    const cappedAvailPx = Math.min(Math.max(0, availWidthPx), Math.max(110, gridWidth - 20));
+    const displayLabel = clampSeamLabelToWidth(fullLabel, 44, cappedAvailPx);
     const boxWidthPx = estimateTextWidthPx(displayLabel) + SEAM_LABEL_PADDING_PX;
     const rawSpanStart =
       align === "left" ? xPx : align === "right" ? xPx - boxWidthPx : xPx - boxWidthPx / 2;
@@ -360,6 +400,7 @@ export function resolveSeamLabelLayouts(
         xPx,
         spanStart,
         spanEnd,
+        fitsWidth: cappedAvailPx >= MIN_SEAM_LABEL_WIDTH_PX && boxWidthPx <= cappedAvailPx + 2,
       },
     ];
   });
@@ -376,20 +417,21 @@ export function resolveSeamLabelLayouts(
         Math.abs(cand.xPx - p.xPx) < minSpacingPx ||
         (cand.spanStart - 8 <= p.spanEnd && cand.spanEnd + 8 >= p.spanStart),
     );
-    const showLabel = inPlot && !collides;
+    const showLabel = inPlot && cand.fitsWidth && !collides;
     if (showLabel) {
       placed.push({ xPx: cand.xPx, spanStart: cand.spanStart, spanEnd: cand.spanEnd });
     }
     showBySeam.set(cand.seam, showLabel);
   }
 
-  return candidates.map(({ seam, seamDay, seamIdx, fullLabel, displayLabel, align }) => ({
+  return candidates.map(({ seam, seamDay, seamIdx, fullLabel, displayLabel, align, spanEnd }) => ({
     seam,
     seamDay,
     seamIdx,
     fullLabel,
     displayLabel,
     align,
+    spanEnd,
     showLabel: showBySeam.get(seam) ?? false,
   }));
 }
@@ -529,8 +571,9 @@ export function formatPartialReason(reason: string | null): string | null {
 export function formatZScore(z: number | null): string {
   if (z === null || !Number.isFinite(z)) return "—";
   if (Math.abs(z) >= 10) return copy.pages.changes.clippedZ;
-  const sign = z > 0 ? "+" : z < 0 ? "−" : "";
-  return `${sign}${Math.abs(z).toFixed(1)}σ`;
+  const truncatedTenths = Math.trunc(Math.abs(z) * 10) / 10;
+  const sign = truncatedTenths === 0 ? "" : z > 0 ? "+" : "−";
+  return `${sign}${truncatedTenths.toFixed(1)}σ`;
 }
 
 function zToneFor(z: number | null): RecentUnitRow["zTone"] {
@@ -560,11 +603,15 @@ export function currentStintBandPoints(series: MetricSeriesDTO): BandPointDTO[] 
     return [];
   }
   const bounds = getSeriesRangeBounds(series);
+  const recentWindow = findRecentWindow(series.units);
   const currentStint = [...series.stints].sort((a, b) =>
     a.endDay < b.endDay ? 1 : a.endDay > b.endDay ? -1 : 0,
   )[0];
   const filtered = series.band.filter((b) => {
     if (currentStint && (b.day < currentStint.startDay || b.day > currentStint.endDay)) {
+      return false;
+    }
+    if (recentWindow && b.day >= recentWindow.startDay) {
       return false;
     }
     return isDayInRangeBounds(b.day, bounds);
@@ -744,9 +791,12 @@ export function buildBaselineSummary(series: MetricSeriesDTO): string {
   const currentStint = [...series.stints].sort((a, b) =>
     a.endDay < b.endDay ? 1 : a.endDay > b.endDay ? -1 : 0,
   )[0];
+  const recentWindow = findRecentWindow(series.units);
   const bandDays = series.band
     .filter(
-      (b) => !currentStint || (b.day >= currentStint.startDay && b.day <= currentStint.endDay),
+      (b) =>
+        (!currentStint || (b.day >= currentStint.startDay && b.day <= currentStint.endDay)) &&
+        (!recentWindow || b.day < recentWindow.startDay),
     )
     .map((b) => b.day)
     .sort();
@@ -799,11 +849,13 @@ export function buildMetricChartSummary(series: MetricSeriesDTO): string {
   const visibleSeams = series.seams.filter((s) => isDayInRangeBounds(s.seamDay, bounds));
   const seamText =
     visibleSeams.length > 0 && visibleSeams[0]
-      ? `, ${visibleSeams.length} device seam (${formatShortDay(visibleSeams[0].seamDay)})`
+      ? `, ${visibleSeams.length} ${visibleSeams.length === 1 ? "device seam" : "device seams"} (${formatShortDay(visibleSeams[0].seamDay)})`
       : "";
   const nonMinorCount = series.epochs.filter((e) => !e.minor).length;
+  const readingWord = numericUnits.length === 1 ? "reading" : "readings";
+  const epochWord = nonMinorCount === 1 ? "primary epoch" : "primary epochs";
 
-  return `${label}: ${numericUnits.length} readings${span} ranging from ${minVal} to ${maxVal}${unitSuffix} across ${nonMinorCount} primary epochs${seamText}.`;
+  return `${label}: ${numericUnits.length} ${readingWord}${span} ranging from ${minVal} to ${maxVal}${unitSuffix} across ${nonMinorCount} ${epochWord}${seamText}.`;
 }
 
 /** Builds an accessible hidden table mirror for screen readers (`EChart` `table` prop). */

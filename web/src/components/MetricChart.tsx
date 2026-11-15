@@ -1,6 +1,7 @@
 import type { EChartsCoreOption } from "echarts/core";
 import { graphic } from "echarts/core";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { apiClient } from "@/api/client";
 import type {
   MetricSeriesDTO,
   MetricUnitPointDTO,
@@ -16,6 +17,7 @@ import {
   buildMetricChartSummary,
   buildMetricChartTable,
   currentStintBandPoints,
+  estimateLegendRows,
   findRecentWindow,
   formatPartialReason,
   formatSeamLabel,
@@ -69,6 +71,38 @@ export function MetricChart({
     return map;
   }, [days]);
 
+  const zoneByDayRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (series.range === "all" || days.length === 0) {
+      zoneByDayRef.current = new Map();
+      return;
+    }
+    const toDay = days[days.length - 1];
+    const firstDay = days[0];
+    if (!toDay || !firstDay) return;
+    // /api/nights caps spans at 400 days (inclusive of endpoints -> max 399 day delta).
+    const toMs = Date.parse(`${toDay}T00:00:00Z`);
+    const firstMs = Date.parse(`${firstDay}T00:00:00Z`);
+    const minFromMs = toMs - 399 * 86_400_000;
+    const fromDay = new Date(Math.max(firstMs, minFromMs)).toISOString().slice(0, 10);
+
+    const controller = new AbortController();
+    apiClient
+      .nights(fromDay, toDay, controller.signal)
+      .then((dto) => {
+        if (controller.signal.aborted) return;
+        const map = new Map<string, string>();
+        for (const night of dto.nights) {
+          if (night.zone) map.set(night.date, night.zone);
+        }
+        zoneByDayRef.current = map;
+      })
+      .catch(() => {
+        // Tooltip degrades gracefully without zone when /api/nights fails or aborts.
+      });
+    return () => controller.abort();
+  }, [days, series.range]);
+
   const currentBand = useMemo(() => currentStintBandPoints(series), [series]);
   const bandSegments = useMemo(
     () => buildBandPolygons(currentBand, dayIndex),
@@ -115,6 +149,7 @@ export function MetricChart({
       for (const u of series.units) {
         unitByEpochDay.set(`${u.epochId}:${u.day}`, u);
       }
+      const gridWidth = Math.max(160, chartWidth - 72);
       const bandByDay = new Map(currentBand.map((b) => [b.day, b]));
       const seamLayouts = resolveSeamLabelLayouts(
         series.seams,
@@ -124,10 +159,13 @@ export function MetricChart({
         series.unit,
         {
           isWeekly,
-          gridWidth: Math.max(160, chartWidth - 72),
+          gridWidth,
           viewStartIdx: zoomWindow?.startValue,
           viewEndIdx: zoomWindow?.endValue,
         },
+      );
+      const seamOverlapsTopRight = seamLayouts.some(
+        (layout) => layout.showLabel && layout.spanEnd >= gridWidth - 54,
       );
       const seamsByDay = new Map<string, SeamStepDTO[]>();
       for (const s of series.seams) {
@@ -302,7 +340,9 @@ export function MetricChart({
                     itemStyle: { color: "rgba(161, 161, 170, 0.08)" },
                     label: {
                       show: true,
-                      position: "insideTopLeft" as const,
+                      position: seamOverlapsTopRight
+                        ? ("insideBottomRight" as const)
+                        : ("insideTopRight" as const),
                       color: theme.mutedForeground,
                       fontSize: 11,
                     },
@@ -452,11 +492,17 @@ export function MetricChart({
         ...(zoomWindow ? zoomWindow : {}),
       };
 
+      const legendLabels = nonMinorEpochs.map((e) => e.label);
+      const legendRows = estimateLegendRows(legendLabels, chartWidth);
+      const legendHeight = legendRows > 0 ? 8 + legendRows * 22 : 12;
+      const gridTop = Math.max(58, legendHeight + (unitLabel ? 22 : 8));
+
       return {
         legend: {
           top: 2,
           left: 0,
-          data: nonMinorEpochs.map((e) => e.label),
+          width: Math.max(120, chartWidth - 8),
+          data: legendLabels,
           icon: "circle",
           itemWidth: 8,
           itemHeight: 8,
@@ -469,7 +515,7 @@ export function MetricChart({
         grid: {
           left: 52,
           right: 20,
-          top: 58,
+          top: gridTop,
           bottom: 58,
         },
         tooltip: {
@@ -483,8 +529,9 @@ export function MetricChart({
             const day = typeof firstIdx === "number" ? days[firstIdx] : undefined;
             if (!day) return "";
 
+            const zone = series.range !== "all" ? zoneByDayRef.current.get(day) : undefined;
             const lines: string[] = [
-              `<div style="font-weight:600;margin-bottom:4px;">${escapeHtml(formatDayWithWeekday(day))}</div>`,
+              `<div style="font-weight:600;margin-bottom:4px;">${escapeHtml(formatDayWithWeekday(day))}${zone ? ` <span style="font-weight:400;color:${theme.mutedForeground};">· ${escapeHtml(zone)}</span>` : ""}</div>`,
             ];
 
             for (const epoch of series.epochs) {
@@ -502,10 +549,11 @@ export function MetricChart({
                       ),
                     theme.epochs,
                   );
-              const notes: string[] = [];
-              if (!u.usable) {
-                notes.push(formatPartialReason(u.partialReason) ?? copy.chart.partialGeneric);
-              }
+              const notes: string[] = [
+                u.usable
+                  ? copy.pages.metricDetail.evidence.usableLabel
+                  : (formatPartialReason(u.partialReason) ?? copy.chart.partialGeneric),
+              ];
               if (u.tzChange) notes.push(copy.chart.tzShiftNote);
               if (epoch.minor) notes.push(copy.chart.minorEpochNote);
               if (u.n > 0) notes.push(`n=${u.n}`);

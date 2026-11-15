@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { metricSeriesStub, metricsIndexStub } from "../../web/src/api/fixtures";
+import { epochsStub, metricSeriesStub, metricsIndexStub } from "../../web/src/api/fixtures";
+import { buildDeviceTimelineModel } from "../../web/src/lib/devices";
 import {
   buildLongViewModel,
   buildLongViewSummary,
@@ -12,6 +13,7 @@ import {
   buildMiniChartTable,
   resolveWeeklySeamWeek,
 } from "../../web/src/lib/metrics-index";
+import { EPOCH_PALETTE, epochColor } from "../../web/src/lib/theme";
 
 describe("Long view calendar helpers", () => {
   test("groups multi-year series by year, computes per-stint deviation, marks partial & seam cells", () => {
@@ -152,5 +154,37 @@ describe("Metrics index weekly helpers", () => {
     const feb10Cells = model.years.flatMap((y) => y.cells).filter((c) => c.day === day);
     expect(feb10Cells).toHaveLength(1);
     expect(feb10Cells[0]?.epochId).toBe(e2.id);
+  });
+
+  test("same epochId maps to the same color in the index card and the Devices timeline", () => {
+    const baseEpochs = epochsStub(true);
+    // Remap epoch IDs out of order vs server colorIndex (simulating real DB IDs with minor epochs)
+    const oldWatch = baseEpochs.epochs.find((e) => e.id === 1);
+    const currentWatch = baseEpochs.epochs.find((e) => e.id === 2);
+    const phone = baseEpochs.epochs.find((e) => e.id === 3);
+    if (!oldWatch || !currentWatch || !phone) throw new Error("expected fixture epochs");
+
+    const remappedEpochs = [
+      { ...oldWatch, id: 4, colorIndex: 2 },
+      { ...phone, id: 2, colorIndex: 3 },
+      { ...currentWatch, id: 5, colorIndex: 4 },
+    ];
+    const timeline = buildDeviceTimelineModel(remappedEpochs);
+    const colorMap = new Map(remappedEpochs.map((e) => [e.id, e.colorIndex]));
+    const weeklySeries = [
+      { weekStart: "2026-01-19", median: 48, epochId: 4, hasPartial: false },
+      { weekStart: "2026-01-26", median: 52, epochId: 5, hasPartial: false },
+    ];
+    const segments = buildEpochWeeklySegments(weeklySeries, colorMap);
+
+    for (const seg of segments) {
+      const deviceSeg = timeline.segments.find((s) => s.epochId === seg.epochId);
+      expect(deviceSeg).toBeDefined();
+      const indexColor = epochColor(seg.colorIndex, EPOCH_PALETTE);
+      const devicesColor = epochColor(deviceSeg?.colorIndex ?? 0, EPOCH_PALETTE);
+      expect(indexColor).toBe(devicesColor);
+    }
+    expect(epochColor(segments[0]?.colorIndex ?? -1, EPOCH_PALETTE)).toBe("#fb923c");
+    expect(epochColor(segments[1]?.colorIndex ?? -1, EPOCH_PALETTE)).toBe("#bef264");
   });
 });

@@ -157,7 +157,8 @@ export const copy = {
           ? `Learning your new watch — ${metricLabel}: ${current} of ${target} usable nights. First reading around ${readyDay}. Other overnight metrics are ready.`
           : `Learning your new watch — ${metricLabel}: ${current} of ${target} usable nights. Other overnight metrics are ready.`,
       devicesCta: "Devices",
-      allWithin: (count: number) => `Nothing stands out across ${count} overnight metrics.`,
+      allWithin: (count: number) =>
+        `Nothing stands out across ${count} ${count === 1 ? "overnight metric" : "overnight metrics"}.`,
       overnightTitle: "Overnight",
       emptyOvernight: "No overnight metrics with data yet.",
       rankedHint: "ranked by distance from usual",
@@ -176,12 +177,14 @@ export const copy = {
       lowTrustBadge: "low trust",
       trustButtonLabel: (metricLabel: string) => `${metricLabel} data trust details`,
       checksButtonLabel: (metricLabel: string, count: number) =>
-        `${metricLabel}: ${count} flagged checks`,
+        `${metricLabel}: ${count} ${count === 1 ? "flagged check" : "flagged checks"}`,
       checksHeading: "Flagged checks",
-      sparklineAria: (metricLabel: string, count: number, hasClipped: boolean) =>
-        hasClipped
-          ? `${metricLabel} trend across ${count} units (capped at ≥10σ)`
-          : `${metricLabel} trend across ${count} units`,
+      sparklineAria: (metricLabel: string, count: number, hasClipped: boolean) => {
+        const unitWord = count === 1 ? "unit" : "units";
+        return hasClipped
+          ? `${metricLabel} trend across ${count} ${unitWord} (capped at ≥10σ)`
+          : `${metricLabel} trend across ${count} ${unitWord}`;
+      },
       lastNight: {
         title: (dayLabel: string) => `Last complete night — ${dayLabel}`,
         emptyTitle: "Last complete night",
@@ -203,10 +206,13 @@ export const copy = {
       subtitle: "One card per metric, ordered overnight, daytime, then trend-only.",
       noDataYet: "No data yet",
       trendOnlySummary: "Trend only — no baseline",
-      weeklySummary: (metricLabel: string, count: number, seamCount: number) =>
-        seamCount > 0
-          ? `${metricLabel} 1-year weekly trend across ${count} weeks with ${seamCount} device seam.`
-          : `${metricLabel} 1-year weekly trend across ${count} weeks.`,
+      weeklySummary: (metricLabel: string, count: number, seamCount: number) => {
+        const weekWord = count === 1 ? "week" : "weeks";
+        const seamWord = seamCount === 1 ? "device seam" : "device seams";
+        return seamCount > 0
+          ? `${metricLabel} 1-year weekly trend across ${count} ${weekWord} with ${seamCount} ${seamWord}.`
+          : `${metricLabel} 1-year weekly trend across ${count} ${weekWord}.`;
+      },
       groups: {
         overnight: "Overnight",
         daytime: "Daytime",
@@ -230,7 +236,7 @@ export const copy = {
       trendOnlyNote: "Trend only — no baseline comparison",
       longView: {
         summary: (metricLabel: string, count: number, yearCount: number) =>
-          `${metricLabel} calendar across ${count} units in ${yearCount} ${yearCount === 1 ? "year" : "years"}.`,
+          `${metricLabel} calendar across ${count} ${count === 1 ? "unit" : "units"} in ${yearCount} ${yearCount === 1 ? "year" : "years"}.`,
         noData: "No units available for Long view",
         legendLower: "Lower",
         legendMedian: "Stint median",
@@ -260,10 +266,12 @@ export const copy = {
         lowText: string,
         highText: string,
         spanText: string | null,
-      ) =>
-        spanText
-          ? `Baseline: ${count} ${noun} · median ${medianText} (${lowText}–${highText}) · ${spanText}`
-          : `Baseline: ${count} ${noun} · median ${medianText} (${lowText}–${highText})`,
+      ) => {
+        const unitWord = count === 1 ? (noun === "days" ? "day" : "night") : noun;
+        return spanText
+          ? `Baseline: ${count} ${unitWord} · median ${medianText} (${lowText}–${highText}) · ${spanText}`
+          : `Baseline: ${count} ${unitWord} · median ${medianText} (${lowText}–${highText})`;
+      },
       noBaselineYet: "Baseline: warming up — not yet established",
       noBaselineTrendOnly: "Trend only — no baseline range computed",
       unknownTitle: "Unknown metric",
@@ -310,9 +318,9 @@ export const copy = {
         dayPrefix: (weekdayDate: string) => `Day of ${weekdayDate}`,
         sheetDescription: "Recorded unit evidence and source details.",
         valueSummary: (valueText: string, sampleCount: number, windowLabel: string) =>
-          `Value ${valueText} (${sampleCount} samples, ${windowLabel})`,
+          `Value ${valueText} (${sampleCount} ${sampleCount === 1 ? "sample" : "samples"}, ${windowLabel})`,
         valueMedianSummary: (valueText: string, sampleCount: number, windowLabel: string) =>
-          `Value ${valueText} (median of ${sampleCount} samples, ${windowLabel})`,
+          `Value ${valueText} (median of ${sampleCount} ${sampleCount === 1 ? "sample" : "samples"}, ${windowLabel})`,
         noSamplesNight: "No samples stored for this night",
         noSamplesDay: "No samples stored for this day",
         devicePrefix: "Device",
@@ -337,10 +345,14 @@ export const copy = {
       title: "Devices",
       subtitle: "Device epochs, metric primaries, seams, and OS updates.",
       timelineTitle: "Timeline (days present)",
-      timelineSummary: (epochCount: number, minorCount: number) =>
-        minorCount > 0
-          ? `Device timeline across ${epochCount} primary or secondary epochs and ${minorCount} occasional sources.`
-          : `Device timeline across ${epochCount} ${epochCount === 1 ? "epoch" : "epochs"}.`,
+      timelineSummary: (epochCount: number, minorCount: number) => {
+        const primaryWord =
+          epochCount === 1 ? "primary or secondary epoch" : "primary or secondary epochs";
+        const minorWord = minorCount === 1 ? "occasional source" : "occasional sources";
+        return minorCount > 0
+          ? `Device timeline across ${epochCount} ${primaryWord} and ${minorCount} ${minorWord}.`
+          : `Device timeline across ${epochCount} ${epochCount === 1 ? "epoch" : "epochs"}.`;
+      },
       lanes: {
         watch: "Watch",
         phone: "Phone",
@@ -367,6 +379,8 @@ export const copy = {
       roles: {
         primary: "primary",
         candidate: "candidate",
+        former: "former",
+        formerPrimary: "former primary",
         minor: "minor",
       },
       baselines: {
@@ -416,11 +430,14 @@ export const copy = {
       },
       summary: {
         nothingNew: "Nothing new: 0 new records.",
-        newRecords: (n: number) => `${n.toLocaleString()} new records`,
+        newRecords: (n: number) =>
+          `${n.toLocaleString()} ${n === 1 ? "new record" : "new records"}`,
         alreadyKnown: (n: number) => `${n.toLocaleString()} already known`,
-        newUsableNights: (n: number) => `${n.toLocaleString()} new usable nights`,
+        newUsableNights: (n: number) =>
+          `${n.toLocaleString()} ${n === 1 ? "new usable night" : "new usable nights"}`,
         dataThrough: (day: string) => `Data through ${day}`,
-        newEpochs: (labels: readonly string[]) => `New device: ${labels.join(", ")}`,
+        newEpochs: (labels: readonly string[]) =>
+          `${labels.length === 1 ? "New device" : "New devices"}: ${labels.join(", ")}`,
         olderExportWarning: "This export is older than data you already have; nothing is removed.",
         topChangesPrefix: "Top changes now:",
         seeChangesCta: "See what changed →",

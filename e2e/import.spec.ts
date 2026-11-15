@@ -73,6 +73,7 @@ test("real server 1440px: fixture upload -> summary", async ({ page }) => {
   await expect(summary).toBeVisible({ timeout: 15_000 });
   await expect(summary).not.toContainText(copy.pages.import.summary.nothingNew);
   await expect(summary).toContainText("new records");
+  await expect(summary).toContainText("Data through Nov 14 (Sat)");
   await expect(
     summary.getByRole("link", { name: copy.pages.import.summary.seeChangesCta }),
   ).toHaveAttribute("href", "/");
@@ -178,6 +179,27 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
   let hasCompleted = false;
   const startedAt = new Date(Date.now() - 41_000).toISOString();
 
+  const priorDoneRow = {
+    id: 90,
+    zipName: "seed-watch.zip",
+    zipSize: 1_000_000,
+    status: "done",
+    stage: "deriving",
+    progress: 1_000_000,
+    progressTotal: 1_000_000,
+    error: null,
+    exportVersion: "11",
+    exportDate: "2026-02-01",
+    recordsSeen: 100,
+    recordsInserted: 100,
+    recordsDeduped: 0,
+    newUsableNights: 10,
+    newEpochs: [],
+    olderThanStored: false,
+    durationMs: 500,
+    createdAt: "2026-02-01T00:00:00Z",
+  };
+
   await page.route("**/api/imports", async (route) => {
     if (route.request().method() === "POST") {
       postStarted = true;
@@ -193,7 +215,7 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: "[]",
+        body: JSON.stringify([priorDoneRow]),
       });
       return;
     }
@@ -204,10 +226,12 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
           zipSize: 2_400_000,
           status: "done",
           stage: "deriving",
-          progress: 100,
+          progress: 1_000_000,
+          progressTotal: 1_000_000,
           error: null,
           exportVersion: "11",
           exportDate: "2026-03-02",
+          asOfDay: "2026-03-01",
           recordsSeen: 432,
           recordsInserted: 420,
           recordsDeduped: 12,
@@ -223,7 +247,8 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
           zipSize: 2_400_000,
           status: "parsing",
           stage: "parsing",
-          progress: 64,
+          progress: 640_000,
+          progressTotal: 1_000_000,
           error: null,
           exportVersion: "11",
           recordsSeen: null,
@@ -237,7 +262,7 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([row]),
+      body: JSON.stringify([row, priorDoneRow]),
     });
   });
 
@@ -253,7 +278,8 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
           zipSize: 2_400_000,
           status: "parsing",
           stage: "parsing",
-          progress: 64,
+          progress: 640_000,
+          progressTotal: 1_000_000,
           error: null,
           exportVersion: "11",
           recordsSeen: null,
@@ -278,10 +304,12 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
         zipSize: 2_400_000,
         status: "done",
         stage: "deriving",
-        progress: 100,
+        progress: 1_000_000,
+        progressTotal: 1_000_000,
         error: null,
         exportVersion: "11",
         exportDate: "2026-03-02",
+        asOfDay: "2026-03-01",
         recordsSeen: 432,
         recordsInserted: 420,
         recordsDeduped: 12,
@@ -313,6 +341,7 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
   await expect(running).toBeVisible();
   await expect(running).toContainText(copy.pages.import.stages.parsing);
   await expect(running).toContainText("64%");
+  await expect(running.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "64");
   await expect(running).toContainText(copy.pages.import.canCloseTab);
   await expect(page.getByTestId("dropzone-busy")).toContainText(copy.pages.import.dropzoneDisabled);
 
@@ -323,6 +352,7 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
   await expect(summary).toContainText("420 new records");
   await expect(summary).toContainText("12 already known");
   await expect(summary).toContainText("3 new usable nights");
+  await expect(summary).toContainText("Data through Mar 1 (Sun)");
   await expect(summary).toContainText("New device: Synthetic Watch C");
   expect(errors).toEqual([]);
 });
@@ -365,7 +395,8 @@ test("§8 states: B-I4 older export warning and B-I11 upload interruption (route
         zipSize: 1024,
         status: "done",
         stage: "deriving",
-        progress: 100,
+        progress: 1024,
+        progressTotal: 1024,
         error: null,
         exportVersion: "11",
         exportDate: "2026-01-10",
@@ -430,14 +461,15 @@ test("§8 states: empty history, B-I5/B-I10 failed job card, Retry -> done, and 
             zipSize: 2048,
             status: "done",
             stage: "deriving",
-            progress: 100,
+            progress: 1_000_000,
+            progressTotal: 1_000_000,
             error: null,
             exportVersion: "11",
             recordsSeen: 100,
             recordsInserted: 100,
             recordsDeduped: 0,
             newUsableNights: 2,
-            newEpochs: [],
+            newEpochs: ["First Watch"],
             durationMs: 900,
             createdAt: "2026-03-02T09:00:00Z",
           }
@@ -447,7 +479,8 @@ test("§8 states: empty history, B-I5/B-I10 failed job card, Retry -> done, and 
             zipSize: 2048,
             status: "failed",
             stage: "parsing",
-            progress: 40,
+            progress: 400_000,
+            progressTotal: 1_000_000,
             error: "interrupted by restart",
             retryable: true,
             exportVersion: "11",
@@ -485,14 +518,15 @@ test("§8 states: empty history, B-I5/B-I10 failed job card, Retry -> done, and 
         zipSize: 2048,
         status: "done",
         stage: "deriving",
-        progress: 100,
+        progress: 1_000_000,
+        progressTotal: 1_000_000,
         error: null,
         exportVersion: "11",
         recordsSeen: 100,
         recordsInserted: 100,
         recordsDeduped: 0,
         newUsableNights: 2,
-        newEpochs: [],
+        newEpochs: ["First Watch"],
         durationMs: 900,
         createdAt: "2026-03-02T09:00:00Z",
       }),
@@ -522,6 +556,7 @@ test("§8 states: empty history, B-I5/B-I10 failed job card, Retry -> done, and 
   await failedCard.getByRole("button", { name: copy.pages.import.failed.retry }).click();
   await expect(page.getByTestId("import-summary")).toBeVisible();
   await expect(page.getByTestId("import-summary")).toContainText("100 new records");
+  await expect(page.getByTestId("import-summary")).not.toContainText("New device:");
 
   // 3. Expired retry -> 410 -> "Upload the file again."
   scenario = "retry-410";

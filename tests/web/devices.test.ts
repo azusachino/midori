@@ -97,7 +97,16 @@ describe("Devices page helpers", () => {
     expect(formatOsUpdateLabel(osEv)).toBe("10.4 → 11.0 on Feb 26");
 
     expect(buildDevicesSummary(dto.epochs)).toContain("3 primary or secondary epochs");
-    expect(buildDevicesSummary(dto.epochs)).toContain("1 occasional sources");
+    expect(buildDevicesSummary(dto.epochs)).toContain("1 occasional source");
+
+    const withMinorOs = epochsStub(true);
+    const minorEp = withMinorOs.epochs.find((e) => e.minor);
+    if (!minorEp) throw new Error("expected minor epoch");
+    minorEp.osUpdates = [
+      { epochId: minorEp.id, day: minorEp.firstDay, fromSw: "10.0", toSw: "10.1" },
+    ];
+    const minorModel = buildDeviceTimelineModel(withMinorOs.epochs);
+    expect(minorModel.osMarks).toHaveLength(buildDeviceTimelineModel(dto.epochs).osMarks.length);
 
     const table = buildDevicesTable(dto.epochs);
     expect(table.rows).toHaveLength(4);

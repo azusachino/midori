@@ -71,9 +71,33 @@ test("Devices /devices against real server renders timeline, newest-first epoch 
   await assertNoHorizontalOverflow(page);
   await snapShot(page, "int-devices-1440.png");
 
-  // Responsive 390px layout check + mobile screenshot
+  // Responsive 390px layout check + M4 newest watch bar visible inside 390px viewport
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(canvas).toBeVisible();
+  const mobileBox = await canvas.boundingBox();
+  expect(mobileBox).not.toBeNull();
+  if (mobileBox) {
+    expect(mobileBox.x).toBeGreaterThanOrEqual(0);
+    expect(mobileBox.x + mobileBox.width).toBeLessThanOrEqual(390);
+    // Right side of the Watch lane holds current "Synthetic Watch B" bar
+    let foundWatchB = false;
+    for (const yFrac of [0.22, 0.34, 0.16]) {
+      await page.mouse.move(
+        mobileBox.x + mobileBox.width * 0.9,
+        mobileBox.y + mobileBox.height * yFrac,
+      );
+      const text =
+        (await page
+          .getByTestId("device-timeline-echart")
+          .textContent()
+          .catch(() => "")) ?? "";
+      if (text.includes("Synthetic Watch B")) {
+        foundWatchB = true;
+        break;
+      }
+    }
+    expect(foundWatchB).toBe(true);
+  }
   await expect(cards).toContainText("Synthetic Watch B");
   await assertNoHorizontalOverflow(page);
   await snapShot(page, "int-devices-390.png");

@@ -93,6 +93,14 @@ export function DevicesPage() {
   }
 
   const { primaryEpochs, minorEpochs, epochById, isSingleEpoch } = organized;
+  const seamPredecessors = new Set<string>();
+  for (const ep of primaryEpochs) {
+    for (const m of ep.metrics) {
+      if (m.seamFromPrevious?.fromEpochId != null) {
+        seamPredecessors.add(`${m.metric}:${m.seamFromPrevious.fromEpochId}`);
+      }
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -120,6 +128,8 @@ export function DevicesPage() {
             epoch,
             epochById,
           );
+          const hasSeamRows = epoch.metrics.some((m) => m.seamFromPrevious !== null);
+          const isFormerEpoch = query.data.asOfDay !== null && epoch.lastDay < query.data.asOfDay;
 
           return (
             <Card key={epoch.id} data-testid={`epoch-card-${epoch.id}`} className="min-w-0">
@@ -154,7 +164,14 @@ export function DevicesPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>{copy.pages.devices.columns.metric}</TableHead>
-                          <TableHead>{copy.pages.devices.columns.baseline}</TableHead>
+                          <TableHead>
+                            <span>{copy.pages.devices.columns.baseline}</span>
+                            {!isSingleEpoch && hasSeamRows ? (
+                              <span className="block text-[11px] font-normal text-muted-foreground sm:hidden">
+                                {seamHeading}
+                              </span>
+                            ) : null}
+                          </TableHead>
                           {!isSingleEpoch ? (
                             <TableHead className="hidden sm:table-cell">{seamHeading}</TableHead>
                           ) : null}
@@ -188,7 +205,15 @@ export function DevicesPage() {
                                 </Link>
                                 {row.role !== "primary" ? (
                                   <span className="ml-2 text-xs font-normal text-muted-foreground">
-                                    ({copy.pages.devices.roles[row.role]})
+                                    (
+                                    {row.role === "candidate"
+                                      ? seamPredecessors.has(`${row.metric}:${epoch.id}`)
+                                        ? copy.pages.devices.roles.formerPrimary
+                                        : isFormerEpoch
+                                          ? copy.pages.devices.roles.former
+                                          : copy.pages.devices.roles.candidate
+                                      : copy.pages.devices.roles[row.role]}
+                                    )
                                   </span>
                                 ) : null}
                               </TableCell>

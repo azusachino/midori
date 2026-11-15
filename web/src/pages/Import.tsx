@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { copy } from "@/copy";
+import { formatDayWithWeekday } from "@/lib/finding-format";
 import {
   formatDurationClock,
   formatDurationMs,
@@ -51,6 +52,8 @@ export function ImportPage() {
   const pollAbortRef = useRef<AbortController | null>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
   const { changes, refresh: refreshShell } = useShell();
+  const hasActiveShellImportRef = useRef(false);
+  hasActiveShellImportRef.current = Boolean(changes?.activeImport);
 
   const [loadPhase, setLoadPhase] = useState<"loading" | "ready" | "error">("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -114,9 +117,10 @@ export function ImportPage() {
         .then(async (doneRow) => {
           if (ac.signal.aborted) return;
           setActiveJob(null);
-          setCompletedJob(doneRow);
           setUploadError(null);
           await fetchImports(ac.signal).catch(() => undefined);
+          if (ac.signal.aborted) return;
+          setCompletedJob(doneRow);
           refreshShell();
         })
         .catch(async (err: unknown) => {
@@ -169,8 +173,13 @@ export function ImportPage() {
         const active = rows.find((r) => isActiveImportStatus(r.status)) ?? null;
         if (active) {
           beginPolling(active.id, active, false);
-        } else if (rows[0]?.status === "failed" && !isBadExportMessage(rows[0].error)) {
-          setFailedJob(rows[0]);
+        } else {
+          if (rows[0]?.status === "failed" && !isBadExportMessage(rows[0].error)) {
+            setFailedJob(rows[0]);
+          }
+          if (hasActiveShellImportRef.current) {
+            refreshShell();
+          }
         }
       })
       .catch((err: unknown) => {
@@ -181,7 +190,7 @@ export function ImportPage() {
       });
 
     return () => ac.abort();
-  }, [beginPolling, fetchImports]);
+  }, [beginPolling, fetchImports, refreshShell]);
 
   useEffect(() => {
     const cancelLoad = loadInitial();
@@ -304,6 +313,7 @@ export function ImportPage() {
       try {
         const accepted = await apiClient.retryImport(id);
         setRetryingId(null);
+        refreshShell();
         beginPolling(accepted.importId, null, false);
       } catch (err) {
         setRetryingId(null);
@@ -314,7 +324,7 @@ export function ImportPage() {
         setUploadError(err instanceof Error ? err.message : copy.api.unknownError);
       }
     },
-    [beginPolling],
+    [beginPolling, refreshShell],
   );
 
   const handleRetryCardClick = useCallback(() => {
@@ -572,20 +582,31 @@ export function ImportPage() {
               </p>
             ) : null}
 
-            {completedJob.exportDate || completedJob.newEpochs.length > 0 ? (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {[
-                  completedJob.exportDate
-                    ? copy.pages.import.summary.dataThrough(completedJob.exportDate.slice(0, 10))
-                    : null,
-                  completedJob.newEpochs.length > 0
-                    ? copy.pages.import.summary.newEpochs(completedJob.newEpochs)
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            ) : null}
+            {(() => {
+              const hasPriorDoneImport = history.some(
+                (row) => row.id !== completedJob.id && row.status === "done",
+              );
+              const showNewEpochs = completedJob.newEpochs.length > 0 && hasPriorDoneImport;
+              const dataThroughDay =
+                completedJob.asOfDay !== undefined
+                  ? completedJob.asOfDay
+                  : (completedJob.exportDate?.slice(0, 10) ?? null);
+              if (!dataThroughDay && !showNewEpochs) return null;
+              return (
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {[
+                    dataThroughDay
+                      ? copy.pages.import.summary.dataThrough(formatDayWithWeekday(dataThroughDay))
+                      : null,
+                    showNewEpochs
+                      ? copy.pages.import.summary.newEpochs(completedJob.newEpochs)
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              );
+            })()}
 
             {notableChanges.length > 0 ? (
               <p className="text-xs text-muted-foreground">
@@ -651,9 +672,11 @@ export function ImportPage() {
                     isBadExportMessage(row.error);
                   return (
                     <TableRow key={row.id}>
-                      <TableCell className="tabular-nums">{row.createdAt.slice(0, 10)}</TableCell>
-                      <TableCell className="hidden tabular-nums text-muted-foreground sm:table-cell">
-                        {row.exportDate ? row.exportDate.slice(0, 10) : "—"}
+                      <TableCell className="tabular-nums whitespace-nowrap">
+                        {formatDayWithWeekday(row.createdAt)}
+                      </TableCell>
+                      <TableCell className="hidden tabular-nums whitespace-nowrap text-muted-foreground sm:table-cell">
+                        {row.exportDate ? formatDayWithWeekday(row.exportDate) : "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {row.recordsInserted !== null ? row.recordsInserted.toLocaleString() : "—"}

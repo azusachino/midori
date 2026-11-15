@@ -39,19 +39,43 @@ describe("import-helpers", () => {
     expect(isActiveImportStatus("failed")).toBe(false);
   });
 
-  test("resolveJobStage prefers v1 stage and progress when present", () => {
-    expect(resolveJobStage(row({ status: "parsing", stage: "parsing", progress: 64 }))).toEqual({
+  test("resolveJobStage computes progress percentage from parsedBytes / progressTotal", () => {
+    expect(
+      resolveJobStage(
+        row({ status: "parsing", stage: "parsing", progress: 640_000, progressTotal: 1_000_000 }),
+      ),
+    ).toEqual({
       stageIndex: 2,
       stageKey: "parsing",
       progressPct: 64,
       barValue: 64,
     });
 
-    expect(resolveJobStage(row({ status: "storing", stage: "deriving", progress: 120 }))).toEqual({
+    expect(
+      resolveJobStage(
+        row({
+          status: "storing",
+          stage: "deriving",
+          progress: 1_200_000,
+          progressTotal: 1_000_000,
+        }),
+      ),
+    ).toEqual({
       stageIndex: 4,
       stageKey: "deriving",
       progressPct: 100,
       barValue: 100,
+    });
+
+    expect(
+      resolveJobStage(
+        row({ status: "parsing", stage: "parsing", progress: 640_000, progressTotal: null }),
+      ),
+    ).toEqual({
+      stageIndex: 2,
+      stageKey: "parsing",
+      progressPct: null,
+      barValue: 50,
     });
   });
 
