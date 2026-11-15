@@ -176,6 +176,11 @@ export const copy = {
         skippedExportCut: (dayLabel: string) => `${dayLabel} skipped: export taken before noon.`,
         stageBarAria: (deepH: string, remH: string, coreH: string) =>
           `Sleep stages: deep ${deepH} h, REM ${remH} h, core ${coreH} h`,
+        stageLegend: {
+          deep: "Deep",
+          rem: "REM",
+          core: "Core",
+        },
       },
     },
     metrics: {

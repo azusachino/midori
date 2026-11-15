@@ -15,7 +15,7 @@ export interface SparklineProps {
 function accentColorClass(severity: FindingSeverity): string {
   if (severity === "alert") return "text-alert";
   if (severity === "notable") return "text-notable";
-  return "text-accent";
+  return "text-muted-foreground";
 }
 
 export function Sparkline({

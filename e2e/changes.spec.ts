@@ -109,6 +109,12 @@ test("Changes page: populated overnight/daytime findings, popovers, last night, 
   await expect(lastNight).toContainText("Last complete night — Feb 28 (Sat)");
   await expect(lastNight).toContainText("asleep 7.2 h · deep 1.0 · REM 1.5 · core 4.7");
   await expect(lastNight.getByTestId("sleep-stage-bar")).toBeVisible();
+  const stageLegend = lastNight.getByTestId("sleep-stage-legend");
+  await expect(stageLegend).toBeVisible();
+  await expect(stageLegend).toContainText("Deep");
+  await expect(stageLegend).toContainText("REM");
+  await expect(stageLegend).toContainText("Core");
+  await expect(page.getByTestId("finding-row-sleep_dur").locator(".text-accent")).toHaveCount(0);
   await expect(lastNight.getByTestId("last-night-skipped")).toHaveText(
     "Mar 1 skipped: export taken before noon.",
   );
