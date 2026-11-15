@@ -632,7 +632,14 @@ function derivePresenceAndValues(
       nightWindows,
       spec.key,
     );
-    if (night) addMetricValue(aggregates, spec.key, epochId, night.day, record.value);
+    if (night)
+      addMetricValue(
+        aggregates,
+        spec.key,
+        epochId,
+        night.day,
+        spec.key === "spo2" ? record.value * 100 : record.value,
+      );
   }
 
   const heartRateType = "HKQuantityTypeIdentifierHeartRate";

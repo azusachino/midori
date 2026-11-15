@@ -256,7 +256,7 @@ export interface UnitEvidenceDTO {
 export interface EpochMetricRoleDTO {
   metric: string;
   role: "primary" | "candidate" | "minor";
-  baselineState: "full" | "early" | "warming_up" | "insufficient" | "trend_only";
+  baselineState: "full" | "early" | "warming_up" | "insufficient" | "trend_only" | null;
   warmup: { current: number; target: number } | null;
   seamFromPrevious: MetricSeriesDTO["seams"][number] | null;
 }
