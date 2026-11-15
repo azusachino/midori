@@ -562,6 +562,46 @@ in `docs/reviews/`.
   - backup CronJob fires
 - Rollback = previous tag + snapshot restore, which needs owner approval.
 
+- **Done 2026-11-16** (lead; owner-authorized deploy "you can deploy after you finish").
+  - midori: README rewritten (PR #19). Image fixes (PR #20): the Dockerfile copies
+    `src/domain` for the web build; smoke-container uses the sleep-bearing corpus and the v1
+    `changes` tool.
+  - Release image `azusachino.com/midori:v0.2.0` from `main@46a8934`. Revision label `46a8934…`,
+    containerd digest `sha256:7b2af73d…`. `make smoke-container` PASS (image clean, import,
+    changes, MCP, snapshot + archive).
+  - Pre-deploy snapshot: job `midori-predeploy-v020` → `midori-20261115-170436.db`.
+  - harus-k3s (`task/midori-manifests`, PR #167):
+    - pin bumped to v0.2.0 in `SERVICE_VERSIONS.yaml`, the deployment and the backup CronJob
+    - probes moved to `/api/health` (v1 removed `/api/briefing`) with a 10 s timeout
+    - `make validate` + `check-drift` (43 in sync, 0 drift)
+    - applied with a scoped `kubectl apply -f` of the two midori manifests, not `apply-tools`,
+      which re-applies every tools service
+  - Rollout: 1 pod on v0.2.0, 0 restarts; health and web 200 over the tailnet.
+  - Real export uploaded through the ingress: 58 s, 2,046,801 inserted, 1,058 usable nights,
+    health max 2.3 s during the import.
+  - Immediate re-import: 0 inserted, 2,047,778 deduped. Health max 5.8 s on one sample, which
+    is why the probe timeout went to 10 s; the pod is CPU-limited to 1 core.
+  - MCP `changes` over HTTPS from the workstation: 10 rows.
+  - Backup job on the v0.2.0 image: 828 MB snapshot.
+  - Data intact across the probe-change restart.
+  - **Open:**
+    - The harus-k3s commit is blocked by the local pre-commit hook (`pre-commit.legacy` puts
+      pre-commit in migration mode). The changes are staged, not committed; the owner decides
+      how to fix the hook.
+    - The cluster db still holds the 76 synthetic records from the v0 rollout smoke, which show
+      as 2 extra epochs. Removing them is a data deletion and needs the owner's approval.
+
+**v1 done (Checkpoint 5)** — design success criteria:
+
+1. Re-import under 2 min, 0 new on an immediate re-import: met, locally and on the cluster.
+2. The new watch is its own epoch for all overnight metrics, and no metric is blank because of
+   the seam: met (Gate C plus the cluster data).
+3. Changes contributors carry confidence and checks, consistent with Metric detail: met.
+   Onset is not exercised by the current data; it is fixture-tested.
+4. An MCP-only agent answers without cause assertions: met (Checkpoint B). It predates 9b–9d.
+5. Gates green and nothing personal in Git or images: met (CI, privacy guard, image scan).
+6. Running on harus-k3s with a re-import there and backups working: met. The harus-k3s
+   commit is pending the hook fix.
 ## Dispatch log
 
 | Slice | Writer (peer, model) | Worktree / branch | Base | Status |
