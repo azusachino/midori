@@ -201,11 +201,21 @@ The 66 MB proof. No CI. Owner watches.
 ### Task 12 — Device events + findings wiring [lead]
 
 - AC:
-  - [ ] All three event kinds emitted; coverage-boundary detection per contract
-  - [ ] Cross-source z suppressed + recalibration finding at seams
-  - [ ] Findings recompute triggered by import completion (integration assertion)
-  - [ ] Spike regression: two-source wrist-temp swap → switch event + suppressed z, never +4σ
-- Verify: spike-regression test green in CI.
+  - [x] All three event kinds emitted; coverage-boundary detection per contract
+  - [x] Cross-source z suppressed + recalibration finding at seams
+  - [x] Findings recompute triggered by import completion (integration assertion)
+  - [x] Spike regression: two-source wrist-temp swap → switch event + suppressed z, never +4σ
+- Verify: spike-regression test green in CI. DONE by lead 2026-11-15: src/stats/events.ts
+  (device_events ledger: first_seen/last_seen global from daily spans, switch per metric from
+  detectBoundaries; INSERT OR IGNORE dedup, 43 events on live db) + src/stats/findings.ts
+  (computeFindings: deviation findings severity≠info; seam suppression precedence switch→cross_source,
+  gap→coverage_gap when boundary∈[anchor−90,anchor] involves the row's source; recalibration finding
+  per switch boundary, coverage per series_start/gap; recomputeFindings wholesale DELETE+INSERT per
+  import, wired into runImport after daily metrics). Live readout: 0 deviations (all |z|<1.5),
+  29 recalibration + 8 coverage findings — full 3-year device history incl. WatchUltra takeover
+  2026-10-10 on every metric and hrv_rmssd series_start. Tests: 8 in findings.test.ts — spike fixture
+  (gap seam: B suppressed coverage_gap, no deviation finding, no |z|≥2.5) + abutting-seam corpus
+  (switch event + recalibration finding + B cross_source, A's own z stands).
 - Deps: T11, T6. Files: src/stats/events.ts, findings.ts. Scope: M
 
 **Checkpoint 2** — on the real import: spike readout reproduced (wrist temp = recalibration

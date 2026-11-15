@@ -1,5 +1,7 @@
 import { openDb } from "../db/db";
 import { computeDailyMetrics } from "../stats/daily";
+import { persistDeviceEvents } from "../stats/events";
+import { recomputeFindings } from "../stats/findings";
 import { mapRecord } from "./mapper";
 import { parseExportXml } from "./parser";
 import type { WriteCounters } from "./store";
@@ -64,6 +66,8 @@ export async function runImport(dbPath: string, zipPath: string): Promise<Import
     // Runs within the storing phase (~1s on 2M records): 'analyzing' is not a
     // user-visible lifecycle state worth a schema CHECK update.
     computeDailyMetrics(db, importId);
+    persistDeviceEvents(db, importId);
+    recomputeFindings(db, importId);
 
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");
