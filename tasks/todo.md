@@ -309,7 +309,16 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
 
 - AC: as-of date; last-night summary; ranked deviations **with evidence links**; recalibration
   notices; import status + cadence nudge ("last import N days ago"); trust labels.
-- Verify: render from briefing fixture payload; links resolve.
+- Verify: render from briefing fixture payload; links resolve. DONE by lead 2026-11-15:
+  web/src/pages/Briefing.tsx — as-of lead, import line + cadence nudge, 6 last-night cards
+  (sleep/deep/rem h, rhr, hrv_sdnn, resp_rate; freshest source per metric, trust chip, as-of day),
+  deviations list (severity chip, recent-vs-baseline, σ, suppression reasons as prose, trust chip,
+  "Investigate" link → /investigate?metric=&source=), recalibration + coverage findings list with
+  links. PageSection gained optional lead prop; copy.ts += copy.metrics (13 EN labels) +
+  copy.briefing block; styles in dedicated briefing.css (app.css owned by T17 worker in parallel).
+  DEVIATION: no component-level render test (no react testing lib in stack; adding one = new dep
+  → ask-first). Verified: tsc + biome clean, build deferred until parallel worker lands; visual
+  render + link pass deferred to checkpoint 3 (playwright browse).
 - Deps: T13, T16. Files: web/src/pages/Briefing.tsx. Scope: M
 
 ### Task 19 — Investigate page [delegable]
