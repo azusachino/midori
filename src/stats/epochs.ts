@@ -49,6 +49,21 @@ function dayDistance(a: string, b: string): number {
   return Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / DAY_MS;
 }
 
+function compareVersions(a: string, b: string): -1 | 0 | 1 | null {
+  const isDottedNumeric = /^\d+(?:\.\d+)*$/;
+  if (!isDottedNumeric.test(a) || !isDottedNumeric.test(b)) return null;
+  const left = a.split(".").map(BigInt);
+  const right = b.split(".").map(BigInt);
+  const width = Math.max(left.length, right.length);
+  for (let i = 0; i < width; i++) {
+    const leftPart = left[i] ?? 0n;
+    const rightPart = right[i] ?? 0n;
+    if (leftPart < rightPart) return -1;
+    if (leftPart > rightPart) return 1;
+  }
+  return 0;
+}
+
 /** Derive device epochs, inheritance assignments, and software update events. */
 export function deriveEpochs(records: readonly EpochInput[]): EpochDerivation {
   const dated = records.map((record) => ({
@@ -137,18 +152,24 @@ export function deriveEpochs(records: readonly EpochInput[]): EpochDerivation {
     const softwareRecords = rows
       .filter((row) => row.deviceHw !== "" && row.deviceSw !== null)
       .sort((a, b) => a.startAt.localeCompare(b.startAt) || a.id - b.id);
-    let previousSoftware: string | null = null;
+    let newestSoftware: string | null = null;
     for (const record of softwareRecords) {
-      if (previousSoftware !== null && record.deviceSw !== previousSoftware) {
-        events.push({
-          sourceName: record.sourceName,
-          deviceHw: record.deviceHw,
-          day: record.day,
-          kind: "os_update",
-          detail: `${previousSoftware} → ${record.deviceSw}`,
-        });
+      const version = record.deviceSw;
+      if (version === null) continue;
+      if (newestSoftware === null) {
+        if (compareVersions(version, version) !== null) newestSoftware = version;
+        continue;
       }
-      previousSoftware = record.deviceSw;
+      const order = compareVersions(version, newestSoftware);
+      if (order !== 1) continue;
+      events.push({
+        sourceName: record.sourceName,
+        deviceHw: record.deviceHw,
+        day: record.day,
+        kind: "os_update",
+        detail: `${newestSoftware} → ${version}`,
+      });
+      newestSoftware = version;
     }
   }
 

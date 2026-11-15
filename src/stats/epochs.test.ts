@@ -119,6 +119,41 @@ describe("epoch derivation", () => {
     ]);
   });
 
+  test("B-D8 interleaved older versions do not create events", () => {
+    const versions = ["26.0.1", "26.1", "26.1.0", "11.5", "26.0.1", "26.2"];
+    const records = versions.map((deviceSw, index): EpochInput => {
+      const parsed = parseHealthKitDate(
+        `2026-04-${String(index + 1).padStart(2, "0")} 12:00:00 +0900`,
+      );
+      if (!parsed.ok) throw new Error("invalid version test date");
+      return {
+        id: index + 1,
+        sourceName: REPLACEMENT_SOURCE,
+        deviceHw: "Watch7,5",
+        deviceSw,
+        startAt: parsed.date.utcIso,
+        startOffsetMin: parsed.date.offsetMinutes,
+      };
+    });
+
+    expect(deriveEpochs(records).events).toEqual([
+      {
+        sourceName: REPLACEMENT_SOURCE,
+        deviceHw: "Watch7,5",
+        day: "2026-04-02",
+        kind: "os_update",
+        detail: "26.0.1 → 26.1",
+      },
+      {
+        sourceName: REPLACEMENT_SOURCE,
+        deviceHw: "Watch7,5",
+        day: "2026-04-06",
+        kind: "os_update",
+        detail: "26.1 → 26.2",
+      },
+    ]);
+  });
+
   test("v1 derived tables replace v0 tables and epoch rebuild persists the result", () => {
     const db = new Database(":memory:");
     applyMigrations(db);
