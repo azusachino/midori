@@ -1,194 +1,162 @@
-# Implementation Plan: midori v0 (rev 2)
+# Implementation plan: midori v1
 
-Spec: `docs/design.md` (approved 2026-11-13, grill decisions folded 2026-11-14, commit a072a40).
-Rev 2 incorporates the independent pi/Kimi K3.1 Pro plan review
-(`docs/reviews/2026-11-14-plan-review-pi-kimi.md`, verdict CHANGES REQUESTED): splits oversized
-tasks, adds the local-backup task, pins contracts before implementation, defines the upload job,
-extends privacy to container images, and expands Phase 5 into the prescribed ship-to-cluster
-sequence. Per-task acceptance criteria land in `tasks/todo.md` at the Phase 3 gate — **before any
-implementation begins**.
+Status: proposed 2026-11-15, rev 2 after the
+[Fable review](../docs/reviews/2026-11-15-v1-design-review-fable.md). The v0 plan, ledger and
+checkpoints are archived in `tasks/v0/`.
+Inputs: [design](../docs/design.md), [journeys and behavior](../docs/journeys.md) (the
+contract), [UI design](../docs/ui-design.md), decisions
+[0001](../docs/decisions/0001-analyze-by-device-epoch-and-night.md) and
+[0002](../docs/decisions/0002-ui-on-shadcn-tailwind-echarts.md).
 
-## Overview
+## Workflow rules
 
-Build the v0 loop end to end: scaffold → contracts pinned → real export importable into SQLite
-with local backup → deterministic per-source deviation analysis with the spike regression as a
-permanent fixture → briefing/investigate/import UI → read-only MCP (stdio + streamable HTTP) →
-ship to harus-k3s as the closing milestone, following the ship-to-cluster playbook. Local-first
-development; the cluster never blocks the analysis loop.
+- **No code before Gate 0.** The design set gets agent review (Fable: done, rev 2 answers it)
+  and owner approval of PR #1.
+- **Per-slice acceptance criteria before the slice starts.** Each slice names its `B-` rules.
+  The slice brief copies them as acceptance criteria and adds its verification command.
+- **One slice = one PR** on `task/v1-<n>-<name>`, at most about 5 source files plus tests.
+  Every slice needs `bun run check` green; UI slices also need `make e2e` green. Merge in slice
+  order, and `main` stays green and runnable after every merge.
+- **Behavior first.** Each `B-` rule gets a test or e2e check whose name starts with its id.
+- **Real data stays out of Git.** Real-export checks are recorded as pass/fail plus counts and
+  shapes only; screenshots stay in `.tmp/`.
+- **Who does what.** The lead does slices 1–8 (engine and contract) and 17 (Devices). Slices
+  9–16 can be delegated to worker models with a brief. No UI slice merges until its real-data
+  screenshots have actually been looked at.
+- **Reviews.** Gate 0: Fable (done). Gate A: independent review of the engine against
+  B-D/B-N/B-F/B-C. Gate C: independent J1–J5 walkthrough on real data.
+- **Ask first.** Any step that deletes stored data. Cluster apply (slice 18).
 
-## Architecture Decisions
+## What is kept, rewritten, deleted
 
-- **Slicing**: foundation is unavoidably horizontal (schema, parser), but every task after the
-  schema is a verifiable vertical step ending in something runnable.
-- **Contracts before consumers**: typed `Finding`/`EvidenceRef`, stats window semantics,
-  coverage-boundary algorithm, and the JSON API/upload-job shapes are pinned (Task 4) before
-  stats, API, UI, or MCP tasks consume them (review HIGH-2, MED-1).
-- **Import upload is an async job** (review HIGH-3): the uploaded body is the ~66 MB
-  `export.zip`; the server then unpacks and parses the ~909 MB `export.xml`, which takes minutes.
-  `POST /api/imports` returns `202 + import id`; status transitions
-  `queued → unpacking → parsing → storing → done | failed`; single-import lock (one running
-  import per db); spool to a temp file with atomic rename; configurable size/time limits; retry
-  re-uses the same idempotent pipeline as CLI import. The "66 MB is nothing" note in the design
-  refers to ingress body size only — parse duration, not upload, is the constraint.
-- **Bulk-insert path**: drizzle owns schema/migrations and cold queries; the ingest hot path
-  uses raw `bun:sqlite` prepared statements inside batched transactions if the in-task benchmark
-  shows drizzle overhead (decision point inside Task 6, measured during the task, not after).
-- **Fixture strategy**: small synthetic `export.xml` (~50 records, multi-source, offset and
-  boundary edge cases) for parser/stats unit tests, plus the **spike regression fixture**
-  (two-source wrist-temp device swap → `switch` event + suppressed z, never raw +4σ), plus the
-  design-required integration test (fixture zip → db → briefing endpoint payload). Real-export
-  verification is owner-witnessed — never CI, never committed.
-- **Night/day rules port from the spike** (harus-workstation `.tmp/midori/analyze.py`,
-  gitignored scratch — port into tracked code + tests, scratch is not the spec): sleep start
-  ≥15:00 local → that date's night; <09:00 → previous date; naps excluded; dominant-source
-  stages per night; HRV restricted to 21:00–09:00 samples.
-- **MCP dual transport**: one tool implementation; stdio for local dev + streamable HTTP
-  mounted on the Hono app (tailnet-only) for the cluster. Tool payloads carry as-of dates and
-  trust labels like every other consumer.
-- **Privacy extends to artifacts** (review HIGH-4): `data/`, zips, db sidecars, and backups are
-  excluded from Git *and* from the Docker build context (`.dockerignore`); image-content
-  inspection verifies no personal data; CI and smoke tests use synthetic data only.
+| Area | Fate | Slice |
+| --- | --- | --- |
+| `src/ingest/zip.ts`, `parser.ts` | Keep; parser also yields `device` hardware/software and `MetadataEntry` | 1 |
+| `src/ingest/mapper.ts`, `store.ts` | Extend: new columns; `INSERT OR IGNORE` → upsert filling NULLs (B-I12) | 1 |
+| `src/db/schema.ts`, `migrations/` | New migrations: capture columns, `imports` fields + status `deriving`, derived tables | 1, 2 |
+| `src/ingest/import.ts`, `src/http/import.ts` | Keep the job; add pre-job validation, `deriving` stage, progress, retry, restart reconcile, 24 h spool | 8 |
+| `src/backup/` | Keep; add the 10-snapshot cap | 8 |
+| `src/stats/*`, `src/domain/stats.ts` | Rewrite per 0001. Keep `median`/MAD helpers; remove the 1e-9 zero-MAD branch | 3–7 |
+| `src/domain/metrics.ts` | Extend: `sleep_hr`, kind, floors, minimums, `trendOnly`; SpO2 becomes overnight | 3 |
+| `src/domain/api.ts`, `types.ts` | Rewrite the DTOs for v1 payloads | 9 |
+| `src/http/queries.ts`, `routes.ts` | Add v1 read routes (slice 9). v0 read routes are deleted in slice 11 with the v0 web | 9, 11 |
+| `src/mcp/server.ts` | Rewrite the tools (B-A*); transports kept | 10 |
+| `src/cli.ts` | Add a `changes` readout | 7 |
+| `tests/fixtures/*` + snapshot | Extend the model (device attrs, metadata, tz, minor app, alternating steps, flat resp); regenerate the snapshot | 1–6 |
+| `tests/integration/*` | Update to v1 routes as they land | 9–11 |
+| `scripts/smoke-container.ts`, `scripts/e2e/run.ts`, `e2e/*.spec.ts` | Move from `/api/briefing` + `briefing` tool to `/api/changes` + `changes` | 9, 10, 11 |
+| `web/` (pages, CSS, uPlot wrapper, client, copy), `tests/web/*`, `uplot` dependency | Delete and rebuild per ui-design.md | 11 |
+| `Dockerfile`, harus-k3s manifests | Keep; bump the tag at ship | 18 |
+| `README.md` | Rewrite commands, layout and description | 18 |
 
-## Task List
+## Phases and slices
 
-### Phase 1: Foundation, contracts & ingest (store → ingest)
+### Gate 0 — design approved
 
-- [ ] Task 1: Scaffold Bun + TS strict project (biome, `bun test`, `bun run check`, README
-      commands pinned, .gitignore for `data/`). CI on push runs `bun install`, typecheck,
-      `bun test` — synthetic data only — plus a **tracked-file privacy guard** rejecting health
-      exports, SQLite dbs/`-wal`/`-shm` sidecars, and backup artifacts (pinned pattern list),
-      so personal data cannot enter the public repo.
-- [ ] Task 2: SQLite schema + drizzle migrations — all six tables, WAL, dedup unique key on
-      (type, source_name, start_at, end_at, value) with NULL/numeric-normalization behavior
-      defined; records persist UTC instant **and** original local offset; `device_events`
-      supports all three kinds (`first_seen`, `last_seen`, `switch`).
-- [ ] Task 3: Fixture builders — synthetic export.xml (~50 records: multi-source, ±offset
-      formats, sleep stages, night samples, unknown record type, malformed-edge dates) + spike
-      regression fixture (two-source wrist-temp swap) + dedup-edge fixtures (NULL values,
-      category records, equivalent numerics).
-- [ ] Task 4: Pin module contracts in tracked code (`src/domain/`): typed `Finding`/
-      `EvidenceRef`; exact stats semantics — baseline window anchor−90…anchor−29 inclusive,
-      recent window anchor−13…anchor (14 days), ≥15 baseline / ≥7 recent day gates, severity
-      thresholds at |z|≥1.5 / ≥2.5, zero-MAD policy ported from the spike and pinned by unit
-      test, missing-day treatment, per-source anchor = last data day; coverage-boundary
-      algorithm (gap vs device switch, ported from the spike's source-check logic) ; JSON API +
-      upload-job DTOs; trust labels per metric. Unit tests pin every edge.
-- [ ] Task 5: Streaming XML parser + record mapper (fixtures green; unknown types stored not
-      aggregated; Workout/route/ECG presence logged, not parsed).
-- [ ] Task 6: Transactional ingest store — batched inserts with dedup, import-run bookkeeping,
-      source first/last-seen + counts, `bun run import <export.zip>` CLI; in-task benchmark on
-      the fixture scaled to ~2M rows decides drizzle vs raw `bun:sqlite` hot path.
-- [ ] Task 7: Local backup — post-import `VACUUM INTO` snapshot to `data/backups/`, 30-day
-      retention, imported zips archived under `data/archive/`; `PRAGMA integrity_check` on
-      snapshots; restore smoke test (snapshot → readable db); WAL-sidecar lifecycle handled
-      (checkpoint before snapshot; restore replaces db **and** removes stale sidecars);
-      synthetic-clock retention test proving the 30-day cutoff deletes expired snapshots while
-      preserving newer ones.
-- [ ] Task 8: Real-export verification (owner-witnessed): import in <5 min;
-      immediate re-import reports 0 new; source counts agree with the import;
-      post-import snapshot + archive created.
+Fable review → rev 2 (this revision) → owner approval of PR #1.
 
-**Checkpoint 1**: import loop proven on real data; idempotence shown; timing met; backup +
-restore smoke green.
+### Phase 1 — engine (lead)
 
-### Phase 2: Stats engine (stats)
+1. **Capture.** Migration: `records.device_hw/device_sw/meta_json`, `imports.export_date`.
+   Parser, mapper and store changes, including the upsert. Fixture model gains device
+   attributes, device-less sleep/RHR records and metadata. Rules: B-I12, B-I8 (export_date).
+   Test: re-importing over pre-v1 rows fills `device_hw`. Measure the db growth from
+   `meta_json` against the 30% risk threshold.
+2. **Derived schema + epochs.** Migration for `epochs, epoch_events, stints, nights,
+   metric_values, findings, seam_steps`; drop `daily_metrics`/`device_events`. Epoch
+   derivation with inheritance and OS-update events. Rules: B-D1, B-D2, B-D2b, B-D8.
+   Fixture: same-name replacement watch.
+3. **Minor + sticky primary.** Registry extension (kind, floors, minimums, `sleep_hr`,
+   `trendOnly`, SpO2 overnight); minor rule; stints; seams; seam steps. Rules: B-D3–B-D7.
+   Fixtures: a minor app → no seam; alternating phone/watch → no seam.
+4. **Nights.** Zones from `HKTimeZone`, night rule, 09:00–12:00 continuation, sleep stages from
+   the primary, `sleep_hr`, export-cut completeness, `tz_change`, daytime units. Rules:
+   B-N1–B-N9. Fixture: a night in another zone.
+5. **Values + baselines.** Usability, ordinal windows, gates, floors and cap, severity,
+   confidence, k-outside, onset. Rules: B-F1–B-F6, B-F8, B-F11. The spike fixture now expects
+   new stint → warming up → across-seam step. Fixture: flat respiratory-rate baseline.
+6. **Findings + checks.** Ranking, trend-only exclusion, checks, wording keys. Rules: B-F7,
+   B-F9, B-F10, B-C1–B-C6.
+7. **Atomic derive + CLI + real-data readout.** One derive transaction with a swap; evidence
+   bounded by as-of; `bun src/cli.ts changes [--json]`. Owner-witnessed run on the real export
+   checks B-I9, success criterion 2 (new watch as its own epoch for all overnight metrics, no
+   spurious steps seams) and the † thresholds. Tuning notes go into journeys.md. Rules: B-I6.
+8. **Import job hardening.** Pre-job zip validation, `deriving` stage, progress, retry endpoint,
+   24 h spool, restart reconcile, backup cap. Rules: B-I1–B-I5, B-I7, B-I8, B-I10, B-I12
+   (backups). Integration tests through HTTP.
 
-- [ ] Task 9: Local-day derivation + night assembly — record-local calendar days (JST),
-      14:59/15:00 and 08:59/09:00 boundary tests, cross-midnight stages, naps excluded,
-      dominant-source selection incl. ties.
-- [ ] Task 10: Per-source daily metrics — median vs sum methods, HRV 21:00–09:00 filter,
-      sparse-series behavior.
-- [ ] Task 11: Baselines + robust z + severity + trust labels + per-source anchor, exactly per
-      the Task 4 contract (window edges, gates, thresholds, zero-MAD, flat-baseline case).
-- [ ] Task 12: Device events + recalibration — all three event kinds, coverage-boundary
-      detection per contract, suppressed cross-source z, findings recompute wired into import
-      completion with an integration assertion. Spike regression test green.
+**Gate A**: independent review of slices 1–8 against B-D/B-N/B-F/B-C/B-I; `bun run check`
+green.
 
-**Checkpoint 2**: verify per-source statistics against the private import. A change in
-source is a potential confounder; it does not establish the cause of a measured change.
+### Phase 2 — read API + MCP
 
-### Phase 3: API + UI (http + briefing-ui)
+9. **REST v1** (lead): `/api/changes`, `/api/metrics`, `/api/metrics/:metric`, `/units/:day`,
+   `/api/epochs`, `/api/nights`, plus import summary fields. v1 routes are added next to the v0
+   ones. The integration test goes fixture zip → `/api/changes`. Smoke and e2e scripts switch
+   to `/api/changes`. Rules: B-R1–B-R4 (payload), B-I3, B-I4, B-A4 (`nights`).
+10. **MCP v1** (lead): tools `changes, metric_series, nights, epochs, list_imports`; REST
+    parity test; descriptions per B-A3. **Checkpoint B**: a pi session answers "what changed
+    recently, and could the device explain it?" using MCP only. The transcript is reviewed for
+    cause assertions and stored without values. Rules: B-A1–B-A4.
 
-- [ ] Task 13: Domain/API JSON contracts + read routes (imports list, briefing, metric daily,
-      deviations, findings, sources) + the design-required integration test: fixture zip →
-      db → briefing endpoint payload assertions.
-- [ ] Task 14: Import upload/job route per the Task 4 contract — `202 + id`, status
-      transitions, single-import lock, spooling + atomic rename, size/time limits, error
-      payloads, retry semantics; synthetic-zip API integration test.
-- [ ] Task 15: Web foundation — Vite+React scaffold, design tokens (dark-first), centralized
-      copy module, API client with job polling.
-- [ ] Task 16: uPlot React wrapper — baseline bands, multi-series, boundary markers (genuinely
-      small, isolated).
-- [ ] Task 17: Import page — drop zone with job progress, run history, new-since-last-run.
-- [ ] Task 18: Briefing page — as-of date, last night, ranked deviations **with evidence
-      links**, recalibration notices, **import status + cadence nudge**, trust labels.
-- [ ] Task 19: Investigate page — metric picker, baseline band chart, deviation table with
-      evidence navigation, device events, RMSSD/SDNN seam handling (both series + boundary
-      marker, no blending), as-of date, trust labels.
+### Phase 3 — UI (delegable, with briefs)
 
-**Checkpoint 3** (explicit): integration test green in CI; manual browse on real data —
-briefing shows cadence + import status + evidence links; every view carries its as-of date and
-trust labels; investigate reproduces the spike readout visually.
+11. **Foundation + v0 removal.** Delete the v0 web, `tests/web`, `uplot` and the v0 read routes.
+    Add Tailwind v4, shadcn init, the router, the shell (sidebar/tabs, top-bar freshness,
+    importing pill), the `EChart` wrapper with a CSS-variable theme, the epoch palette and
+    tints (contrast/colorblind check), the API client, and empty/loading/error primitives. Set a
+    bundle budget check (≤300 KB gzipped). e2e: shell + empty states at both widths.
+12. **Import page.** Drop zone with a file input, XHR upload, stepper, summary, history, retry,
+    all §8 states. e2e: upload fixture, duplicate, bad file, phone file input.
+13. **Changes page.** `FindingRow`, overnight/daytime lists, warming-up notice, stale banner,
+    last usable night, all §4 states.
+14. **Metric chart + detail shell.** `MetricChart` (polygon band, recent, seams, steps, OS
+    marks, partial, minor), range/zoom in the URL, FindingRow header, recent-units table,
+    trend-only and not-found states.
+15. **Checks + evidence sheet.** Checks panel, `?night=` evidence sheet, full-screen on phones.
+16. **Long view + Metrics index.** Calendar heatmap with a custom series, Metrics grid from
+    `/api/metrics`.
+17. **Devices page** (lead). Epoch timeline from days present, per-epoch cards, seam steps, OS
+    updates, single-epoch state.
 
-### Phase 4: MCP server (mcp)
+**Gate C**: independent J1–J5 walkthrough on real data (screenshots inspected, findings
+recorded without values) plus `make e2e` green.
 
-- [ ] Task 20: MCP server, stdio transport — read-only tools (list_imports, list_sources,
-      metric_daily, deviations, findings, briefing), payloads carrying as-of + trust labels;
-      contract shared with REST layer.
-- [ ] Task 21: Streamable HTTP transport mounted on the Hono app (tailnet-only), same tools.
+### Phase 4 — ship
 
-**Checkpoint 4**: a pi session answers "what changed recently and why" using only MCP tools;
-tool-call transcript preserved as evidence.
+18. README rewrite; image + smoke (synthetic); harus-k3s tag bump PR with its gates;
+    owner-authorized apply; real export re-imported on the cluster through the upsert (no
+    deletion); MCP check from the workstation; backup CronJob firing. Rollback = previous tag.
+    The v1 columns are additive, but the v0 code cannot read the v1 derived tables, so a
+    rollback also restores the pre-deploy snapshot. That restore is a data operation and needs
+    the owner's approval.
 
-### Phase 5: Ship to cluster (closing milestone, per ship-to-cluster playbook)
+## Parallelism
 
-- [ ] Task 22: Dockerfile (Bun base, multi-stage) + `.dockerignore` (data/, zips, db sidecars,
-      backups, archive) + image-content inspection proving no personal data + container
-      smoke test (synthetic import + briefing + MCP HTTP inside the container).
-- [ ] Task 23: harus-charts base chart/workload via its `tk` ticket workflow — RWO PVC,
-      `Recreate` update strategy (no overlapping writers), app-level import lock respected;
-      chart build/synth/test gates green.
-- [ ] Task 24: Backup CronJob in the chart — nightly `VACUUM INTO`, 30-day retention,
-      integrity check; restore drill executed once on the cluster; WAL-sidecar handling across
-      backup, restore, pod restart, and node replacement (sidecars never restored across
-      restarts).
-- [ ] Task 25: Deploy per playbook: midori service-owned image target; harus-k3s image pin +
-      `check-drift` + validate; authorized apply; rollout verification from other machines —
-      briefing via tailnet, zip upload through ingress, MCP query from workstation, CronJob
-      firing; rollback note recorded. Rollout verification also covers pod-restart behavior
-      (SQLite reopens cleanly; no stale sidecars) and a re-import idempotence check through the
-      cluster endpoint. Separate commits per owning repo (midori, harus-charts,
-      harus-k3s).
+- Slices 1→2→3→4→5→6→7 run strictly in sequence.
+- Slice 8 can run in parallel with slices 5–7 (different files).
+- Slice 11 can start after Gate 0, but merges after slice 9.
+- Slices 12, 13 and 17 run in parallel after slice 11; slices 14→15→16 run in sequence.
+- Slice 10 runs in parallel with Phase 3.
 
-**Checkpoint 5 (v0 done)**: all six success criteria in `docs/design.md` verified and recorded
-with evidence.
+## Risks
 
-## Parallelization
+| Risk | Mitigation |
+| --- | --- |
+| Device-less records split epochs (review H2) | Inheritance rule B-D2 + same-name fixture; slice 7 readout checks that every overnight metric sits on the new epoch |
+| Source mixing creates spurious seams (H3) | Sticky primary B-D4 + alternating fixture; slice 7 counts seams per metric |
+| Quantized metrics inflate z (H5) | Registry floors + cap (B-F4) + flat-baseline fixture |
+| Re-import leaves new columns NULL (H6) | Upsert (B-I12) + test; no deletion anywhere in the plan |
+| Timezone travel mis-assigns nights (M1) | `HKTimeZone` zones (B-N1) + fixture; tz check B-C4 |
+| † thresholds feel wrong on real data | Slice 7 readout before any UI; tune with a note in journeys.md |
+| `meta_json` grows the db (751 MB now) | Measured in slice 1; switch to a key allowlist if growth exceeds 30% |
+| Workers ship unverified UI again | Inspected real-data screenshots are a merge condition for every UI slice |
+| ECharts bundle and custom-series complexity | Per-module imports; budget check in slice 11; band and calendar via documented `custom` series |
+| Derive time grows | Measured in slice 7 against B-I9 |
+| Cluster rollback needs a data restore | Snapshot before apply; restore only with owner approval (slice 18) |
 
-- After Task 4 (contracts), fixture work (Task 3) and scaffold (Task 1) are independent.
-- After Task 13/14 (API contracts + upload job), Phase 3 UI work and Phase 4 MCP work are
-  independent — safe to run as parallel sessions.
-- Schema, ingest hot path, and stats semantics are strictly sequential (Tasks 2→5→6→9→11).
+## Open questions
 
-## Risks and Mitigations
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| 2.05M-row import misses <5 min | High | Raw `bun:sqlite` prepared statements in the hot path; batched transactions; benchmark inside Task 6 (scaled fixture), fallback decided before stats exist |
-| Stats semantics ambiguous at implementation time | High | Task 4 pins windows, gates, thresholds, zero-MAD, boundary algorithm as tracked, unit-tested contracts before any consumer exists |
-| Large-upload/parse failure modes (async job, lock, spool) | Med | Async 202 + status contract (Task 4), implemented + integration-tested in Task 14 before UI depends on it |
-| Personal data leaks into container image | High | `.dockerignore` + image-content inspection + synthetic-only CI (Task 22) |
-| export.xml shape drift / unknown attributes | Med | Parser ignores unknown attributes; fixtures pin Export Version 17 shape; unknown record types stored |
-| Night/day rule edge cases | Med | Boundary-time unit tests (14:59/15:00, 08:59/09:00, 21:00, cross-midnight, ties); rules ported from spike into tracked tests |
-| SQLite on k3s (rollout overlap, integrity, recovery) | Med | RWO PVC + `Recreate` strategy + app-level lock; integrity checks on snapshots; restore drill (Tasks 24–25) |
-| Cross-repo chart/deploy workflow | Med | Phase 5 follows the ship-to-cluster playbook and harus-charts' own tk workflow, gates named per task |
-| SAX/ZIP runtime dependencies unapproved | Med | Open question 1 resolved before Task 5 |
-| Backup exists but doesn't restore | Med | Restore smoke test local (Task 7) and drill on cluster (Task 24) |
-
-## Open Questions
-
-1. **Runtime dependencies for XML SAX parsing and zip handling** (e.g. `saxes`/`sax-wasm`,
-   `yauzl`/`adm-zip`, or shelling out to `unzip`): the design's ask-first boundary applies —
-   owner decision needed before Task 5. Bun/platform-native options preferred if adequate.
-2. RMSSD vs SDNN across the device switch — decided for v0 (Task 19); revisit only if
-   briefings feel broken at the seam.
+1. Router: TanStack Router vs React Router. Decided in slice 11; either is acceptable per 0002.
+2. `rhr` assigned to the night that ends that morning (journeys §2 †): confirm in the slice 7
+   readout.
