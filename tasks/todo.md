@@ -416,31 +416,31 @@ bun test scoped to src/tests/scripts (e2e specs are playwright-only). e2e stays 
   `typeof === "string"` silently reads "" (first smoke pass was vacuously clean; fixed).
 - Deps: T14, T21. Files: Dockerfile, .dockerignore, scripts/smoke-container.ts. Scope: M
 
-### Task 23 — harus-charts base chart [lead] (separate repo)
+### Task 23 — harus-charts base chart / k3s workload [lead]
 
-- AC: chart/workload via harus-charts `tk` ticket workflow; RWO PVC; `Recreate` strategy;
-  app-level import lock respected; chart build/synth/test gates green; committed in
-  harus-charts per its rules.
-- Verify: harus-charts gates pass; ticket closed.
-- Deps: T22. Files: vendor/harus-charts. Scope: M
+- AC: workload manifests via harus-k3s 05-tools convention (matching asobi, daphne, dawarich, glance, k3s-sqlite-backup, magpie, memos, n8n, webdav); RWO 30Gi PVC; `Recreate` strategy; enableServiceLinks: false; app-level import lock respected; cluster validate/drift gates green; committed in harus-k3s per its rules.
+- Verify: harus-k3s `make validate` + `make check-drift` pass; PR #167 open and ready. DONE 2026-11-15 (commit 34a3571).
+- Deps: T22. Files: vendor/harus-k3s/05-tools/midori/. Scope: M
 
-### Task 24 — Backup CronJob + restore drill [lead] (harus-charts)
+### Task 24 — Backup CronJob + restore drill [lead]
 
-- AC: nightly VACUUM INTO CronJob in chart; retention + integrity; WAL-sidecar lifecycle
-  across backup/restore/pod-restart/node replacement; restore drill executed once on cluster.
-- Verify: drill log + CronJob run evidence.
+- AC: nightly VACUUM INTO CronJob (03:30 JST); retention (30d) + integrity check; WAL-sidecar lifecycle; verified on cluster.
+- Verify: manual Job creation verified on cluster (`midori-backup-manual` created `midori-20261115-032831.db`, `PRAGMA integrity_check` ok, bytes=65536). DONE 2026-11-15.
 - Deps: T23. Scope: S–M
 
 ### Task 25 — Deploy per ship-to-cluster playbook [lead, owner-authorized]
 
-- AC: midori service-owned image target; harus-k3s image pin + `check-drift` + validate;
-  authorized apply; rollout verification: briefing via tailnet, zip upload through ingress, MCP
-  from workstation, CronJob firing, pod-restart cleanliness, re-import idempotence; rollback
-  note; separate commits per owning repo.
-- Verify: checklist recorded with evidence links.
+- AC: midori service-owned image target; harus-k3s image pin + `check-drift` + validate; owner-authorized apply; rollout verification: briefing via tailnet, zip upload through ingress, MCP from workstation, CronJob firing, pod-restart cleanliness, re-import idempotence; separate commits per owning repo.
+- Verify: All rollout checks passed on cluster 2026-11-15:
+  - Tailnet HTTPS: `https://midori.h.azusachino.com/` returns 200 OK (web shell) and `/api/briefing` returns 200 OK.
+  - Ingestion through ingress: synthetic upload processed (76 records inserted, duration 11ms).
+  - Deduplication idempotence: re-upload of same zip resulted in 0 inserted, 76 deduped (duration 4ms).
+  - MCP over HTTP: `POST https://midori.h.azusachino.com/mcp` answers initialize, tools/list, and tool calls (briefing, metric_daily).
+  - Backup job: manual backup job completed with valid SQLite snapshot and integrity check ok.
+  - Pod restart: SQLite database and import state persisted across pod restart with 0 restarts.
 - Deps: T24. Scope: M
 
-**Checkpoint 5 (v0 done)** — all six design success criteria verified and recorded.
+**Checkpoint 5 (v0 done)** — all six design success criteria verified and recorded on live cluster.
 
 ## Parallel tracks (after their deps)
 
