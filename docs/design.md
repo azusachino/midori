@@ -4,6 +4,8 @@ Status: proposed 2026-11-15, replacing v0 (approved 2026-11-13, in Git history a
 Drivers: `docs/reviews/2026-11-15-v0-product-review.md`,
 [0001 analysis model](decisions/0001-analyze-by-device-epoch-and-night.md),
 [0002 UI stack](decisions/0002-ui-on-shadcn-tailwind-echarts.md).
+Companions: [journeys and expected behavior](journeys.md), [UI design](ui-design.md),
+[plan](../tasks/plan.md).
 Evidence base: harus-workstation
 `docs/runbooks/research/2026-11/2026-11-13-midori-apple-health-assistant.md`.
 
