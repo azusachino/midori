@@ -2,7 +2,7 @@ import type { EChartsCoreOption } from "echarts/core";
 import { graphic } from "echarts/core";
 import { useCallback, useMemo } from "react";
 import type { MetricSeriesDTO, MetricUnitPointDTO } from "@/api/types";
-import { EChart, type EChartZoomEvent } from "@/components/EChart";
+import { EChart, type EChartPointClickEvent, type EChartZoomEvent } from "@/components/EChart";
 import { copy } from "@/copy";
 import { displayUnit, formatDayWithWeekday, formatMetricNumber } from "@/lib/finding-format";
 import {
@@ -25,6 +25,7 @@ export interface MetricChartProps {
   zoomStart?: string | undefined;
   zoomEnd?: string | undefined;
   onZoomChange?: (zoom: { zoomStart: string; zoomEnd: string } | null) => void;
+  onSelectDay?: (day: string) => void;
   height?: number;
 }
 
@@ -71,6 +72,7 @@ export function MetricChart({
   zoomStart,
   zoomEnd,
   onZoomChange,
+  onSelectDay,
   height = 320,
 }: MetricChartProps) {
   const days = useMemo(() => buildCalendarDays(series), [series]);
@@ -101,6 +103,18 @@ export function MetricChart({
       onZoomChange(zoomEventToDays(days, ev));
     },
     [days, onZoomChange],
+  );
+
+  const handlePointClick = useCallback(
+    (ev: EChartPointClickEvent) => {
+      if (!onSelectDay) return;
+      if (ev.seriesType !== "line" && ev.seriesType !== "scatter" && ev.seriesType !== "grid") {
+        return;
+      }
+      const day = days[ev.dataIndex] ?? (/^\d{4}-\d{2}-\d{2}$/.test(ev.name) ? ev.name : undefined);
+      if (day) onSelectDay(day);
+    },
+    [days, onSelectDay],
   );
 
   const buildOption = useCallback(
@@ -530,6 +544,7 @@ export function MetricChart({
       height={height}
       buildOption={buildOption}
       onDataZoom={handleDataZoom}
+      onPointClick={handlePointClick}
       summary={summary}
       table={table}
     />

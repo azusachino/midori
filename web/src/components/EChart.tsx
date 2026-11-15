@@ -46,6 +46,13 @@ export interface EChartZoomEvent {
   endValue?: string | number | undefined;
 }
 
+export interface EChartPointClickEvent {
+  name: string;
+  dataIndex: number;
+  seriesName?: string | undefined;
+  seriesType?: string | undefined;
+}
+
 export interface EChartProps {
   /** Builds the ECharts option using the resolved CSS-variable theme. */
   buildOption: (theme: ChartTheme) => EChartsCoreOption;
@@ -55,6 +62,8 @@ export interface EChartProps {
   table?: AccessibleTableData;
   /** Called after interactive dataZoom slider/inside gestures complete. */
   onDataZoom?: (event: EChartZoomEvent) => void;
+  /** Called when a plotted series point is clicked. */
+  onPointClick?: (event: EChartPointClickEvent) => void;
   className?: string;
   height?: number;
   "data-testid"?: string;
@@ -76,6 +85,7 @@ export function EChart({
   summary,
   table,
   onDataZoom,
+  onPointClick,
   className,
   height = 240,
   "data-testid": testId,
@@ -84,6 +94,8 @@ export function EChart({
   const instanceRef = useRef<EChartsType | null>(null);
   const onDataZoomRef = useRef(onDataZoom);
   onDataZoomRef.current = onDataZoom;
+  const onPointClickRef = useRef(onPointClick);
+  onPointClickRef.current = onPointClick;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -112,6 +124,52 @@ export function EChart({
         end,
         startValue: firstBatch?.startValue ?? evObj.startValue ?? resolved?.startValue,
         endValue: firstBatch?.endValue ?? evObj.endValue ?? resolved?.endValue,
+      });
+    });
+
+    let lastHandledDomEvent: unknown = null;
+
+    chart.on("click", (rawEvent: unknown) => {
+      const handler = onPointClickRef.current;
+      if (!handler || typeof rawEvent !== "object" || rawEvent === null) return;
+      const ev = rawEvent as {
+        componentType?: unknown;
+        name?: unknown;
+        dataIndex?: unknown;
+        seriesName?: unknown;
+        seriesType?: unknown;
+        event?: { event?: unknown };
+      };
+      if (ev.componentType !== "series") return;
+      if (typeof ev.dataIndex !== "number") return;
+      lastHandledDomEvent = ev.event?.event ?? null;
+      handler({
+        name: typeof ev.name === "string" ? ev.name : String(ev.name ?? ""),
+        dataIndex: ev.dataIndex,
+        seriesName: typeof ev.seriesName === "string" ? ev.seriesName : undefined,
+        seriesType: typeof ev.seriesType === "string" ? ev.seriesType : undefined,
+      });
+    });
+
+    chart.getZr().on("click", (rawZr: unknown) => {
+      const handler = onPointClickRef.current;
+      if (!handler || typeof rawZr !== "object" || rawZr === null) return;
+      const zrEv = rawZr as { offsetX?: number; offsetY?: number; event?: unknown };
+      if (zrEv.event && zrEv.event === lastHandledDomEvent) return;
+      if (typeof zrEv.offsetX !== "number" || typeof zrEv.offsetY !== "number") return;
+      if (!chart.containPixel("grid", [zrEv.offsetX, zrEv.offsetY])) return;
+      const coord = chart.convertFromPixel({ seriesIndex: 0 }, [zrEv.offsetX, zrEv.offsetY]) as
+        | number[]
+        | undefined;
+      if (!Array.isArray(coord) || typeof coord[0] !== "number" || Number.isNaN(coord[0])) {
+        return;
+      }
+      const dataIndex = Math.round(coord[0]);
+      if (dataIndex < 0) return;
+      handler({
+        name: "",
+        dataIndex,
+        seriesType: "grid",
       });
     });
 

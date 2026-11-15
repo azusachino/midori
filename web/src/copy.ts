@@ -250,6 +250,69 @@ export const copy = {
       unknownTitle: "Unknown metric",
       unknownBody: (key: string) => `“${key}” is not a recognized midori metric.`,
       knownListLabel: "Known metrics",
+      checksTitle: "Checks",
+      checkStatusClear: "Clear",
+      checkStatusFlagged: "Flagged",
+      checksDevicesLink: "Devices",
+      checksInspectUnit: (dayLabel: string) => `Open ${dayLabel}`,
+      checksClearLabels: {
+        device_change: "No device change in last 35 days",
+        os_update: "No OS update in last 35 days",
+        partial_nights: (noun: "nights" | "days") => `No partial ${noun} skipped`,
+        tz_change: "No timezone change",
+        missing_nights: (noun: "nights" | "days") => `No missing ${noun}`,
+        trust: (trustLabel: string) => `Trust: ${trustLabel}`,
+      },
+      checksFlaggedLabels: {
+        device_change: (dayLabel?: string) =>
+          dayLabel
+            ? `Device change in last 35 days (${dayLabel})`
+            : "Device change in last 35 days",
+        os_update: (dayLabel?: string) =>
+          dayLabel ? `OS update in last 35 days (${dayLabel})` : "OS update in last 35 days",
+        partial_nights: (count: number | undefined, noun: "nights" | "days", dayLabel?: string) => {
+          const singular = noun === "days" ? "day" : "night";
+          const unitWord = count === 1 ? singular : noun;
+          const prefix =
+            count !== undefined && count > 0
+              ? `${count} partial ${unitWord} skipped`
+              : `Partial ${noun} skipped`;
+          return dayLabel ? `${prefix} (${dayLabel})` : prefix;
+        },
+        tz_change: (dayLabel?: string) =>
+          dayLabel ? `Timezone change (${dayLabel})` : "Timezone change in recent window",
+        missing_nights: (noun: "nights" | "days", dayLabel?: string) =>
+          dayLabel ? `Missing ${noun} (${dayLabel})` : `Missing ${noun} in recent window`,
+        low_trust: "Trust: low",
+      },
+      evidence: {
+        title: (prefix: string, metricLabel: string) => `${prefix} · ${metricLabel}`,
+        nightPrefix: (weekdayDate: string) => `Night of ${weekdayDate}`,
+        dayPrefix: (weekdayDate: string) => `Day of ${weekdayDate}`,
+        sheetDescription: "Recorded unit evidence and source details.",
+        valueSummary: (valueText: string, sampleCount: number, windowLabel: string) =>
+          `Value ${valueText} (${sampleCount} samples, ${windowLabel})`,
+        valueMedianSummary: (valueText: string, sampleCount: number, windowLabel: string) =>
+          `Value ${valueText} (median of ${sampleCount} samples, ${windowLabel})`,
+        noSamplesNight: "No samples stored for this night",
+        noSamplesDay: "No samples stored for this day",
+        devicePrefix: "Device",
+        unknownDevice: "Primary source unavailable",
+        usableLabel: "usable",
+        partialLabel: (reason: string | null) => (reason ? `partial (${reason})` : "partial"),
+        samplesHeading: "Samples",
+        sleepHeading: "Sleep",
+        sleepWindow: (startLocal: string, endLocal: string, asleepH: string) =>
+          `${startLocal}–${endLocal} · asleep ${asleepH} h`,
+        alsoRecordedBy: "Also recorded by:",
+        copyLink: "Copy link",
+        copiedLink: "Link copied",
+        loadingLabel: "Loading evidence…",
+        loadError: "Couldn't load unit evidence.",
+        retryLabel: "Retry",
+        closeLabel: "Close evidence sheet",
+        sampleWindowOvernight: "21:00–09:00",
+      },
     },
     devices: {
       title: "Devices",

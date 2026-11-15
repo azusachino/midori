@@ -1,5 +1,6 @@
 import { Moon } from "lucide-react";
 import type { LastNightDTO } from "@/api/types";
+import { SleepStageBar } from "@/components/SleepStageBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { copy } from "@/copy";
 import { formatDayWithWeekday, formatShortDay } from "@/lib/finding-format";
@@ -30,11 +31,6 @@ export function LastNightCard({ lastNight }: LastNightCardProps) {
   const rem = lastNight.remH.toFixed(1);
   const core = lastNight.coreH.toFixed(1);
 
-  const stageTotal = Math.max(0.01, lastNight.deepH + lastNight.remH + lastNight.coreH);
-  const deepPct = (lastNight.deepH / stageTotal) * 100;
-  const remPct = (lastNight.remH / stageTotal) * 100;
-  const corePct = (lastNight.coreH / stageTotal) * 100;
-
   return (
     <Card data-testid="last-night-card">
       <CardHeader>
@@ -51,44 +47,12 @@ export function LastNightCard({ lastNight }: LastNightCardProps) {
             {copy.pages.changes.lastNight.breakdown(asleep, deep, rem, core)}
           </p>
 
-          <div className="flex w-full flex-col gap-1.5 sm:w-48">
-            <div
-              role="img"
-              aria-label={copy.pages.changes.lastNight.stageBarAria(deep, rem, core)}
-              data-testid="sleep-stage-bar"
-              className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
-            >
-              {deepPct > 0 ? (
-                <div style={{ width: `${deepPct.toFixed(1)}%` }} className="h-full bg-epoch-2" />
-              ) : null}
-              {remPct > 0 ? (
-                <div style={{ width: `${remPct.toFixed(1)}%` }} className="h-full bg-learning" />
-              ) : null}
-              {corePct > 0 ? (
-                <div
-                  style={{ width: `${corePct.toFixed(1)}%` }}
-                  className="h-full bg-muted-foreground/45"
-                />
-              ) : null}
-            </div>
-            <div
-              data-testid="sleep-stage-legend"
-              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-epoch-2" />
-                <span>{copy.pages.changes.lastNight.stageLegend.deep}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-learning" />
-                <span>{copy.pages.changes.lastNight.stageLegend.rem}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-muted-foreground/45" />
-                <span>{copy.pages.changes.lastNight.stageLegend.core}</span>
-              </span>
-            </div>
-          </div>
+          <SleepStageBar
+            deepH={lastNight.deepH}
+            remH={lastNight.remH}
+            coreH={lastNight.coreH}
+            className="sm:w-48"
+          />
         </div>
 
         {lastNight.skippedPartialDay && lastNight.skippedPartialReason === "export_cut" ? (

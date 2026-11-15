@@ -812,21 +812,109 @@ export function emptyRangeMetricSeriesStub(
   };
 }
 
+function buildSyntheticSamples(
+  day: string,
+  metric: string,
+  unitKind: "night" | "day",
+  baseValue: number,
+  sampleCount: number,
+) {
+  const spread =
+    metric === "wrist_temp"
+      ? 0.08
+      : metric === "steps"
+        ? 450
+        : metric === "active_kj"
+          ? 85
+          : metric === "spo2"
+            ? 0.6
+            : metric === "resp_rate" || metric === "sleep_h"
+              ? 0.4
+              : 3;
+
+  const startMinutes = unitKind === "night" ? 23 * 60 + 14 : 8 * 60 + 30;
+  const stepMinutes = unitKind === "night" ? 48 : 65;
+
+  return Array.from({ length: sampleCount }, (_, idx) => {
+    const totalMin = (startMinutes + idx * stepMinutes) % (24 * 60);
+    const hh = String(Math.floor(totalMin / 60)).padStart(2, "0");
+    const mm = String(totalMin % 60).padStart(2, "0");
+    const localTime = `${hh}:${mm}`;
+    const offset = ((idx % 3) - 1) * spread;
+    const raw =
+      metric === "steps" || metric === "active_kj"
+        ? baseValue / sampleCount + offset
+        : baseValue + offset;
+    const value = roundMetricVal(raw, metric);
+    return {
+      timestamp: `${day}T${localTime}:00+09:00`,
+      localTime,
+      value,
+    };
+  });
+}
+
 export function unitEvidenceStub(metric: string, day: string): UnitEvidenceDTO {
+  const unitKind: UnitEvidenceDTO["unitKind"] =
+    metricKindFor(metric) === "daytime" ? "day" : "night";
+  const series = metricSeriesStub(metric, "all");
+  const dayUnits = series.units.filter((u) => u.day === day);
+  const primaryEpochIds = new Set(series.epochs.filter((e) => !e.minor).map((e) => e.id));
+  const primaryUnit = dayUnits.find((u) => primaryEpochIds.has(u.epochId)) ?? dayUnits[0] ?? null;
+
+  if (!primaryUnit || primaryUnit.value === null || primaryUnit.n <= 0) {
+    return {
+      metric,
+      day,
+      unitKind,
+      zone: "Asia/Tokyo",
+      value: null,
+      sampleCount: 0,
+      usable: false,
+      partialReason: primaryUnit?.partialReason ?? null,
+      primaryEpoch: null,
+      deviceSw: null,
+      samples: [],
+      sleep: null,
+      alsoRecordedBy: [],
+    };
+  }
+
+  const primaryEpoch = series.epochs.find((e) => e.id === primaryUnit.epochId) ?? null;
+  const alsoRecordedBy = dayUnits
+    .filter((u) => u.epochId !== primaryUnit.epochId)
+    .map((u) => series.epochs.find((e) => e.id === u.epochId))
+    .filter((e): e is NonNullable<typeof e> => e !== undefined);
+
+  const deviceSw = day >= "2026-02-26" ? "11.0" : day >= "2026-01-12" ? "10.4" : "10.2";
+  const samples = buildSyntheticSamples(day, metric, unitKind, primaryUnit.value, primaryUnit.n);
+
+  const sleep =
+    unitKind === "night"
+      ? {
+          startLocal: "23:02",
+          endLocal: primaryUnit.usable ? "06:48" : "03:45",
+          asleepH: primaryUnit.usable ? 7.1 : 4.2,
+          deepH: primaryUnit.usable ? 1.1 : 0.6,
+          remH: primaryUnit.usable ? 1.5 : 0.8,
+          coreH: primaryUnit.usable ? 4.5 : 2.8,
+        }
+      : null;
+
   return {
     metric,
     day,
-    unitKind: metricKindFor(metric) === "daytime" ? "day" : "night",
+    unitKind,
     zone: "Asia/Tokyo",
-    value: null,
-    sampleCount: 0,
-    usable: false,
-    partialReason: null,
-    primaryEpoch: null,
-    deviceSw: null,
-    samples: [],
-    sleep: null,
-    alsoRecordedBy: [],
+    value: primaryUnit.value,
+    sampleCount: primaryUnit.n,
+    usable: primaryUnit.usable,
+    partialReason: primaryUnit.partialReason,
+    primaryEpoch,
+    deviceSw,
+    samples,
+    sleep,
+    alsoRecordedBy,
   };
 }
 

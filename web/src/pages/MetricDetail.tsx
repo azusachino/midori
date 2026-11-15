@@ -4,6 +4,8 @@ import { ArrowLeft } from "lucide-react";
 import { type MouseEvent, useCallback } from "react";
 import { apiClient } from "@/api/client";
 import type { MetricRange, MetricSeriesDTO, MetricTab } from "@/api/types";
+import { ChecksPanel } from "@/components/ChecksPanel";
+import { EvidenceSheet } from "@/components/EvidenceSheet";
 import { FindingRow } from "@/components/FindingRow";
 import { LoadingState } from "@/components/LoadingState";
 import { MetricChart } from "@/components/MetricChart";
@@ -98,6 +100,35 @@ export function MetricDetailPage() {
       },
     });
   }, [navigate]);
+
+  const handleSelectDay = useCallback(
+    (day: string) => {
+      void navigate({
+        search: (prev) => ({ ...prev, night: day }),
+      });
+    },
+    [navigate],
+  );
+
+  const handleCloseEvidence = useCallback(() => {
+    void navigate({
+      replace: true,
+      search: (prev) => {
+        if (!prev.night) return prev;
+        const updated = { ...prev };
+        delete updated.night;
+        return updated;
+      },
+    });
+  }, [navigate]);
+
+  const handleRowButtonClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      const day = event.currentTarget.dataset.day;
+      if (day) handleSelectDay(day);
+    },
+    [handleSelectDay],
+  );
 
   if (!known) {
     const knownKeys = Array.from(new Set([...OVERNIGHT_ORDER, ...Object.keys(METRICS)]));
@@ -254,78 +285,102 @@ export function MetricDetailPage() {
                     zoomStart={search.zoomStart}
                     zoomEnd={search.zoomEnd}
                     onZoomChange={handleZoomChange}
+                    onSelectDay={handleSelectDay}
                   />
                 </CardContent>
               </Card>
 
-              <Card data-testid="recent-units-card" className="min-w-0 overflow-hidden">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">
-                    {copy.pages.metricDetail.recentUnitsTitle(noun)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-0">
-                  <Table data-testid="recent-units-table">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="px-2 sm:px-3">
-                          {copy.pages.metricDetail.recentTable.colDay}
-                        </TableHead>
-                        <TableHead className="px-2 sm:px-3">
-                          {copy.pages.metricDetail.recentTable.colValue}
-                        </TableHead>
-                        <TableHead className="px-2 sm:px-3">
-                          {copy.pages.metricDetail.recentTable.colZ}
-                        </TableHead>
-                        <TableHead className="hidden px-2 sm:table-cell sm:px-3">
-                          {copy.pages.metricDetail.recentTable.colDevice}
-                        </TableHead>
-                        <TableHead className="px-2 sm:px-3">
-                          {copy.pages.metricDetail.recentTable.colNotes}
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {recentRows.map((row) => (
-                        <TableRow key={`${row.day}-${row.deviceLabel}`}>
-                          <TableCell className="px-2 tabular-nums sm:px-3">
-                            {row.dayLabel}
-                          </TableCell>
-                          <TableCell className="px-2 font-medium tabular-nums sm:px-3">
-                            {row.valueText}
-                          </TableCell>
-                          <TableCell
-                            className={cn(
-                              "px-2 tabular-nums sm:px-3",
-                              row.zTone === "alert" && "text-alert font-medium",
-                              row.zTone === "notable" && "text-notable font-medium",
-                              (row.zTone === "within" || row.zTone === "none") &&
-                                "text-muted-foreground",
-                            )}
-                          >
-                            {row.zText}
-                          </TableCell>
-                          <TableCell className="hidden px-2 text-muted-foreground sm:table-cell sm:px-3">
-                            {row.deviceLabel}
-                          </TableCell>
-                          <TableCell className="px-2 text-xs whitespace-normal text-muted-foreground sm:px-3">
-                            {[row.partialNote, row.tzChange ? copy.chart.tzShiftNote : null]
-                              .filter(Boolean)
-                              .join(" · ") || "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              <div
+                className={cn(
+                  "grid min-w-0 gap-5",
+                  data.kind !== "trendOnly" ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]" : "",
+                )}
+              >
+                {data.kind !== "trendOnly" ? (
+                  <ChecksPanel series={data} onSelectDay={handleSelectDay} />
+                ) : null}
 
-                  <p
-                    data-testid="baseline-summary"
-                    className="border-t border-border pt-3 text-xs text-muted-foreground tabular-nums"
-                  >
-                    {baselineSummary}
-                  </p>
-                </CardContent>
-              </Card>
+                <Card data-testid="recent-units-card" className="min-w-0 overflow-hidden">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">
+                      {copy.pages.metricDetail.recentUnitsTitle(noun)}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-0">
+                    <Table data-testid="recent-units-table">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="px-2 sm:px-3">
+                            {copy.pages.metricDetail.recentTable.colDay}
+                          </TableHead>
+                          <TableHead className="px-2 sm:px-3">
+                            {copy.pages.metricDetail.recentTable.colValue}
+                          </TableHead>
+                          <TableHead className="px-2 sm:px-3">
+                            {copy.pages.metricDetail.recentTable.colZ}
+                          </TableHead>
+                          <TableHead className="hidden px-2 sm:table-cell sm:px-3">
+                            {copy.pages.metricDetail.recentTable.colDevice}
+                          </TableHead>
+                          <TableHead className="px-2 sm:px-3">
+                            {copy.pages.metricDetail.recentTable.colNotes}
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recentRows.map((row) => (
+                          <TableRow
+                            key={`${row.day}-${row.deviceLabel}`}
+                            data-selected={search.night === row.day ? "true" : undefined}
+                            className={cn(search.night === row.day && "bg-muted/40")}
+                          >
+                            <TableCell className="px-2 tabular-nums sm:px-3">
+                              <button
+                                type="button"
+                                data-day={row.day}
+                                data-testid={`recent-row-btn-${row.day}`}
+                                onClick={handleRowButtonClick}
+                                className="text-left font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring cursor-pointer tabular-nums"
+                              >
+                                {row.dayLabel}
+                              </button>
+                            </TableCell>
+                            <TableCell className="px-2 font-medium tabular-nums sm:px-3">
+                              {row.valueText}
+                            </TableCell>
+                            <TableCell
+                              className={cn(
+                                "px-2 tabular-nums sm:px-3",
+                                row.zTone === "alert" && "text-alert font-medium",
+                                row.zTone === "notable" && "text-notable font-medium",
+                                (row.zTone === "within" || row.zTone === "none") &&
+                                  "text-muted-foreground",
+                              )}
+                            >
+                              {row.zText}
+                            </TableCell>
+                            <TableCell className="hidden px-2 text-muted-foreground sm:table-cell sm:px-3">
+                              {row.deviceLabel}
+                            </TableCell>
+                            <TableCell className="px-2 text-xs whitespace-normal text-muted-foreground sm:px-3">
+                              {[row.partialNote, row.tzChange ? copy.chart.tzShiftNote : null]
+                                .filter(Boolean)
+                                .join(" · ") || "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+
+                    <p
+                      data-testid="baseline-summary"
+                      className="border-t border-border pt-3 text-xs text-muted-foreground tabular-nums"
+                    >
+                      {baselineSummary}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
             </>
           )}
         </TabsContent>
@@ -339,6 +394,14 @@ export function MetricDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <EvidenceSheet
+        metric={data.metric}
+        unit={data.unit}
+        kind={data.kind}
+        day={search.night ?? null}
+        onClose={handleCloseEvidence}
+      />
     </div>
   );
 }
