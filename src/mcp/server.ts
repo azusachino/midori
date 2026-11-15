@@ -2,15 +2,7 @@ import type { Database } from "bun:sqlite";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { METRICS } from "../domain/metrics";
-import {
-  briefing,
-  DEFAULT_DEVIATION_DAYS,
-  listDeviations,
-  listFindings,
-  listImports,
-  listSources,
-  metricDaily,
-} from "../http/queries";
+import { listImports, listSources } from "../http/queries";
 
 /**
  * MCP server (T20): read-only tools over the same queries as REST. Every
@@ -18,11 +10,6 @@ import {
  * the REST DTOs). Transport-agnostic: stdio wiring lives in cli.ts mcp, the
  * streamable HTTP mount in src/mcp/http.ts (T21).
  */
-
-const daySchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .describe("calendar day, YYYY-MM-DD (record-local)");
 
 export function createMcpServer({ db }: { db: Database }): McpServer {
   const server = new McpServer(
@@ -82,7 +69,10 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
           ],
         };
       }
-      return { content: [{ type: "text", text: JSON.stringify(metricDaily(db, metric)) }] };
+      return {
+        isError: true,
+        content: [{ type: "text", text: "v1 derived reads arrive in slice 10" }],
+      };
     },
   );
 
@@ -91,20 +81,11 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
     {
       description:
         "Robust-z deviations (baseline = per-source median+MAD over anchor−90..−29, recent = last 14d of that source). Rows carry trust labels; cross_source suppression indicates a source coverage boundary, not proof of a device switch.",
-      inputSchema: {
-        days: z
-          .number()
-          .int()
-          .min(1)
-          .max(365)
-          .default(DEFAULT_DEVIATION_DAYS)
-          .describe(
-            "only rows whose per-source as-of is within this many days of the global anchor",
-          ),
-      },
+      inputSchema: {},
     },
-    async ({ days }) => ({
-      content: [{ type: "text", text: JSON.stringify(listDeviations(db, days)) }],
+    async () => ({
+      isError: true,
+      content: [{ type: "text", text: "v1 derived reads arrive in slice 10" }],
     }),
   );
 
@@ -113,12 +94,11 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
     {
       description:
         "Persisted finding ledger from the last import: deviation | recalibration (inferred source coverage boundary) | coverage (series start/gap), with evidence refs. A boundary does not establish a device switch or its cause; older persisted evidence may use stronger wording.",
-      inputSchema: {
-        since: daySchema.optional().describe("only findings anchored on/after this day"),
-      },
+      inputSchema: {},
     },
-    async ({ since }) => ({
-      content: [{ type: "text", text: JSON.stringify(listFindings(db, since)) }],
+    async () => ({
+      isError: true,
+      content: [{ type: "text", text: "v1 derived reads arrive in slice 10" }],
     }),
   );
 
@@ -130,7 +110,8 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
       inputSchema: {},
     },
     async () => ({
-      content: [{ type: "text", text: JSON.stringify(briefing(db)) }],
+      isError: true,
+      content: [{ type: "text", text: "v1 derived reads arrive in slice 10" }],
     }),
   );
 

@@ -149,7 +149,7 @@ Metric set:
 | B-D5 | A change of primary | A seam at the new stint's first unit |
 | B-D6 | A seam with ≥7 shared usable units† between old and new primary | Median offset (new − old) with n. Values are never adjusted |
 | B-D7 | A seam with <7 shared units | Across-seam step instead: median of the old stint's last ≤28 usable units vs the new stint's first ≤28 (≥7 each). Label: "difference across the watch change — device or you, can't be separated" |
-| B-D8 | `software:` version changes within a primary epoch | An OS-update event on that epoch (no seam) |
+| B-D8 | A `software:` version first seen on an epoch that is newer (dotted-numeric compare) than every version seen on that epoch before | One OS-update event on the day it is first seen (no seam). Reappearance of an older version (late-synced samples) is not an event. Measured on the real export: per-day change detection gave 6 events for 4 versions in 18 days on one watch |
 
 ### Nights and units (B-N)
 

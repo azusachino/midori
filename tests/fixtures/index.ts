@@ -30,4 +30,5 @@ export {
   type WorkoutSpec,
   wellFormedError,
 } from "./model";
+export { REPLACEMENT_SOURCE, replacementWatch, replacementWatchSpec } from "./replacement-watch";
 export { SOURCE_A, SOURCE_B, SPIKE_ANCHOR, SPIKE_WINDOWS, spike, spikeSpec } from "./spike";

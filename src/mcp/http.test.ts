@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Hono } from "hono";
-import { SOURCE_B, SPIKE_ANCHOR, spike } from "../../tests/fixtures";
+import { spike } from "../../tests/fixtures";
 import { buildStoredZip } from "../../tests/util/mkzip";
 import { openDb } from "../db/db";
 import { runImport } from "../ingest/import";
@@ -58,7 +58,7 @@ afterAll(() => {
 });
 
 describe("MCP over streamable HTTP", () => {
-  test("client handshake + briefing tool call round-trips", async () => {
+  test("client handshake + derived tool response reports temporary unavailability", async () => {
     const client = new Client({ name: "midori-http-test-client", version: "0.0.0" });
     await client.connect(new StreamableHTTPClientTransport(new URL(url)));
     try {
@@ -67,16 +67,8 @@ describe("MCP over streamable HTTP", () => {
       if (!Array.isArray(content) || content.length === 0) throw new Error("no content");
       const first = content[0];
       if (first?.type !== "text") throw new Error("non-text content");
-      const b = JSON.parse(first.text) as {
-        anchorDay: string;
-        asOf: Record<string, { sourceName: string; day: string }>;
-        findings: Array<{ kind: string; metric: string }>;
-        lastImport: { status: string } | null;
-      };
-      expect(b.anchorDay).toBe(SPIKE_ANCHOR);
-      expect(b.asOf.wrist_temp).toEqual({ sourceName: SOURCE_B, day: SPIKE_ANCHOR });
-      expect(b.findings.some((f) => f.kind === "coverage" && f.metric === "wrist_temp")).toBe(true);
-      expect(b.lastImport?.status).toBe("done");
+      expect(res.isError).toBe(true);
+      expect(first.text).toBe("v1 derived reads arrive in slice 10");
     } finally {
       await client.close();
     }

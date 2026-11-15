@@ -404,11 +404,11 @@ describe("POST /api/imports", () => {
     }
   });
 
-  test("read routes still work when upload is mounted", async () => {
+  test("v0 read routes return 501 when upload is mounted", async () => {
     const h = harness();
     try {
       const res = await h.app.request("/api/sources");
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
     } finally {
       h.close();
     }
