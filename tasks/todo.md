@@ -185,11 +185,17 @@ The 66 MB proof. No CI. Owner watches.
 ### Task 11 — Baselines + z + trust [lead]
 
 - AC:
-  - [ ] median+MAD baseline per T4 window (inclusive edges); robust z = (rec−base)/(1.4826·MAD)
-  - [ ] Gates, severity bands, zero-MAD, flat baseline — all per contract, tested
-  - [ ] Per-source anchor = last data day; as-of surfaced in every output
-  - [ ] Trust labels attached to every metric output
-- Verify: `bun test src/stats/baselines`.
+  - [x] median+MAD baseline per T4 window (inclusive edges); robust z = (rec−base)/(1.4826·MAD)
+  - [x] Gates, severity bands, zero-MAD, flat baseline — all per contract, tested
+  - [x] Per-source anchor = last data day; as-of surfaced in every output
+  - [x] Trust labels attached to every metric output
+- Verify: `bun test src/stats/baselines`. DONE by lead 2026-11-15: src/stats/baselines.ts
+  computeDeviations — one row per (metric, source) with any daily rows; composes T4
+  robustZ/severityOf/baselineOffsets; insufficient_data when gates fail (only suppression
+  kind here; cross_source/coverage_gap arrive in T12). Real-db readout: 49 rows, 24 computed,
+  25 suppressed (Ultra has no baseline window yet), 9ms; top |z| = rhr +1.21 on iWatch tail —
+  consistent with spike verdict. Per-source anchor differs from spike's global anchor by
+  design (grilled Q9). 6 tests incl. flat-baseline alert + per-source anchor self-containment.
 - Deps: T10. Files: src/stats/baselines.ts. Scope: M
 
 ### Task 12 — Device events + findings wiring [lead]
