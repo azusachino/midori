@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { type MouseEvent, useCallback, useMemo, useState } from "react";
 import { apiClient } from "@/api/client";
 import type { EpochCardDTO, EpochsDTO } from "@/api/types";
 import { DeviceTimeline } from "@/components/DeviceTimeline";
@@ -58,8 +58,19 @@ function resolveSeamColumnHeading(
 export function DevicesPage() {
   const query = useAsyncQuery<EpochsDTO>((signal) => apiClient.epochs(signal), "devices");
   const [showOccasional, setShowOccasional] = useState(false);
+  const [expandedOsEpochIds, setExpandedOsEpochIds] = useState<ReadonlySet<number>>(new Set());
   const handleToggleOccasional = useCallback(() => {
     setShowOccasional((prev) => !prev);
+  }, []);
+  const handleToggleOsUpdates = useCallback((ev: MouseEvent<HTMLButtonElement>) => {
+    const epochId = Number(ev.currentTarget.dataset.epochId);
+    if (!Number.isFinite(epochId)) return;
+    setExpandedOsEpochIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(epochId)) next.delete(epochId);
+      else next.add(epochId);
+      return next;
+    });
   }, []);
 
   const organized = useMemo(
@@ -186,7 +197,8 @@ export function DevicesPage() {
                                   "tabular-nums",
                                   row.baselineState === "warming_up"
                                     ? "text-learning"
-                                    : row.baselineState === "insufficient" ||
+                                    : baselineText === "—" ||
+                                        row.baselineState === "insufficient" ||
                                         row.baselineState === "trend_only"
                                       ? "text-muted-foreground"
                                       : "text-foreground",
@@ -221,17 +233,44 @@ export function DevicesPage() {
                   </p>
                 ) : null}
 
-                {epoch.osUpdates.length > 0 ? (
-                  <div
-                    data-testid={`epoch-os-updates-${epoch.id}`}
-                    className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-border pt-2.5 text-xs text-muted-foreground tabular-nums"
-                  >
-                    <span className="font-medium text-foreground">
-                      {copy.pages.devices.osUpdatesLabel}
-                    </span>
-                    <span>{epoch.osUpdates.map((ev) => formatOsUpdateLabel(ev)).join(" · ")}</span>
-                  </div>
-                ) : null}
+                {epoch.osUpdates.length > 0
+                  ? (() => {
+                      const orderedUpdates = [...epoch.osUpdates].sort((a, b) =>
+                        a.day.localeCompare(b.day),
+                      );
+                      const hiddenCount = Math.max(0, orderedUpdates.length - 3);
+                      const isExpanded = expandedOsEpochIds.has(epoch.id);
+                      const visibleUpdates =
+                        hiddenCount > 0 && !isExpanded ? orderedUpdates.slice(-3) : orderedUpdates;
+                      return (
+                        <div
+                          data-testid={`epoch-os-updates-${epoch.id}`}
+                          className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-border pt-2.5 text-xs text-muted-foreground tabular-nums"
+                        >
+                          <span className="font-medium text-foreground">
+                            {copy.pages.devices.osUpdatesLabel}
+                          </span>
+                          <span>
+                            {visibleUpdates.map((ev) => formatOsUpdateLabel(ev)).join(" · ")}
+                          </span>
+                          {hiddenCount > 0 ? (
+                            <button
+                              type="button"
+                              aria-expanded={isExpanded}
+                              data-epoch-id={epoch.id}
+                              data-testid={`epoch-os-updates-toggle-${epoch.id}`}
+                              onClick={handleToggleOsUpdates}
+                              className="cursor-pointer font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            >
+                              {isExpanded
+                                ? copy.pages.devices.osUpdatesLess
+                                : copy.pages.devices.osUpdatesMore(hiddenCount)}
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })()
+                  : null}
               </CardContent>
             </Card>
           );

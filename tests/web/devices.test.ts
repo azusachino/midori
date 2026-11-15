@@ -82,6 +82,7 @@ describe("Devices page helpers", () => {
 
     expect(formatBaselineLabel(hrvRow)).toBe("full");
     expect(formatBaselineLabel(tempRow)).toBe("learning 9/14");
+    expect(formatBaselineLabel({ baselineState: null, warmup: null })).toBe("—");
     expect(formatSeamDescription("hrv_sdnn", hrvRow.seamFromPrevious)).toBe(
       "offset −4.0 ms (n=10 shared days)",
     );

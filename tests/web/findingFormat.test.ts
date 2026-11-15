@@ -78,6 +78,28 @@ describe("finding-format", () => {
         }),
       ),
     ).toBe("9.1k vs 6.0k");
+
+    // Pre-9c fraction-scale '%' values (< 1.5) are suppressed; percent-scale values include '%'
+    expect(
+      formatRecentVsBaseline(
+        makeRow({
+          metric: "spo2",
+          unit: "%",
+          recentMedian: 0.97,
+          baselineMedian: 0.98,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      formatRecentVsBaseline(
+        makeRow({
+          metric: "spo2",
+          unit: "%",
+          recentMedian: 96.5,
+          baselineMedian: 97.2,
+        }),
+      ),
+    ).toBe("96.5 vs 97.2 %");
   });
 
   test("rankFindingRows follows B-F7: |z| capped at 10, confidence, state tiers, registry order", () => {

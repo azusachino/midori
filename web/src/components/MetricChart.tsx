@@ -1,7 +1,7 @@
 import type { EChartsCoreOption } from "echarts/core";
 import { graphic } from "echarts/core";
 import { useCallback, useMemo } from "react";
-import type { MetricSeriesDTO, MetricUnitPointDTO } from "@/api/types";
+import type { MetricSeriesDTO, MetricUnitPointDTO, OsUpdateEventDTO } from "@/api/types";
 import { EChart, type EChartPointClickEvent, type EChartZoomEvent } from "@/components/EChart";
 import { copy } from "@/copy";
 import { displayUnit, formatDayWithWeekday, formatMetricNumber } from "@/lib/finding-format";
@@ -10,11 +10,13 @@ import {
   buildCalendarDays,
   buildMetricChartSummary,
   buildMetricChartTable,
+  clampSeamLabel,
   currentStintBandPoints,
   findRecentWindow,
   formatPartialReason,
   formatSeamLabel,
   resolveZoomWindow,
+  selectPrimaryOsUpdatesInView,
   shouldIncludeZero,
   toWeekStartMonday,
   zoomEventToDays,
@@ -43,29 +45,6 @@ function escapeHtml(text: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
-}
-
-function nearestValueForEpoch(
-  units: readonly MetricUnitPointDTO[],
-  epochId: number,
-  targetDay: string,
-): number | null {
-  const exact = units.find((u) => u.epochId === epochId && u.day === targetDay && u.value !== null);
-  if (exact && exact.value !== null) return exact.value;
-
-  const epochVals = units.filter((u) => u.epochId === epochId && u.value !== null);
-  if (epochVals.length === 0) return null;
-  let best = epochVals[0];
-  let bestDiff = Number.POSITIVE_INFINITY;
-  const targetMs = Date.parse(`${targetDay}T00:00:00Z`);
-  for (const pt of epochVals) {
-    const diff = Math.abs(Date.parse(`${pt.day}T00:00:00Z`) - targetMs);
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      best = pt;
-    }
-  }
-  return best?.value ?? null;
 }
 
 export function MetricChart({
@@ -133,7 +112,22 @@ export function MetricChart({
       }
       const bandByDay = new Map(currentBand.map((b) => [b.day, b]));
       const seamsByDay = new Map(series.seams.map((s) => [axisDay(s.seamDay), s]));
-      const osUpdatesByDay = new Map(series.osUpdates.map((u) => [axisDay(u.day), u]));
+      const primaryOsUpdates = selectPrimaryOsUpdatesInView(series, days);
+      const osUpdatesByDay = new Map<string, OsUpdateEventDTO[]>();
+      const osUpdateXSet = new Set<number>();
+      for (const upd of primaryOsUpdates) {
+        const coordDay = axisDay(upd.day);
+        const xIdx = dayIndex.get(coordDay);
+        if (xIdx === undefined) continue;
+        osUpdateXSet.add(xIdx);
+        const list = osUpdatesByDay.get(coordDay);
+        if (list) {
+          list.push(upd);
+        } else {
+          osUpdatesByDay.set(coordDay, [upd]);
+        }
+      }
+      const osUpdateXIndices = Array.from(osUpdateXSet).sort((a, b) => a - b);
 
       const echartsSeries: Record<string, unknown>[] = [];
 
@@ -235,27 +229,16 @@ export function MetricChart({
           };
         });
 
-        const osUpdatesForEpoch = series.osUpdates
-          .filter((u) => u.epochId === epoch.id)
-          .flatMap((u) => {
-            const coordDay = axisDay(u.day);
-            const val = nearestValueForEpoch(series.units, epoch.id, coordDay);
-            if (val === null || !dayIndex.has(coordDay)) return [];
-            const swText = u.fromSw ? `${u.fromSw} → ${u.toSw}` : u.toSw;
-            return [
-              {
-                name: `${copy.chart.osUpdateLabel} ${swText}`,
-                coord: [coordDay, val],
-                value: `OS ${u.toSw}`,
-              },
-            ];
-          });
-
         const attachSharedAnnotations = idx === 0;
         const seamLines = attachSharedAnnotations
           ? series.seams.flatMap((seam) => {
               const seamDay = axisDay(seam.seamDay);
-              if (!dayIndex.has(seamDay)) return [];
+              const seamIdx = dayIndex.get(seamDay);
+              if (seamIdx === undefined) return [];
+              const ratio = days.length <= 1 ? 0.5 : seamIdx / (days.length - 1);
+              const align: "left" | "center" | "right" =
+                ratio < 0.35 ? "left" : ratio > 0.65 ? "right" : "center";
+              const fullLabel = formatSeamLabel(seam, series.epochs, series.metric, series.unit);
               return [
                 {
                   xAxis: seamDay,
@@ -267,10 +250,10 @@ export function MetricChart({
                   label: {
                     show: true,
                     rotate: 0,
-                    align: "right" as const,
+                    align,
                     verticalAlign: "top" as const,
-                    distance: 8,
-                    formatter: formatSeamLabel(seam, series.epochs, series.metric, series.unit),
+                    distance: 6,
+                    formatter: clampSeamLabel(fullLabel),
                     color: theme.foreground,
                     backgroundColor: theme.card,
                     borderColor: theme.borderStrong,
@@ -285,13 +268,19 @@ export function MetricChart({
             })
           : [];
 
+        const recentStart = recentWindow ? axisDay(recentWindow.startDay) : null;
+        const recentEnd = recentWindow ? axisDay(recentWindow.endDay) : null;
         const recentArea =
-          attachSharedAnnotations && recentWindow
+          attachSharedAnnotations &&
+          recentStart !== null &&
+          recentEnd !== null &&
+          dayIndex.has(recentStart) &&
+          dayIndex.has(recentEnd)
             ? [
                 [
                   {
                     name: copy.chart.recentWindowLabel,
-                    xAxis: recentWindow.startDay,
+                    xAxis: recentStart,
                     itemStyle: { color: "rgba(161, 161, 170, 0.08)" },
                     label: {
                       show: true,
@@ -300,7 +289,7 @@ export function MetricChart({
                       fontSize: 11,
                     },
                   },
-                  { xAxis: recentWindow.endDay },
+                  { xAxis: recentEnd },
                 ],
               ]
             : undefined;
@@ -324,30 +313,6 @@ export function MetricChart({
               }
             : {}),
           ...(recentArea ? { markArea: { silent: true, data: recentArea } } : {}),
-          ...(osUpdatesForEpoch.length > 0
-            ? {
-                markPoint: {
-                  symbol: "diamond",
-                  symbolSize: 12,
-                  itemStyle: {
-                    color: theme.card,
-                    borderColor: color,
-                    borderWidth: 1.5,
-                  },
-                  label: {
-                    show: true,
-                    position: "top",
-                    formatter: (p: { value?: string }) => String(p.value ?? ""),
-                    color: theme.mutedForeground,
-                    fontSize: 10,
-                    backgroundColor: theme.card,
-                    padding: [1, 4],
-                    borderRadius: 3,
-                  },
-                  data: osUpdatesForEpoch,
-                },
-              }
-            : {}),
         });
       });
 
@@ -370,6 +335,52 @@ export function MetricChart({
           data: scatterData,
         });
       });
+
+      // 4. Primary-epoch OS update ticks along the x-axis baseline (no chart labels; tooltip only)
+      if (osUpdateXIndices.length > 0) {
+        echartsSeries.push({
+          name: copy.chart.osUpdateLabel,
+          type: "custom",
+          silent: true,
+          z: 5,
+          encode: { x: 0 },
+          renderItem: (
+            params: { coordSys: unknown },
+            api: {
+              value: (idx: number) => number | string;
+              coord: (val: [number, number]) => number[];
+            },
+          ) => {
+            const xIdx = Number(api.value(0));
+            const pt = api.coord([xIdx, 0]);
+            const coordSys = params.coordSys as {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            };
+            const xPx = pt[0] ?? 0;
+            if (xPx < coordSys.x || xPx > coordSys.x + coordSys.width) return null;
+            const baselineY = coordSys.y + coordSys.height;
+            return {
+              type: "polygon" as const,
+              shape: {
+                points: [
+                  [xPx, baselineY - 7],
+                  [xPx - 4, baselineY],
+                  [xPx + 4, baselineY],
+                ],
+              },
+              style: {
+                fill: theme.learning,
+                stroke: theme.card,
+                lineWidth: 0.75,
+              },
+            };
+          },
+          data: osUpdateXIndices.map((xIdx) => [xIdx]),
+        });
+      }
 
       const zoomOptionBase = {
         filterMode: "none" as const,
@@ -457,12 +468,14 @@ export function MetricChart({
               );
             }
 
-            const osUpd = osUpdatesByDay.get(day);
-            if (osUpd) {
-              const swText = osUpd.fromSw ? `${osUpd.fromSw} → ${osUpd.toSw}` : osUpd.toSw;
-              lines.push(
-                `<div style="color:${theme.learning};margin-top:3px;">${escapeHtml(copy.chart.osUpdateLabel)}: ${escapeHtml(swText)}</div>`,
-              );
+            const osUpdatesForDay = osUpdatesByDay.get(day);
+            if (osUpdatesForDay && osUpdatesForDay.length > 0) {
+              for (const osUpd of osUpdatesForDay) {
+                const swText = osUpd.fromSw ? `${osUpd.fromSw} → ${osUpd.toSw}` : osUpd.toSw;
+                lines.push(
+                  `<div style="color:${theme.learning};margin-top:3px;">${escapeHtml(copy.chart.osUpdateLabel)}: ${escapeHtml(swText)}</div>`,
+                );
+              }
             }
 
             return lines.join("");

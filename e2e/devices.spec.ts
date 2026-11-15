@@ -116,10 +116,33 @@ test("Devices §7 states: single epoch omits seam column and occasional section,
         body: JSON.stringify(epochsStub(false)),
       });
     }
+    const base = singleEpochStub();
+    const watch = base.epochs[0];
+    const modified =
+      watch === undefined
+        ? base
+        : {
+            ...base,
+            epochs: [
+              {
+                ...watch,
+                osUpdates: [
+                  { day: "2026-01-01", fromSw: "10.0", toSw: "10.1" },
+                  { day: "2026-01-10", fromSw: "10.1", toSw: "10.2" },
+                  { day: "2026-01-20", fromSw: "10.2", toSw: "10.3" },
+                  { day: "2026-02-01", fromSw: "10.3", toSw: "10.4" },
+                  { day: "2026-02-15", fromSw: "10.4", toSw: "10.5" },
+                ],
+                metrics: watch.metrics.map((m) =>
+                  m.metric === "sleep_h" ? { ...m, baselineState: null, warmup: null } : m,
+                ),
+              },
+            ],
+          };
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(singleEpochStub()),
+      body: JSON.stringify(modified),
     });
   });
 
@@ -134,6 +157,18 @@ test("Devices §7 states: single epoch omits seam column and occasional section,
   await expect(watchCard).toContainText("Synthetic Watch A");
   await expect(watchCard).not.toContainText("Across");
   await expect(page.getByTestId("occasional-sources-card")).toHaveCount(0);
+
+  // Null baselineState displays '—' and >3 OS updates collapse to latest 3 + expand toggle
+  await expect(watchCard.locator("tbody tr").first()).toContainText("—");
+  await expect(watchCard.getByText(/to 10\.1 on|10\.0 → 10\.1/)).toHaveCount(0);
+  await expect(watchCard.getByText(/10\.4 → 10\.5/)).toBeVisible();
+  const osToggle = page.getByTestId("epoch-os-updates-toggle-1");
+  await expect(osToggle).toContainText("2 more");
+  await osToggle.click();
+  await expect(watchCard.getByText(/10\.0 → 10\.1/)).toBeVisible();
+  await expect(osToggle).toContainText(copy.pages.devices.osUpdatesLess);
+  await osToggle.click();
+  await expect(watchCard.getByText(/10\.0 → 10\.1/)).toHaveCount(0);
 
   // Empty imports -> B-R4 empty state
   mode = "empty";

@@ -7,12 +7,14 @@ import {
   buildMetricChartSummary,
   buildMetricChartTable,
   buildRecentUnitRows,
+  clampSeamLabel,
   currentStintBandPoints,
   deduplicateUnitsByDay,
   formatSeamLabel,
   hasEstablishedBaseline,
   nextWiderRange,
   resolveZoomWindow,
+  selectPrimaryOsUpdatesInView,
   shouldIncludeZero,
   toWeekStartMonday,
   zoomEventToDays,
@@ -335,5 +337,69 @@ describe("metric-chart helpers", () => {
     expect(deduped).toHaveLength(1);
     expect(deduped[0]?.epochId).toBe(epoch2.id);
     expect(deduped[0]?.value).toBe(8000);
+  });
+
+  test("clamps out-of-window seams/bands on 90d, filters primary OS updates, and clamps long seam labels", () => {
+    const base = metricSeriesStub("hrv_sdnn", "90d");
+    const epoch1 = base.epochs[0];
+    const epoch2 = base.epochs[1];
+    if (!epoch1 || !epoch2) throw new Error("expected two fixture epochs");
+
+    const dirtySeries = {
+      ...base,
+      epochs: [
+        { ...epoch1, minor: false },
+        { ...epoch2, minor: false },
+        {
+          ...epoch2,
+          id: 99,
+          label: "iPhone 15",
+          kind: "phone" as const,
+          colorIndex: null,
+          minor: true,
+        },
+      ],
+      band: [{ day: "2024-06-01", median: 45, low: 39, high: 52 }, ...base.band],
+      seams: [
+        {
+          seamDay: "2024-06-01",
+          fromEpochId: 1,
+          toEpochId: 2,
+          kind: "offset" as const,
+          value: 2,
+          nOld: 20,
+          nNew: 20,
+        },
+        ...base.seams,
+      ],
+      osUpdates: [
+        { day: "2024-06-15", epochId: epoch2.id, fromSw: "9.0", toSw: "10.0" },
+        { day: "2026-02-26", epochId: 99, fromSw: "18.1", toSw: "18.2" }, // minor epoch -> excluded
+        { day: "2026-02-26", epochId: epoch1.id, fromSw: "10.2", toSw: "10.4" }, // non-stint on Feb 26 -> excluded
+        { day: "2026-02-26", epochId: epoch2.id, fromSw: "10.4", toSw: "11.0" }, // primary covering stint -> kept
+      ],
+    };
+
+    const days = buildCalendarDays(dirtySeries);
+    expect((days[0] ?? "") >= "2025-12-01").toBe(true);
+    expect(days).not.toContain("2024-06-01");
+    expect(currentStintBandPoints(dirtySeries).some((b) => b.day.startsWith("2024-"))).toBe(false);
+
+    const osInView = selectPrimaryOsUpdatesInView(dirtySeries, days);
+    expect(osInView).toHaveLength(1);
+    expect(osInView[0]).toMatchObject({ epochId: epoch2.id, day: "2026-02-26", toSw: "11.0" });
+
+    // Empty stints fallback (trendOnly) selects only latest active non-minor epoch
+    const trendUpdates = selectPrimaryOsUpdatesInView({ ...dirtySeries, stints: [] }, days);
+    expect(trendUpdates).toHaveLength(1);
+    expect(trendUpdates[0]?.epochId).toBe(epoch2.id);
+
+    expect(clampSeamLabel("step +0.52 °C (can't be separated)")).toBe(
+      "step +0.52 °C (can't be separated)",
+    );
+    const longSeam = "Offset · Apple Watch Series 8 → Apple Watch Ultra 2 (+4.2 ms)";
+    const clamped = clampSeamLabel(longSeam, 32);
+    expect(clamped.length).toBeLessThanOrEqual(32);
+    expect(clamped.endsWith("…")).toBe(true);
   });
 });

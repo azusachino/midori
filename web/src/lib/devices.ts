@@ -414,7 +414,11 @@ export function formatEpochSpan(
   return `${startLabel} – ${endLabel} · ${daysText}`;
 }
 
-export function formatBaselineLabel(row: EpochMetricRoleDTO): string {
+export function formatBaselineLabel(row: {
+  baselineState: EpochMetricRoleDTO["baselineState"] | null;
+  warmup: EpochMetricRoleDTO["warmup"];
+}): string {
+  if (row.baselineState === null) return "—";
   const b = copy.pages.devices.baselines;
   switch (row.baselineState) {
     case "full":

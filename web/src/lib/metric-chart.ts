@@ -4,6 +4,7 @@ import type {
   MetricRange,
   MetricSeriesDTO,
   MetricUnitPointDTO,
+  OsUpdateEventDTO,
   SeamStepDTO,
 } from "../api/types";
 import { copy } from "../copy";
@@ -58,6 +59,11 @@ export interface RecentUnitRow {
 
 const MS_PER_DAY = 86_400_000;
 const MAX_CALENDAR_SPAN_DAYS = 3650;
+const RANGE_LOOKBACK_DAYS: Record<Exclude<MetricRange, "all">, number> = {
+  "90d": 90,
+  "180d": 180,
+  "1y": 365,
+};
 
 function parseDayMs(day: string): number | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
@@ -68,6 +74,29 @@ function parseDayMs(day: string): number | null {
 
 function formatMsAsIsoDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * Computes inclusive `[minDay, maxDay]` calendar bounds for bounded ranges (`90d`/`180d`/`1y`),
+ * or `null` when `range === "all"`.
+ */
+export function getSeriesRangeBounds(
+  series: Pick<MetricSeriesDTO, "range" | "asOfDay">,
+): { minDay: string; maxDay: string } | null {
+  if (series.range === "all" || series.asOfDay === null) return null;
+  const asOfMs = parseDayMs(series.asOfDay);
+  if (asOfMs === null) return null;
+  return {
+    minDay: formatMsAsIsoDay(asOfMs - RANGE_LOOKBACK_DAYS[series.range] * MS_PER_DAY),
+    maxDay: series.asOfDay,
+  };
+}
+
+function isDayInRangeBounds(
+  day: string,
+  bounds: { minDay: string; maxDay: string } | null,
+): boolean {
+  return !bounds || (day >= bounds.minDay && day <= bounds.maxDay);
 }
 
 /** Snaps an ISO day to the ISO week Monday matching the server's weekly bucket key. */
@@ -116,11 +145,21 @@ export function deduplicateUnitsByDay(
 export function buildCalendarDays(series: MetricSeriesDTO): string[] {
   const isWeekly = series.range === "all";
   const normalizeDay = (d: string) => (isWeekly ? toWeekStartMonday(d) : d);
+  const bounds = getSeriesRangeBounds(series);
 
   const days = new Set<string>();
-  for (const u of series.units) days.add(normalizeDay(u.day));
-  for (const b of series.band) days.add(normalizeDay(b.day));
-  for (const s of series.seams) days.add(normalizeDay(s.seamDay));
+  for (const u of series.units) {
+    const d = normalizeDay(u.day);
+    if (isDayInRangeBounds(d, bounds)) days.add(d);
+  }
+  for (const b of series.band) {
+    const d = normalizeDay(b.day);
+    if (isDayInRangeBounds(d, bounds)) days.add(d);
+  }
+  for (const s of series.seams) {
+    const d = normalizeDay(s.seamDay);
+    if (isDayInRangeBounds(d, bounds)) days.add(d);
+  }
 
   if (days.size === 0) return [];
   const sorted = Array.from(days).sort();
@@ -223,6 +262,62 @@ export function formatSeamLabel(
     fromEpoch?.label ?? (seam.fromEpochId !== null ? `#${seam.fromEpochId}` : "prior");
   const toLabel = toEpoch?.label ?? `#${seam.toEpochId}`;
   return copy.chart.seamOffset(fromLabel, toLabel, deltaText);
+}
+
+/**
+ * Truncates long seam markLine labels so text stays within the plot grid while tooltip retains full text.
+ */
+export function clampSeamLabel(label: string, maxLen = 44): string {
+  if (label.length <= maxLen) return label;
+  return `${label.slice(0, Math.max(1, maxLen - 1)).trimEnd()}…`;
+}
+
+/**
+ * Filters OS update events to those inside the plotted axis window belonging to the active
+ * primary epoch in view (covering baseline stint, or latest active non-minor epoch when trend-only).
+ */
+export function selectPrimaryOsUpdatesInView(
+  series: Pick<MetricSeriesDTO, "epochs" | "stints" | "osUpdates" | "units" | "range">,
+  days: readonly string[],
+): OsUpdateEventDTO[] {
+  if (days.length === 0 || series.osUpdates.length === 0) return [];
+  const isWeekly = series.range === "all";
+  const normalizeDay = (d: string) => (isWeekly ? toWeekStartMonday(d) : d);
+  const daySet = new Set(days);
+  const nonMinorEpochs = series.epochs.filter((e) => !e.minor);
+  const nonMinorIds = new Set(nonMinorEpochs.map((e) => e.id));
+
+  let fallbackPrimaryId: number | null = null;
+  if (series.stints.length === 0) {
+    const latestDayByEpoch = new Map<number, string>();
+    for (const u of series.units) {
+      if (!nonMinorIds.has(u.epochId) || !daySet.has(normalizeDay(u.day))) continue;
+      const prev = latestDayByEpoch.get(u.epochId);
+      if (!prev || u.day > prev) latestDayByEpoch.set(u.epochId, u.day);
+    }
+    let bestDay = "";
+    for (const [id, maxDay] of latestDayByEpoch) {
+      if (maxDay > bestDay) {
+        bestDay = maxDay;
+        fallbackPrimaryId = id;
+      }
+    }
+    if (fallbackPrimaryId === null) {
+      fallbackPrimaryId = nonMinorEpochs[nonMinorEpochs.length - 1]?.id ?? null;
+    }
+  }
+
+  return series.osUpdates.filter((u) => {
+    if (!nonMinorIds.has(u.epochId)) return false;
+    if (!daySet.has(normalizeDay(u.day))) return false;
+    if (series.stints.length > 0) {
+      const covering = [...series.stints]
+        .reverse()
+        .find((s) => s.startDay <= u.day && u.day <= s.endDay);
+      return covering ? covering.epochId === u.epochId : false;
+    }
+    return fallbackPrimaryId !== null && u.epochId === fallbackPrimaryId;
+  });
 }
 
 /** Computes [startDay, endDay] for the `isRecent` shaded highlight window. */
@@ -342,12 +437,16 @@ export function currentStintBandPoints(series: MetricSeriesDTO): BandPointDTO[] 
   if (!hasEstablishedBaseline(series) || series.band.length === 0) {
     return [];
   }
+  const bounds = getSeriesRangeBounds(series);
   const currentStint = [...series.stints].sort((a, b) =>
     a.endDay < b.endDay ? 1 : a.endDay > b.endDay ? -1 : 0,
   )[0];
-  const filtered = currentStint
-    ? series.band.filter((b) => b.day >= currentStint.startDay && b.day <= currentStint.endDay)
-    : [...series.band];
+  const filtered = series.band.filter((b) => {
+    if (currentStint && (b.day < currentStint.startDay || b.day > currentStint.endDay)) {
+      return false;
+    }
+    return isDayInRangeBounds(b.day, bounds);
+  });
   if (series.range !== "all") {
     return filtered;
   }
@@ -490,9 +589,11 @@ export function buildMetricChartSummary(series: MetricSeriesDTO): string {
   const firstDay = days[0];
   const lastDay = days[days.length - 1];
   const span = firstDay && lastDay ? ` (${formatRangeSpan(firstDay, lastDay)})` : "";
+  const bounds = getSeriesRangeBounds(series);
+  const visibleSeams = series.seams.filter((s) => isDayInRangeBounds(s.seamDay, bounds));
   const seamText =
-    series.seams.length > 0 && series.seams[0]
-      ? `, ${series.seams.length} device seam (${formatShortDay(series.seams[0].seamDay)})`
+    visibleSeams.length > 0 && visibleSeams[0]
+      ? `, ${visibleSeams.length} device seam (${formatShortDay(visibleSeams[0].seamDay)})`
       : "";
   const nonMinorCount = series.epochs.filter((e) => !e.minor).length;
 

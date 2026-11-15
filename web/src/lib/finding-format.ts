@@ -72,7 +72,7 @@ export function formatMetricNumber(value: number, metric: string, unit: string):
   if (metric === "wrist_temp" || unit === "degC") {
     return value.toFixed(2);
   }
-  if (unit === "h" || metric === "resp_rate") {
+  if (unit === "h" || metric === "resp_rate" || unit === "%") {
     return value.toFixed(1);
   }
   if (Math.abs(value) < 10) {
@@ -84,6 +84,9 @@ export function formatMetricNumber(value: number, metric: string, unit: string):
 /** Formats recent vs baseline median pair, e.g. "42 vs 55 ms" or "9.1k vs 6.0k". */
 export function formatRecentVsBaseline(row: FindingRowDTO): string | null {
   if (row.recentMedian === null || row.baselineMedian === null) return null;
+  if (row.unit === "%" && (row.recentMedian < 1.5 || row.baselineMedian < 1.5)) {
+    return null;
+  }
   const recent = formatMetricNumber(row.recentMedian, row.metric, row.unit);
   const base = formatMetricNumber(row.baselineMedian, row.metric, row.unit);
   const unitLabel = displayUnit(row.metric, row.unit);

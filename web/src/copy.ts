@@ -351,6 +351,8 @@ export const copy = {
       sincePrefix: (dayLabel: string) => `since ${dayLabel}`,
       daysCount: (count: number) => (count === 1 ? "1 day" : `${count} days`),
       osUpdatesLabel: "OS updates",
+      osUpdatesMore: (count: number) => `${count} more`,
+      osUpdatesLess: "Show less",
       noMetricsNote: "No primary metrics in current derive.",
       occasionalTitle: (count: number) => `Occasional sources (${count})`,
       occasionalHint: "Minor sources with fewer than 6 days in any 28-day window; never primary.",
