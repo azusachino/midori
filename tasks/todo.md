@@ -273,7 +273,13 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
 
 - AC: Vite+React builds; dark-first design tokens; centralized copy module; API client with
   job polling; no page logic yet.
-- Verify: `bun run dev` serves shell; typecheck green.
+- Verify: `bun run dev` serves shell; typecheck green. DONE (worker t82 claude-haiku-5-5, reviewed
+  +committed by lead as e1f1c74): web/ shell (tokens.css dark-first, 3-page nav, hand-rolled routing
+  w/ skip-link + useId), typed client (ApiError kinds, pollImport w/ ImportFailedError/NotFound/abort),
+  src/server.ts (Bun.serve 5174, /api wins, SPA fallback, extension-aware 404, traversal-safe static,
+  maxRequestBodySize=MAX_UPLOAD_BYTES), scripts/dev.ts (API+Vite proxy), tests: server 6 + client 7
+  (186 total). Review fixes: biome react domain scoped to web/src via overrides (was globally off);
+  static id="main" → useId(). Smoke on real db: / 200, /api/briefing 200, SPA route 200, traversal 404.
 - Deps: T13. Files: web/. Scope: M
 
 ### Task 16 — uPlot wrapper [delegable]
