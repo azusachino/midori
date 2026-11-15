@@ -2,27 +2,15 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { applyMigrations } from "../src/db/db";
-import { rebuildBaselines } from "../src/stats/baselines";
-import { rebuildNightPipeline } from "../src/stats/nights";
-import { rebuildMetricValues } from "../src/stats/values";
+import { derive } from "../src/stats/derive";
 
 const RECORDS = Number(process.env.MIDORI_BENCH_RECORDS ?? 2_000_000);
 const childPath = process.argv[2] === "--derive" ? process.argv[3] : undefined;
 
 if (childPath) {
   const db = new Database(childPath);
-  const phases: Record<string, number> = {};
   const start = performance.now();
-  const nights = rebuildNightPipeline(db, (phase, elapsedMs) => {
-    phases[`${phase}Ms`] = elapsedMs;
-  });
-  const nightsElapsedMs = performance.now() - start;
-  const valuesStart = performance.now();
-  const usableChanged = rebuildMetricValues(db);
-  const valuesMs = performance.now() - valuesStart;
-  const baselinesStart = performance.now();
-  const baselines = rebuildBaselines(db);
-  const baselinesMs = performance.now() - baselinesStart;
+  const result = derive(db);
   const elapsedMs = performance.now() - start;
   const epochs = (db.query("SELECT COUNT(*) AS count FROM epochs").get() as { count: number })
     .count;
@@ -37,18 +25,14 @@ if (childPath) {
   console.log(
     JSON.stringify({
       records: RECORDS,
-      nights: nights.length,
+      nights: result.nights,
       epochs,
       metricValues,
       metricCount,
       elapsedMs,
-      nightsElapsedMs,
-      valuesMs,
-      baselinesMs,
-      usableChanged,
-      baselineCount: baselines.length,
+      findings: result.findings.length,
+      usableChanged: result.metricValuesChanged,
       maxRssBytes,
-      ...phases,
     }),
   );
 } else {
@@ -234,25 +218,15 @@ if (childPath) {
       metricValues: number;
       metricCount: number;
       elapsedMs: number;
-      nightsElapsedMs: number;
-      valuesMs: number;
-      baselinesMs: number;
+      findings: number;
       usableChanged: number;
-      baselineCount: number;
       maxRssBytes: number;
-      epochsMs: number;
-      resolverMs: number;
-      sleepMs: number;
-      metricsMs: number;
-      stintsMs: number;
-      persistMs: number;
-      nightsMs: number;
     };
     console.log(
       `records=${result.records.toLocaleString()} epochs=${result.epochs} nights=${result.nights.toLocaleString()} metrics=${result.metricCount} metric_values=${result.metricValues.toLocaleString()}`,
     );
     console.log(
-      `mix=45% heart_rate, 25% sleep (device-less), 5% RHR (device-less), 25% other metrics; seed=${seedSeconds.toFixed(1)}s epochs=${(result.epochsMs / 1000).toFixed(1)}s resolver=${(result.resolverMs / 1000).toFixed(1)}s sleep=${(result.sleepMs / 1000).toFixed(1)}s metrics=${(result.metricsMs / 1000).toFixed(1)}s stints=${(result.stintsMs / 1000).toFixed(1)}s persist=${(result.persistMs / 1000).toFixed(1)}s pipeline=${(result.nightsElapsedMs / 1000).toFixed(1)}s values=${(result.valuesMs / 1000).toFixed(2)}s baselines=${(result.baselinesMs / 1000).toFixed(2)}s derive=${(result.elapsedMs / 1000).toFixed(1)}s usable_rows=${result.usableChanged.toLocaleString()} baselines=${result.baselineCount} peak_rss=${(result.maxRssBytes / (1024 * 1024)).toFixed(0)} MiB`,
+      `mix=45% heart_rate, 25% sleep (device-less), 5% RHR (device-less), 25% other metrics; seed=${seedSeconds.toFixed(1)}s full_derive=${(result.elapsedMs / 1000).toFixed(1)}s usable_rows=${result.usableChanged.toLocaleString()} findings=${result.findings} peak_rss=${(result.maxRssBytes / (1024 * 1024)).toFixed(0)} MiB`,
     );
   } finally {
     rmSync(scratch, { recursive: true, force: true });

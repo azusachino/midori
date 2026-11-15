@@ -395,7 +395,8 @@ export function rebuildEpochs(db: Database): PersistedEpochDerivation {
   }
 
   const epochIds = new Map<string, number>();
-  db.exec("BEGIN");
+  const ownsTransaction = !db.inTransaction;
+  if (ownsTransaction) db.exec("BEGIN");
   try {
     db.exec("DELETE FROM epoch_events; DELETE FROM epochs;");
     const insertEpoch = db.prepare(
@@ -420,9 +421,9 @@ export function rebuildEpochs(db: Database): PersistedEpochDerivation {
       const epochId = epochIds.get(epochMapKey(event.sourceName, event.deviceHw));
       if (epochId !== undefined) insertEvent.run(epochId, event.day, event.kind, event.detail);
     }
-    db.exec("COMMIT");
+    if (ownsTransaction) db.exec("COMMIT");
   } catch (error) {
-    db.exec("ROLLBACK");
+    if (ownsTransaction && db.inTransaction) db.exec("ROLLBACK");
     throw error;
   }
   const inheritedEpochIds = new Map<string, number>();

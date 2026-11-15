@@ -817,7 +817,8 @@ function derivePresenceAndValues(
   }
 
   onPhase?.("metrics", performance.now() - phaseStart);
-  db.exec("BEGIN");
+  const ownsTransaction = !db.inTransaction;
+  if (ownsTransaction) db.exec("BEGIN");
   try {
     phaseStart = performance.now();
     const stints = rebuildEpochTableStints(db, nights, aggregates, epochKinds);
@@ -825,11 +826,11 @@ function derivePresenceAndValues(
     phaseStart = performance.now();
     db.exec("DELETE FROM metric_values; DELETE FROM nights;");
     const nightRows = persistNightValues(db, nights, zones, aggregates, stints, exportAt);
-    db.exec("COMMIT");
+    if (ownsTransaction) db.exec("COMMIT");
     onPhase?.("persist", performance.now() - phaseStart);
     return nightRows;
   } catch (error) {
-    db.exec("ROLLBACK");
+    if (ownsTransaction && db.inTransaction) db.exec("ROLLBACK");
     throw error;
   }
 }

@@ -1,5 +1,5 @@
 import { openDb } from "../db/db";
-import { rebuildEpochs } from "../stats/epochs";
+import { derive } from "../stats/derive";
 import { mapRecord } from "./mapper";
 import { parseExportXml } from "./parser";
 import type { WriteCounters } from "./store";
@@ -116,9 +116,9 @@ export async function runImport(
     const counters = writer.finish();
     refreshSources(db, id);
 
-    // The complete post-store derive is a distinct, persisted job stage.
+    // Keep the current derived snapshot readable until this entire rebuild commits.
     setStatus("deriving");
-    rebuildEpochs(db);
+    derive(db);
 
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");

@@ -2,7 +2,7 @@ import type {
   BriefingDTO,
   DeviationDTO,
   ErrorResponse,
-  FindingDTO,
+  LegacyFindingDTO as FindingDTO,
   ImportDTO,
   MetricDailyDTO,
   SourceDTO,

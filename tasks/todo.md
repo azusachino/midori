@@ -227,10 +227,10 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - `src/stats/checks.ts` (+ test)
   - `src/domain/api.ts` (finding/check types only)
 - AC:
-  - [ ] Ranking exactly per B-F7, including daytime only when notable/alert and trend-only
+  - [x] Ranking exactly per B-F7, including daytime only when notable/alert and trend-only
     excluded.
-  - [ ] Each check has a test for clear and for flagged.
-  - [ ] Wording is emitted as keys plus params (e.g. `{dir: "lower"}`), not English sentences.
+  - [x] Each check has a test for clear and for flagged.
+  - [x] Wording is emitted as keys plus params (e.g. `{dir: "lower"}`), not English sentences.
     The UI copy module renders them. A test asserts that no finding text contains "caused",
     "better" or "worse".
 - Verify: `bun run check`.
@@ -243,19 +243,35 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - `src/ingest/import.ts` (call derive)
   - `src/cli.ts` (`changes [--json]`)
 - AC:
-  - [ ] Derive runs epochs → stints → nights → values → findings/checks/seam steps in one
+  - [x] Derive runs epochs → stints → nights → values → findings/checks/seam steps in one
     transaction.
-  - [ ] Test: a derive that throws midway leaves the previous derived rows intact.
-  - [ ] Evidence queries are bounded to units ≤ as-of.
-  - [ ] `bun src/cli.ts changes --json` prints the ranked rows.
+  - [x] Test: a derive that throws midway leaves the previous derived rows intact.
+  - [x] Evidence queries are bounded to units ≤ as-of.
+  - [x] `bun src/cli.ts changes --json` prints the ranked rows.
 - Readout (lead + owner, real data, recorded here without values):
-  - [ ] re-import over the existing db fills `device_hw` (count of NULL sensor rows → 0)
-  - [ ] end-to-end time
-  - [ ] the new watch is one epoch for all overnight metrics, including sleep and RHR
-  - [ ] seam count per metric (steps ≤ 2)
-  - [ ] no metric blank because of the seam
-  - [ ] † thresholds sane, or tuned with a note in journeys.md
+  - [x] re-import over the existing db fills `device_hw` (count of NULL sensor rows → 0)
+  - [x] end-to-end time
+  - [x] the new watch is one epoch for all overnight metrics, including sleep and RHR
+  - [x] seam count per metric (steps ≤ 2)
+  - [x] no metric blank because of the seam
+  - [x] † thresholds sane, or tuned with a note in journeys.md
 - Verify: `bun run check`; CLI on the fixture db.
+- **Slices 6 + 7 done 2026-11-15** — `midori-engine-s6` (pi, gpt-6-luna high), commits `f68b77e`
+  (slice 6) and `1774a06` (slice 7), merged as one PR.
+  - `bun run check` (lead): exit 0, 198 tests.
+  - Severity renamed `info` → `within`. Finding/check DTOs match the UI types; the hand-back
+    lists 5 places where the UI types and journeys differ, all of them formatting done in the
+    copy layer.
+  - **Slice 7 readout (lead, real data, counts and states only):**
+    - Full import with the atomic derive: exit 0, 22.6 s import + derive, 26.5 s wall, 187 MB
+      peak RSS. Meets B-I9 (<2 min) and fits the 2 GiB pod limit.
+    - `device_hw` filled (slice 1); the new watch is one epoch for all overnight metrics,
+      including sleep and RHR (slice 2).
+    - Steps has 1 seam in 180 days (slice 3). No metric is blank because of the seam (slice 5).
+    - `changes --json`: 10 overnight rows, all `computed`, medium confidence.
+    - Flagged checks: `device_change` ×9 (seam 28 days before as-of) and `os_update` ×10.
+      `hrv_rmssd` has no seam because only the new watch records it. As expected.
+    - † thresholds: no tuning needed from this readout.
 
 ### Slice 8 — Import job hardening `[midori-engine]`
 

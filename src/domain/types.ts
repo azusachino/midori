@@ -5,8 +5,8 @@
 
 export type FindingKind = "deviation" | "recalibration" | "coverage";
 
-/** info = coverage/recalibration notes; notable/alert = |z| bands for deviations. */
-export type Severity = "info" | "notable" | "alert";
+/** Severity is the neutral band or one of the two deviation bands. */
+export type Severity = "within" | "notable" | "alert";
 
 export type DeviceEventKind = "first_seen" | "last_seen" | "switch";
 

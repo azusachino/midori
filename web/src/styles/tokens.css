@@ -22,7 +22,7 @@
   /* severity (deviation bands) */
   --color-notable: #e7b04a;
   --color-alert: #ef6f6c;
-  --color-info: #7a8394;
+  --color-within: #7a8394;
 
   /* trust labels */
   --color-trust-high: #5fbf8a;

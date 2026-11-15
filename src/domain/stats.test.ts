@@ -24,7 +24,7 @@ describe("median, MAD and bounded z", () => {
     expect(result?.dispersion).toBe(0.5);
     expect(result?.z).toBe(10);
     expect(severityOf(result?.z ?? null)).toBe("alert");
-    expect(severityOf(1.4)).toBe("info");
+    expect(severityOf(1.4)).toBe("within");
     expect(severityOf(-NOTABLE_ABS_Z)).toBe("notable");
     expect(severityOf(ALERT_ABS_Z)).toBe("alert");
   });

@@ -73,11 +73,11 @@ export function robustZ(baseline: number[], recent: number[], floor: number): ZR
   };
 }
 
-export function severityOf(z: number | null): "info" | "notable" | "alert" {
-  if (z === null) return "info";
+export function severityOf(z: number | null): "within" | "notable" | "alert" {
+  if (z === null) return "within";
   if (Math.abs(z) >= ALERT_ABS_Z) return "alert";
   if (Math.abs(z) >= NOTABLE_ABS_Z) return "notable";
-  return "info";
+  return "within";
 }
 
 const DAY_MS = 86_400_000;

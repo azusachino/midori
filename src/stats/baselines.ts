@@ -10,7 +10,8 @@ export interface BaselineResult {
   metric: string;
   state: BaselineState;
   z: number | null;
-  severity: "info" | "notable" | "alert";
+  dispersion: number | null;
+  severity: "within" | "notable" | "alert";
   confidence: Confidence | null;
   onsetDay: string | null;
   onsetOpen: boolean | null;
@@ -94,6 +95,7 @@ function deriveOne(
     units[0] !== undefined && addDays(units[0].unitDay, RECENT_MAX_AGE_DAYS) >= asOfDay;
   let state: BaselineState;
   let z: number | null = null;
+  let dispersion: number | null = null;
   let confidence: Confidence | null = null;
   let onsetDay: string | null = null;
   let onsetOpen: boolean | null = null;
@@ -113,6 +115,7 @@ function deriveOne(
     );
     if (!score) throw new Error(`baseline gates passed without a score: ${metric}`);
     z = score.z;
+    dispersion = score.dispersion;
     confidence = classifyConfidence(spec.trust, baselineUnits.length, recentUnits.length);
     kOutside = recentUnits.filter(
       (unit) => Math.abs(unit.value - baseline) > 1.5 * score.dispersion,
@@ -125,6 +128,7 @@ function deriveOne(
     metric,
     state,
     z,
+    dispersion,
     severity: severityOf(z),
     confidence,
     onsetDay,
