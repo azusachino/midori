@@ -226,12 +226,22 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
 ### Task 13 — API contracts + read routes + integration test [lead-adjacent]
 
 - AC:
-  - [ ] GET /api/imports, /api/briefing, /api/metrics/:metric/daily, /api/deviations?days=,
+  - [x] GET /api/imports, /api/briefing, /api/metrics/:metric/daily, /api/deviations?days=,
     /api/findings, /api/sources — DTOs from src/domain, as-of + trust in payloads
-  - [ ] Design-required integration test: fixture zip → db → briefing payload assertions,
+  - [x] Design-required integration test: fixture zip → db → briefing payload assertions,
     running in CI
-- Verify: `bun test` incl. integration; routes exercised via supertest/fetch.
-- Deps: T12. Files: src/http/routes.ts, tests/integration. Scope: M
+- Verify: `bun test` incl. integration. DONE by lead 2026-11-15: src/http/routes.ts
+  createApp({db}) — Hono read routes over domain DTOs; deviations computed live per request
+  (~10ms real db) with days filter [1,365] on per-source asOf, ranking computed-|z|-desc then
+  suppressed (deterministic tail); briefing = anchor + asOf-by-metric (freshest source per
+  metric) + persisted findings ledger + sources + lastImport + cadence hint (>30d staleness);
+  metric daily = per-source series asc with trust/trustNote/asOfDay from registry; unknown
+  metric → 404 typed error, known-but-empty → 200 []. hono@4.13.18 (stack-approved).
+  Integration test tests/integration/api.test.ts: spike zip → runImport → all 6 routes asserted
+  (asOf per metric, coverage finding present, no wrist-temp z≥2.5, trust on every deviation row).
+  Live check: re-import of archived zip populated findings ledger (37: 29 recal + 8 coverage)
+  via the real pipeline; wrist_temp story: WatchUltra recal 2026-10-10, 3 per-source series.
+- Deps: T12. Files: src/http/routes.ts, tests/integration/api.test.ts. Scope: M
 
 ### Task 14 — Upload/job route [delegable]
 
