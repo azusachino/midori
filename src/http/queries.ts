@@ -152,6 +152,8 @@ export function listDeviations(db: Database, days = DEFAULT_DEVIATION_DAYS): Dev
       sourceName: r.sourceName,
       unit: r.unit,
       baseline: r.baseline,
+      baselineLow: r.baselineLow,
+      baselineHigh: r.baselineHigh,
       recent: r.recent,
       z: r.z,
       severity: r.severity,

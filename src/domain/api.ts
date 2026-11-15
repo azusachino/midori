@@ -105,6 +105,9 @@ export interface DeviationDTO {
   sourceName: string;
   unit: string | null;
   baseline: number | null;
+  /** Robust \u00b11.5\u03c3 band around `baseline` (null when suppressed) — the "inside normal" envelope. */
+  baselineLow: number | null;
+  baselineHigh: number | null;
   recent: number | null;
   z: number | null;
   severity: Severity;

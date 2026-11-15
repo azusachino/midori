@@ -286,7 +286,16 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
 
 - AC: React wrapper renders baseline bands, multi-series, boundary markers from DTO data;
   visual snapshot test.
-- Verify: story/screenshot green.
+- Verify: story/screenshot green. DONE by lead 2026-11-15: uplot 1.6.32 (bundles own types).
+  web/src/components/chartData.ts = pure builders (union-day alignment w/ null gaps, banded
+  series → hidden low/high + uPlot bands pair, drawBoundaryDays against injected surface,
+  day/value formatters); web/src/components/Chart.tsx = thin lifecycle (create/resize/destroy,
+  ResizeObserver, axis/legend/cursor, unit suffix on y ticks). DEVIATION from AC: canvas rendering
+  is not unit-snapshot-testable under Bun — builders are unit-tested (tests/web/chartData.test.ts,
+  8 tests) and pixels land in checkpoint 3 manual browse. Contract change: DeviationDTO +=
+  baselineLow/baselineHigh (baseline ± 1.5σ_r = notable edge; null when suppressed) — filled by
+  baselines.ts from robustZ dispersion, verified on real db (iWatch wrist_temp band
+  [34.91, 35.64]). DeviationRow now extends DeviationDTO.
 - Deps: T15. Files: web/src/components/Chart.tsx. Scope: S
 
 ### Task 17 — Import page [delegable]

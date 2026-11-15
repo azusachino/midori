@@ -1,8 +1,14 @@
 import type { Database } from "bun:sqlite";
-import type { SuppressionReason } from "../domain/api";
+import type { DeviationDTO, SuppressionReason } from "../domain/api";
 import { addDays } from "../domain/dates";
 import { METRICS } from "../domain/metrics";
-import { baselineOffsets, recentOffsets, robustZ, severityOf } from "../domain/stats";
+import {
+  baselineOffsets,
+  NOTABLE_ABS_Z,
+  recentOffsets,
+  robustZ,
+  severityOf,
+} from "../domain/stats";
 import type { Severity, TrustLabel } from "../domain/types";
 
 /**
@@ -17,21 +23,8 @@ import type { Severity, TrustLabel } from "../domain/types";
  * here a row is either computed or suppressed=insufficient_data.
  */
 
-export interface DeviationRow {
-  metric: string;
-  sourceName: string;
-  unit: string | null;
-  /** Baseline window median (anchor−90..anchor−29, sparse ok). */
-  baseline: number | null;
-  /** Recent window median (anchor−13..anchor, sparse ok). */
-  recent: number | null;
-  z: number | null;
-  severity: Severity;
-  nBaseline: number;
-  nRecent: number;
-  trust: TrustLabel;
+export interface DeviationRow extends DeviationDTO {
   trustNote: string;
-  suppressed: SuppressionReason | null;
   asOfDay: string;
 }
 
@@ -87,21 +80,32 @@ export function computeDeviations(db: Database): DeviationsResult {
       };
       const baseline = pick(baselineOffsets());
       const recent = pick(recentOffsets());
-      const z = robustZ(baseline, recent);
+      const zr = robustZ(baseline, recent);
+      const baseMed = medianOrNull(baseline);
+      // Band = baseline \u00b1 1.5\u03c3_r, exactly the notable-severity edge; null when suppressed.
+      const band =
+        zr !== null && baseMed !== null && Number.isFinite(zr.dispersion)
+          ? {
+              low: baseMed - NOTABLE_ABS_Z * zr.dispersion,
+              high: baseMed + NOTABLE_ABS_Z * zr.dispersion,
+            }
+          : null;
 
       rows.push({
         metric: spec.key,
         sourceName: source,
         unit: spec.unit,
-        baseline: medianOrNull(baseline),
+        baseline: baseMed,
+        baselineLow: band === null ? null : band.low,
+        baselineHigh: band === null ? null : band.high,
         recent: medianOrNull(recent),
-        z: z === null ? null : z.z,
-        severity: z === null ? "info" : severityOf(z.z),
+        z: zr === null ? null : zr.z,
+        severity: zr === null ? "info" : severityOf(zr.z),
         nBaseline: baseline.length,
         nRecent: recent.length,
         trust: spec.trust,
         trustNote: spec.trustNote,
-        suppressed: z === null ? "insufficient_data" : null,
+        suppressed: zr === null ? "insufficient_data" : null,
         asOfDay: anchor,
       });
     }
