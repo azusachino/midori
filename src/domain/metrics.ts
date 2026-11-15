@@ -1,22 +1,16 @@
 import type { TrustLabel } from "./types";
 
-/**
- * Metric registry + trust labels (T4). Keys align with the spike's readout.
- * Trust grades summarize the 2025–2026 accuracy literature:
- * steps/HR high, HRV moderate (nightly SDNN/RMSSD trends only), energy low
- * across all brands. Wrist temperature is a trend metric, not absolute.
- */
-
 export interface MetricSpec {
   key: string;
-  /** HK type identifiers aggregated into this metric. */
   types: readonly string[];
   unit: string;
   method: "median" | "sum";
   trust: TrustLabel;
   trustNote: string;
-  /** true = only 21:00–09:00 local samples count (HRV). */
   nightOnly: boolean;
+  kind: "overnight" | "daytime" | "trendOnly";
+  floor: number;
+  minSamples: number;
 }
 
 export const METRICS: Readonly<Record<string, MetricSpec>> = {
@@ -26,8 +20,11 @@ export const METRICS: Readonly<Record<string, MetricSpec>> = {
     unit: "count",
     method: "sum",
     trust: "high",
-    trustNote: "Step counts are accurate at walking paces.",
+    trustNote: "Step counts are accurate at walking paces. Sums use the primary epoch only.",
     nightOnly: false,
+    kind: "daytime",
+    floor: 250,
+    minSamples: 1,
   },
   rhr: {
     key: "rhr",
@@ -37,6 +34,9 @@ export const METRICS: Readonly<Record<string, MetricSpec>> = {
     trust: "high",
     trustNote: "Resting HR accurate at rest; less so during movement.",
     nightOnly: false,
+    kind: "overnight",
+    floor: 1,
+    minSamples: 1,
   },
   heart_rate: {
     key: "heart_rate",
@@ -46,96 +46,141 @@ export const METRICS: Readonly<Record<string, MetricSpec>> = {
     trust: "high",
     trustNote: "Instantaneous HR accurate at rest; noisy during exercise.",
     nightOnly: false,
+    kind: "daytime",
+    floor: 1,
+    minSamples: 1,
   },
   hrv_sdnn: {
-    key: "hrv_sdnn",
     types: ["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"],
     unit: "ms",
     method: "median",
     trust: "moderate",
     trustNote: "Use as a nightly trend, not an absolute value.",
     nightOnly: true,
+    kind: "overnight",
+    floor: 2,
+    minSamples: 3,
+    key: "hrv_sdnn",
+  },
+  sleep_hr: {
+    types: [],
+    unit: "count/min",
+    method: "median",
+    trust: "moderate",
+    trustNote: "Median heart rate during asleep intervals.",
+    nightOnly: true,
+    kind: "overnight",
+    floor: 1,
+    minSamples: 10,
+    key: "sleep_hr",
   },
   hrv_rmssd: {
-    key: "hrv_rmssd",
     types: ["HKQuantityTypeIdentifierHeartRateVariabilityRMSSD"],
     unit: "ms",
     method: "median",
     trust: "moderate",
     trustNote: "Use as a nightly trend, not an absolute value.",
     nightOnly: true,
+    kind: "overnight",
+    floor: 2,
+    minSamples: 3,
+    key: "hrv_rmssd",
   },
   wrist_temp: {
-    key: "wrist_temp",
     types: ["HKQuantityTypeIdentifierAppleSleepingWristTemperature"],
     unit: "degC",
     method: "median",
     trust: "moderate",
-    trustNote: "Trend-only metric; absolute offset differs per device.",
+    trustNote: "Trend metric; absolute offset differs per device.",
     nightOnly: true,
+    kind: "overnight",
+    floor: 0.05,
+    minSamples: 1,
+    key: "wrist_temp",
   },
   sleep_h: {
-    key: "sleep_h",
     types: ["HKCategoryTypeIdentifierSleepAnalysis"],
     unit: "h",
     method: "sum",
     trust: "moderate",
     trustNote: "Stages are estimates; totals are closer than stages.",
     nightOnly: false,
+    kind: "overnight",
+    floor: 0.25,
+    minSamples: 1,
+    key: "sleep_h",
   },
   deep_h: {
-    key: "deep_h",
     types: ["HKCategoryTypeIdentifierSleepAnalysis"],
     unit: "h",
     method: "sum",
     trust: "moderate",
     trustNote: "Deep sleep estimation is the least reliable stage.",
     nightOnly: false,
+    kind: "overnight",
+    floor: 0.1,
+    minSamples: 1,
+    key: "deep_h",
   },
   rem_h: {
-    key: "rem_h",
     types: ["HKCategoryTypeIdentifierSleepAnalysis"],
     unit: "h",
     method: "sum",
     trust: "moderate",
     trustNote: "REM estimation is moderate-reliability.",
     nightOnly: false,
+    kind: "overnight",
+    floor: 0.1,
+    minSamples: 1,
+    key: "rem_h",
   },
   resp_rate: {
-    key: "resp_rate",
     types: ["HKQuantityTypeIdentifierRespiratoryRate"],
     unit: "count/min",
     method: "median",
     trust: "moderate",
     trustNote: "Overnight respiratory rate is a trend metric.",
     nightOnly: true,
+    kind: "overnight",
+    floor: 0.5,
+    minSamples: 3,
+    key: "resp_rate",
   },
   spo2: {
-    key: "spo2",
     types: ["HKQuantityTypeIdentifierOxygenSaturation"],
     unit: "%",
     method: "median",
     trust: "moderate",
     trustNote: "Spot checks, not medical-grade oximetry.",
     nightOnly: false,
+    kind: "overnight",
+    floor: 1,
+    minSamples: 3,
+    key: "spo2",
   },
   vo2max: {
-    key: "vo2max",
     types: ["HKQuantityTypeIdentifierVO2Max"],
     unit: "ml/(kg·min)",
     method: "median",
     trust: "moderate",
     trustNote: "Estimate varies with workout mix.",
     nightOnly: false,
+    kind: "trendOnly",
+    floor: 1,
+    minSamples: 1,
+    key: "vo2max",
   },
   active_kj: {
-    key: "active_kj",
     types: ["HKQuantityTypeIdentifierActiveEnergyBurned"],
     unit: "kJ",
     method: "sum",
     trust: "low",
     trustNote: "Energy expenditure is inaccurate across all wearable brands.",
     nightOnly: false,
+    kind: "daytime",
+    floor: 100,
+    minSamples: 1,
+    key: "active_kj",
   },
 };
 
