@@ -97,14 +97,16 @@ export function MetricsPage() {
     return { index, epochs };
   }, "metrics");
 
-  const epochLabels = useMemo(() => {
-    const map = new Map<number, string>();
+  const { epochLabels, epochColors } = useMemo(() => {
+    const labels = new Map<number, string>();
+    const colors = new Map<number, number | null>();
     if (query.status === "ready" && query.data.epochs) {
       for (const ep of query.data.epochs.epochs) {
-        map.set(ep.id, ep.label);
+        labels.set(ep.id, ep.label);
+        colors.set(ep.id, ep.colorIndex);
       }
     }
-    return map;
+    return { epochLabels: labels, epochColors: colors };
   }, [query]);
 
   if (query.status === "loading") {
@@ -179,7 +181,11 @@ export function MetricsPage() {
                       </CardHeader>
                       <CardContent className="mt-auto pt-1">
                         {item.hasData && item.weeklySeries.length > 0 ? (
-                          <MetricMiniChart entry={item} epochLabels={epochLabels} />
+                          <MetricMiniChart
+                            entry={item}
+                            epochLabels={epochLabels}
+                            epochColors={epochColors}
+                          />
                         ) : (
                           <div
                             data-testid={`metric-no-data-${item.metric}`}

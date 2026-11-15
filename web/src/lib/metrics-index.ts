@@ -13,14 +13,19 @@ export interface EpochWeeklySeriesSegment {
   }>;
 }
 
-/** Deterministic palette slot assignment for an epoch ID on the /metrics index. */
+/** Resolves the app-wide palette slot for each epoch ID (preferring server `colorIndex`). */
 export function miniChartColorIndexMap(
   weeklySeries: readonly WeeklySeriesPointDTO[],
+  epochColorIndices?: ReadonlyMap<number, number | null>,
 ): Map<number, number> {
   const map = new Map<number, number>();
   for (const pt of weeklySeries) {
     if (pt.epochId !== null && !map.has(pt.epochId)) {
-      map.set(pt.epochId, Math.max(0, pt.epochId - 1) % 6);
+      const serverIndex = epochColorIndices?.get(pt.epochId);
+      map.set(
+        pt.epochId,
+        typeof serverIndex === "number" ? serverIndex : Math.max(0, pt.epochId - 1) % 6,
+      );
     }
   }
   return map;
@@ -29,8 +34,9 @@ export function miniChartColorIndexMap(
 /** Splits weekly series by epochId with nulls elsewhere so lines never bridge a seam. */
 export function buildEpochWeeklySegments(
   weeklySeries: readonly WeeklySeriesPointDTO[],
+  epochColorIndices?: ReadonlyMap<number, number | null>,
 ): EpochWeeklySeriesSegment[] {
-  const colorMap = miniChartColorIndexMap(weeklySeries);
+  const colorMap = miniChartColorIndexMap(weeklySeries, epochColorIndices);
   const epochIds = Array.from(colorMap.keys());
 
   return epochIds.map((epochId) => ({

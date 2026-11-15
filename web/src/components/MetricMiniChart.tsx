@@ -15,14 +15,20 @@ import { type ChartTheme, epochColor } from "@/lib/theme";
 export interface MetricMiniChartProps {
   entry: MetricIndexEntryDTO;
   epochLabels?: ReadonlyMap<number, string> | undefined;
+  epochColors?: ReadonlyMap<number, number | null> | undefined;
   height?: number;
 }
 
 /** 1-year weekly mini chart on the /metrics index with epoch colors and dashed seam lines. */
-export function MetricMiniChart({ entry, epochLabels, height = 112 }: MetricMiniChartProps) {
+export function MetricMiniChart({
+  entry,
+  epochLabels,
+  epochColors,
+  height = 112,
+}: MetricMiniChartProps) {
   const segments = useMemo(
-    () => buildEpochWeeklySegments(entry.weeklySeries),
-    [entry.weeklySeries],
+    () => buildEpochWeeklySegments(entry.weeklySeries, epochColors),
+    [entry.weeklySeries, epochColors],
   );
   const summary = useMemo(() => buildMiniChartSummary(entry), [entry]);
   const table = useMemo(() => buildMiniChartTable(entry, epochLabels), [entry, epochLabels]);
