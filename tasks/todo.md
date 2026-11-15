@@ -304,6 +304,20 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - `scripts/bench-insert.ts` fixed (slice 1 follow-up).
 
 **Gate A**: fresh verifier on slices 1–8 against B-D/B-N/B-F/B-C/B-I. Report persisted in
+- **Gate A done 2026-11-15** — fresh Fable 5.2 verifier (native subagent; did not write the
+  code) on `main@ad46acb`.
+  - Result: **PASS WITH FINDINGS** (2 HIGH, 7 MED, 10 LOW, all reproduced synthetically).
+    Report: `docs/reviews/2026-11-15-gate-a-engine-fable.md`.
+  - **Slice 8b** (`midori-engine-s8b`, pi gpt-6-luna high) fixed H1, H2, M1–M7 and L1–L7.
+    Dead implementations were removed, and every listed B- id has its own test through the
+    production path. L8 and L10 are noted, with no code change.
+  - Lead real-data check after 8b (counts only):
+    - seam steps are now 1 `offset` + 26 `step` (before: 0 offsets, as H1 predicted)
+    - the trend-only `vo2max` row is no longer persisted; 13 findings, all `computed`
+    - derive is 30 s and 832 MB on real data, up from 3.5 s because non-primary values are now
+      kept. This is still within the 60 s / 1.2 GB budget; the full import is about 52 s
+      against B-I9's 2 min.
+  - Lead resolved a rebase type conflict: `newEpochs` is `string[]` of new epoch labels.
 `docs/reviews/`.
 
 ## Phase 2 — read API + MCP

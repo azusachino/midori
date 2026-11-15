@@ -51,12 +51,13 @@ export function deriveOnset(
   baselineMedian: number,
   sigma: number,
   stintStart: string,
+  sideOverride?: -1 | 1,
 ): { day: string | null; open: boolean | null } {
   const newest = units[0];
   if (!newest) return { day: null, open: null };
   const low = baselineMedian - 1.5 * sigma;
   const high = baselineMedian + 1.5 * sigma;
-  const side = newest.value < low ? -1 : newest.value > high ? 1 : 0;
+  const side = sideOverride ?? (newest.value < low ? -1 : newest.value > high ? 1 : 0);
   if (!side) return { day: null, open: null };
   let lastOutside = 0;
   let insideSinceOutside = false;
@@ -120,9 +121,17 @@ function deriveOne(
     kOutside = recentUnits.filter(
       (unit) => Math.abs(unit.value - baseline) > 1.5 * score.dispersion,
     ).length;
-    const foundOnset = deriveOnset(units, baseline, score.dispersion, stint.startDay);
-    onsetDay = foundOnset.day;
-    onsetOpen = foundOnset.open;
+    if (severityOf(z) !== "within") {
+      const foundOnset = deriveOnset(
+        units,
+        baseline,
+        score.dispersion,
+        stint.startDay,
+        z < 0 ? -1 : 1,
+      );
+      onsetDay = foundOnset.day;
+      onsetOpen = foundOnset.open;
+    }
   }
   return {
     metric,
@@ -164,6 +173,7 @@ export function rebuildBaselines(db: Database): BaselineResult[] {
      ORDER BY unit_day DESC LIMIT 35`,
   );
   for (const stint of stints) {
+    if (METRICS[stint.metric]?.kind === "trendOnly") continue;
     const units = unitsQuery.all(
       stint.metric,
       stint.epochId,

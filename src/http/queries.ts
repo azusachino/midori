@@ -38,12 +38,22 @@ export function listSources(db: Database): SourceDTO[] {
   }));
 }
 
+function parseEpochLabels(value: string | null): string[] {
+  if (value === null) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export function listImports(db: Database): ImportDTO[] {
   return (
     db
-      .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, error,
-      export_version, export_date, older_than_stored, records_seen, records_inserted,
-      records_deduped, duration_ms FROM imports ORDER BY id DESC`)
+      .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
+      new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
+      records_seen, records_inserted, records_deduped, duration_ms FROM imports ORDER BY id DESC`)
       .all() as ImportRow[]
   ).map((r) => importDto(r));
 }
@@ -56,6 +66,9 @@ type ImportRow = {
   status: string;
   stage: string | null;
   progress: number | null;
+  progress_total: number | null;
+  new_usable_nights: number | null;
+  new_epochs: string | null;
   error: string | null;
   export_version: string | null;
   export_date: string | null;
@@ -73,6 +86,9 @@ function importDto(r: ImportRow): ImportDTO {
     status: r.status as ImportDTO["status"],
     stage: r.stage,
     progress: r.progress,
+    progressTotal: r.progress_total,
+    newUsableNights: r.new_usable_nights,
+    newEpochs: parseEpochLabels(r.new_epochs),
     error: r.error,
     exportVersion: r.export_version,
     exportDate: r.export_date,
@@ -86,9 +102,9 @@ function importDto(r: ImportRow): ImportDTO {
 }
 export function getImport(db: Database, id: number): ImportDTO | null {
   const row = db
-    .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, error,
-      export_version, export_date, older_than_stored, records_seen, records_inserted,
-      records_deduped, duration_ms FROM imports WHERE id=?`)
+    .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
+      new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
+      records_seen, records_inserted, records_deduped, duration_ms FROM imports WHERE id=?`)
     .get(id) as ImportRow | null;
   return row ? importDto(row) : null;
 }

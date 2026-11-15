@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Hono } from "hono";
 import { archiveZip, backupDatabase, DEFAULT_BACKUP_DIR, pruneBackups } from "../backup/backup";
@@ -17,6 +17,23 @@ import { checkHealthExportZip } from "../ingest/zip";
 export const IMPORT_TIMEOUT_MS = 10 * 60 * 1000;
 export const DEFAULT_SPOOL_DIR = "data/spool";
 export const SPOOL_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+function pruneSpools(spoolDir: string, now = Date.now(), removeParts = true): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(spoolDir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const path = join(spoolDir, entry);
+    if (
+      (removeParts && entry.endsWith(".part")) ||
+      (entry.endsWith(".zip") && !spoolIsFresh(path, now))
+    )
+      rmSync(path, { force: true });
+  }
+}
 
 export type ImportRunner = (
   dbPath: string,
@@ -47,6 +64,16 @@ function jsonError(error: string, status: ErrorStatus, retryable: boolean, impor
   const body: ErrorResponse =
     importId === undefined ? { error, retryable } : { error, retryable, importId };
   return { body, status } as const;
+}
+
+function parseEpochLabels(value: string | null): string[] {
+  if (value === null) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function sanitizeName(raw: string | undefined): string {
@@ -99,13 +126,15 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
   const timeoutMs = opts.timeoutMs ?? IMPORT_TIMEOUT_MS;
   const maxBytes = opts.maxBytes ?? MAX_UPLOAD_BYTES;
   const { db, dbPath, archiveDir } = opts;
+  pruneSpools(spoolDir);
 
   function getImport(id: number): ImportDTO | undefined {
+    pruneSpools(spoolDir, Date.now(), false);
     const row = db
       .query(
-        `SELECT id, created_at, zip_name, zip_size, status, stage, progress, error,
-                export_version, export_date, older_than_stored, records_seen, records_inserted,
-                records_deduped, duration_ms
+        `SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
+                new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
+                records_seen, records_inserted, records_deduped, duration_ms
          FROM imports WHERE id = ?`,
       )
       .get(id) as {
@@ -116,6 +145,9 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       status: string;
       stage: string | null;
       progress: number | null;
+      progress_total: number | null;
+      new_usable_nights: number | null;
+      new_epochs: string | null;
       error: string | null;
       export_version: string | null;
       export_date: string | null;
@@ -134,6 +166,9 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       status: row.status as ImportDTO["status"],
       stage: row.stage,
       progress: row.progress,
+      progressTotal: row.progress_total,
+      newUsableNights: row.new_usable_nights,
+      newEpochs: parseEpochLabels(row.new_epochs),
       error: row.error,
       exportVersion: row.export_version,
       exportDate: row.export_date,
@@ -165,7 +200,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       db.run(
-        `UPDATE imports SET status = 'failed', stage = 'failed', error = ?
+        `UPDATE imports SET status = 'failed', error = ?
          WHERE id = ? AND status NOT IN ('done', 'failed')`,
         [message, importId],
       );

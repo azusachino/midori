@@ -20,7 +20,12 @@ function makeDb() {
   ).run();
   db.prepare(
     `INSERT INTO stints (metric, epoch_id, start_day, end_day) VALUES
-     ('wrist_temp', 1, '2026-01-01', NULL)`,
+     ('wrist_temp', 1, '2026-01-01', '2026-01-09'),
+     ('wrist_temp', 1, '2026-01-10', NULL)`,
+  ).run();
+  db.prepare(
+    `INSERT INTO metric_values (metric, epoch_id, unit_day, unit_kind, value, n, usable)
+     VALUES ('wrist_temp', 1, '2026-01-01', 'night', 1, 0, 0)`,
   ).run();
   db.prepare(
     `INSERT INTO seam_steps (metric, seam_day, kind, value, n_old, n_new)
@@ -53,7 +58,7 @@ describe("finding checks", () => {
   test("B-C1–B-C6 all return clear when no confound applies", () => {
     const db = makeDb();
     db.exec(
-      "DELETE FROM seam_steps; DELETE FROM epoch_events; UPDATE nights SET partial_reason = NULL, tz_change = 0",
+      "DELETE FROM seam_steps; DELETE FROM epoch_events; DELETE FROM metric_values; DELETE FROM stints WHERE start_day = '2026-01-10'; UPDATE nights SET partial_reason = NULL, tz_change = 0",
     );
     const checks = deriveChecks(
       db,

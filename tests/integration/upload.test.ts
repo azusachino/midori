@@ -1,7 +1,15 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, utimesSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  unlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { openDb } from "../../src/db/db";
 import type { ErrorResponse, UploadAcceptedDTO } from "../../src/domain/api";
@@ -155,6 +163,9 @@ describe("POST /api/imports", () => {
       const dto = (await detail.json()) as Record<string, unknown>;
       expect(dto.stage).toBe("done");
       expect(dto.progress).toBeGreaterThan(0);
+      expect(dto.progressTotal).toBeGreaterThanOrEqual(dto.progress as number);
+      expect(dto.newUsableNights).toBeGreaterThanOrEqual(0);
+      expect(Array.isArray(dto.newEpochs)).toBe(true);
       expect(dto.exportDate).toBe("2026-01-07 08:00:00 +0900");
       expect(dto.retryable).toBe(false);
     } finally {
@@ -171,6 +182,86 @@ describe("POST /api/imports", () => {
       expect(spoolFiles(h)).toEqual([]);
       expect(existsSync(h.archiveDir)).toBe(true);
       expect(readdirSync(h.archiveDir).length).toBe(1);
+    } finally {
+      h.close();
+    }
+  });
+
+  test("B-I8 M6 exposes uncompressed progress and per-import new usable nights and epoch labels", async () => {
+    const h = harness();
+    try {
+      const first = await upload(h.app, validZip());
+      const firstId = ((await first.json()) as UploadAcceptedDTO).importId;
+      expect((await waitForTerminal(h, firstId)).status).toBe("done");
+      const priorEpochs = new Set(
+        (
+          h.db.query("SELECT source_name, device_hw FROM epochs").all() as Array<{
+            source_name: string;
+            device_hw: string;
+          }>
+        ).map((epoch) => JSON.stringify([epoch.source_name, epoch.device_hw])),
+      );
+      const priorUsableNights = (
+        h.db
+          .query(
+            "SELECT COUNT(DISTINCT unit_day) AS count FROM metric_values WHERE metric='sleep_h' AND usable=1",
+          )
+          .get() as { count: number }
+      ).count;
+      const expandedXml = general.xml.replace(
+        "</HealthData>",
+        '<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic New Watch" unit="count" startDate="2026-01-06 12:00:00 +0000" endDate="2026-01-06 12:00:00 +0000" value="1200" device="&lt;&lt;HKDevice: 0x3&gt;, name:Synthetic New Watch, hardware:Watch9,1, software:26.2, model:Watch&gt;"/></HealthData>',
+      );
+      const second = await upload(
+        h.app,
+        buildStoredZip([{ name: "apple_health_export/export.xml", data: expandedXml }]),
+      );
+      const { importId } = (await second.json()) as UploadAcceptedDTO;
+      expect((await waitForTerminal(h, importId)).status).toBe("done");
+      const detail = await h.app.request(`/api/imports/${importId}`);
+      const dto = (await detail.json()) as Record<string, unknown>;
+      expect(dto.progressTotal).toBeGreaterThan(0);
+      expect(dto.progress).toBe(dto.progressTotal);
+      const usableNights = (
+        h.db
+          .query(
+            "SELECT COUNT(DISTINCT unit_day) AS count FROM metric_values WHERE metric='sleep_h' AND usable=1",
+          )
+          .get() as { count: number }
+      ).count;
+      expect(dto.newUsableNights).toBe(Math.max(0, usableNights - priorUsableNights));
+      const newEpochs = dto.newEpochs as string[];
+      expect(newEpochs).toEqual(["Synthetic New Watch (Watch9,1)"]);
+      const persisted = h.db.query("SELECT new_epochs FROM imports WHERE id = ?").get(importId) as {
+        new_epochs: string;
+      };
+      expect(persisted.new_epochs).toBe(JSON.stringify(newEpochs));
+      const listed = (await (await h.app.request("/api/imports")).json()) as Array<
+        Record<string, unknown>
+      >;
+      expect(listed.find((row) => row.id === importId)?.newEpochs).toEqual(newEpochs);
+      expect(priorEpochs.has(JSON.stringify(["Synthetic New Watch", "Watch9,1"]))).toBe(false);
+    } finally {
+      h.close();
+    }
+  });
+
+  test("B-I5 L5 mount removes expired spools and orphaned upload parts", () => {
+    const h = harness();
+    try {
+      mkdirSync(h.spoolDir, { recursive: true });
+      const expired = `${h.spoolDir}/expired.zip`;
+      const part = `${h.spoolDir}/orphan.part`;
+      writeFileSync(expired, "old spool");
+      writeFileSync(part, "interrupted upload");
+      const old = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      utimesSync(expired, old, old);
+      createApp({
+        db: h.db,
+        upload: { dbPath: h.dbPath, archiveDir: h.archiveDir, spoolDir: h.spoolDir },
+      });
+      expect(existsSync(expired)).toBe(false);
+      expect(existsSync(part)).toBe(false);
     } finally {
       h.close();
     }
@@ -208,6 +299,9 @@ describe("POST /api/imports", () => {
       const row = await waitForTerminal(h, importId);
       expect(row.status).toBe("failed");
       expect(row.error).toBeTruthy();
+      expect(h.db.query("SELECT stage FROM imports WHERE id = ?").get(importId)).toEqual({
+        stage: "parsing",
+      });
       expect(h.db.inTransaction).toBe(false);
       const left = h.db.query("SELECT COUNT(*) AS n FROM records").get() as { n: number };
       expect(left.n).toBe(0); // the open batch was rolled back, nothing half-written
@@ -237,7 +331,7 @@ describe("POST /api/imports", () => {
       expect(get.status).toBe(200);
       const item = (await get.json()) as Record<string, unknown>;
       expect(item.retryable).toBe(true);
-      expect(item.stage).toBe("failed");
+      expect(item.stage).toBe("queued");
       expect(item.error).toContain("injected first attempt failure");
 
       const retry = await h.app.request(`/api/imports/${importId}/retry`, { method: "POST" });

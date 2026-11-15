@@ -1,114 +1,50 @@
 import { Database } from "bun:sqlite";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { applyMigrations } from "../db/db";
 import { addDays } from "../domain/dates";
-import { deriveSeamSteps } from "./seams";
-import type { MetricUnit } from "./stints";
-import { deriveStints, minorEpochs, primaryUnits, rebuildStints } from "./stints";
+import { derive } from "./derive";
 
-const alwaysUsable = () => true;
-function unit(
-  epochId: number,
-  epochKind: MetricUnit["epochKind"],
-  unitDay: string,
-  n = 1,
-): MetricUnit {
-  return {
-    metric: "steps",
-    epochId,
-    epochKind,
-    unitDay,
-    unitKind: "day",
-    value: epochId * 100 + n,
-    n,
-  };
-}
-function days(start: string, count: number): string[] {
-  return Array.from({ length: count }, (_, index) => addDays(start, index));
+let db: Database;
+afterEach(() => db?.close());
+
+function addStep(day: string, hardware: string, value: number): void {
+  const start = `${day}T12:00:00.000Z`;
+  db.run(
+    `INSERT INTO records (type, source_name, start_at, end_at, start_offset_min, end_offset_min,
+      value, import_id, device_hw) VALUES ('HKQuantityTypeIdentifierStepCount', 'Synthetic Watch',
+      ?, ?, 0, 0, ?, 1, ?)`,
+    [start, new Date(Date.parse(start) + 60_000).toISOString(), value, hardware],
+  );
 }
 
-describe("stints and primary epochs", () => {
-  test("B-D3 minor app single sample → no seam", () => {
-    const rows = [unit(1, "app", "2026-01-01")];
-    expect(minorEpochs(rows)).toEqual(new Set([1]));
-    const stints = deriveStints(rows, alwaysUsable);
-    expect(stints).toEqual([]);
-    expect(deriveSeamSteps(stints, rows, alwaysUsable)).toEqual([]);
-  });
-
-  test("B-D4 alternating phone/watch step days → no seam", () => {
-    const rows = days("2026-01-01", 28).map((day, index) =>
-      unit(index % 2 ? 2 : 1, index % 2 ? "watch" : "phone", day),
-    );
-    const stints = deriveStints(rows, alwaysUsable);
-    expect(stints).toHaveLength(1);
-    expect(deriveSeamSteps(stints, rows, alwaysUsable)).toEqual([]);
-  });
-
-  test("B-D4/B-D5/B-D7 watch replaced by same-kind watch → step seam at first unit of the 7-run", () => {
-    const oldDays = days("2026-01-01", 14);
-    const newDays = days("2026-01-15", 7);
-    const rows = [
-      ...oldDays.map((day) => unit(1, "watch", day)),
-      ...newDays.map((day) => unit(2, "watch", day)),
-    ];
-    const stints = deriveStints(rows, alwaysUsable);
-    expect(stints).toEqual([
-      { metric: "steps", epochId: 1, startDay: "2026-01-01", endDay: "2026-01-14" },
-      { metric: "steps", epochId: 2, startDay: "2026-01-15", endDay: null },
-    ]);
-    expect(deriveSeamSteps(stints, rows, alwaysUsable)).toEqual([
-      { metric: "steps", seamDay: "2026-01-15", kind: "step", value: 100, nOld: 14, nNew: 7 },
-    ]);
-  });
-
-  test("B-D6 shared usable units produce an offset without changing values", () => {
-    const rows = [
-      ...days("2026-01-01", 14).map((day) => unit(1, "watch", day)),
-      ...days("2026-01-08", 14).map((day) => unit(2, "watch", day)),
-    ];
-    const before = rows.map((row) => row.value);
-    const seam = deriveSeamSteps(
-      [
-        { metric: "steps", epochId: 1, startDay: "2026-01-01", endDay: "2026-01-14" },
-        { metric: "steps", epochId: 2, startDay: "2026-01-15", endDay: null },
-      ],
-      rows,
-      alwaysUsable,
-    );
-    expect(seam).toEqual([
-      { metric: "steps", seamDay: "2026-01-15", kind: "offset", value: 100, nOld: 7, nNew: 7 },
-    ]);
-    expect(rows.map((row) => row.value)).toEqual(before);
-  });
-
-  test("B-D4b primary absence has no fallback value", () => {
-    const rows = [
-      ...days("2026-01-01", 14).map((day) => unit(1, "watch", day)),
-      ...days("2026-01-15", 14).map((day) => unit(2, "phone", day)),
-    ];
-    const stints = deriveStints(rows, alwaysUsable);
-    const selected = primaryUnits(stints, rows);
-    expect(selected.some((row) => row.unitDay === "2026-01-15" && row.epochId === 1)).toBe(false);
-    expect(selected.some((row) => row.unitDay === "2026-01-15" && row.epochId === 2)).toBe(true);
-  });
-
-  test("B-D4 stints are persisted", () => {
-    const db = new Database(":memory:");
+describe("primary series through derive()", () => {
+  test("B-D4b primary absence has no value for the current primary on that unit", () => {
+    db = new Database(":memory:");
     applyMigrations(db);
-    db.prepare(
-      "INSERT INTO epochs (source_name, device_hw, kind, first_day, last_day, days_present) VALUES ('watch', 'Watch1,1', 'watch', '2026-01-01', '2026-01-10', 10)",
-    ).run();
-    const insert = db.prepare(
-      "INSERT INTO metric_values (metric, epoch_id, unit_day, unit_kind, value, n, usable) VALUES ('steps', 1, ?, 'day', 100, 1, 1)",
+    db.run(
+      `INSERT INTO imports (created_at, zip_name, zip_size, status, export_date)
+       VALUES ('2026-02-01T00:00:00Z', 'synthetic.zip', 1, 'done', '2026-02-01 12:00:00 +0000')`,
     );
-    for (const day of days("2026-01-01", 10)) insert.run(day);
-    expect(rebuildStints(db, alwaysUsable)).toEqual([
-      { metric: "steps", epochId: 1, startDay: "2026-01-01", endDay: null },
-    ]);
-    expect(db.query("SELECT metric, epoch_id AS epochId FROM stints").all()).toEqual([
-      { metric: "steps", epochId: 1 },
-    ]);
-    db.close();
+    for (let i = 0; i < 14; i++) addStep(addDays("2026-01-01", i), "iPhone1,1", 1000);
+    for (let i = 14; i < 21; i++) addStep(addDays("2026-01-01", i), "Watch1,1", 1200);
+    addStep("2026-01-22", "iPhone1,1", 1000);
+
+    derive(db);
+
+    expect(
+      db
+        .query(`SELECT COUNT(*) AS count FROM metric_values mv JOIN stints s
+        ON s.metric = mv.metric AND s.epoch_id = mv.epoch_id
+        AND s.start_day <= mv.unit_day AND (s.end_day IS NULL OR s.end_day >= mv.unit_day)
+        WHERE mv.metric = 'steps' AND mv.unit_day = '2026-01-22'`)
+        .get(),
+    ).toEqual({ count: 0 });
+    expect(
+      db
+        .query(
+          "SELECT COUNT(*) AS count FROM metric_values WHERE metric='steps' AND unit_day='2026-01-22'",
+        )
+        .get(),
+    ).toEqual({ count: 1 });
   });
 });

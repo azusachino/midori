@@ -18,32 +18,6 @@ export type SleepStage =
   | "asleepUnspecified"
   | "awake";
 
-export const SLEEP_STAGES: readonly SleepStage[] = [
-  "inBed",
-  "asleepCore",
-  "asleepDeep",
-  "asleepREM",
-  "asleepUnspecified",
-  "awake",
-];
-
-export interface SleepRecordInput {
-  source: string;
-  stage: SleepStage;
-  startUtcIso: string;
-  endUtcIso: string;
-  startLocalDay: string;
-  startLocalMinute: number;
-}
-
-export interface Night {
-  date: string;
-  dominantSource: string;
-  stageSeconds: Record<SleepStage, number>;
-  sourceSeconds: Record<string, number>;
-  sourceRecordCounts: Record<string, number>;
-}
-
 export interface DerivedNight {
   date: string;
   zone: string;
@@ -83,18 +57,6 @@ export function nightKeyForSleepRecord(day: string, minute: number): string | nu
   return null;
 }
 
-export function inHrvNightWindow(minute: number): boolean {
-  return minute >= 21 * 60 || minute < NIGHT_END_MINUTE;
-}
-
-export function continuesNight(startAt: string, lastAsleepEndAt: string | null): boolean {
-  return (
-    lastAsleepEndAt !== null &&
-    Date.parse(startAt) >= Date.parse(lastAsleepEndAt) &&
-    Date.parse(startAt) - Date.parse(lastAsleepEndAt) <= CONTINUATION_TOLERANCE_MS
-  );
-}
-
 export function exportCutReason(
   nightDate: string,
   zone: string,
@@ -114,53 +76,6 @@ function emptyStageSeconds(): Record<SleepStage, number> {
   return { inBed: 0, asleepCore: 0, asleepDeep: 0, asleepREM: 0, asleepUnspecified: 0, awake: 0 };
 }
 
-interface NightAccumulator {
-  bySource: Map<string, Record<SleepStage, number>>;
-  countsBySource: Map<string, number>;
-}
-
-/** Legacy pure helper retained for its focused unit tests. Production derives by epoch below. */
-export function assembleNights(records: SleepRecordInput[]): Night[] {
-  const nights = new Map<string, NightAccumulator>();
-  for (const record of records) {
-    const key = nightKeyForSleepRecord(record.startLocalDay, record.startLocalMinute);
-    if (key === null) continue;
-    const acc = nights.get(key) ?? { bySource: new Map(), countsBySource: new Map() };
-    nights.set(key, acc);
-    acc.countsBySource.set(record.source, (acc.countsBySource.get(record.source) ?? 0) + 1);
-    const stages = acc.bySource.get(record.source) ?? emptyStageSeconds();
-    stages[record.stage] += durationSeconds(
-      Date.parse(record.startUtcIso),
-      Date.parse(record.endUtcIso),
-    );
-    acc.bySource.set(record.source, stages);
-  }
-  return [...nights]
-    .map(([date, acc]) => {
-      const sourceSeconds: Record<string, number> = {};
-      const sourceRecordCounts: Record<string, number> = {};
-      const sources = [...acc.bySource.keys()].sort();
-      let winner = sources[0] ?? "";
-      for (const source of sources) {
-        const stages = acc.bySource.get(source) ?? emptyStageSeconds();
-        sourceRecordCounts[source] = acc.countsBySource.get(source) ?? 0;
-        sourceSeconds[source] = SLEEP_STAGES.filter((stage) => stage !== "awake").reduce(
-          (sum, stage) => sum + stages[stage],
-          0,
-        );
-        if (sourceSeconds[source] > (sourceSeconds[winner] ?? -1)) winner = source;
-      }
-      return {
-        date,
-        dominantSource: winner,
-        stageSeconds: { ...(acc.bySource.get(winner) ?? emptyStageSeconds()) },
-        sourceSeconds,
-        sourceRecordCounts,
-      };
-    })
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
 interface DbRecord {
   id: number;
   type: string;
@@ -177,17 +92,14 @@ interface DbRecord {
 class EpochResolver {
   constructor(
     private readonly epochIds: Map<string, number>,
-    private readonly inheritedBySourceDay: Map<string, number>,
+    private readonly inheritedByRecord: Map<string, number>,
   ) {}
 
-  get(
-    record: Pick<DbRecord, "sourceName" | "deviceHw" | "startAt" | "startOffsetMin">,
-  ): number | null {
+  get(record: Pick<DbRecord, "id" | "sourceName" | "deviceHw">): number | null {
     if (record.deviceHw !== null)
       return this.epochIds.get(epochKey(record.sourceName, record.deviceHw)) ?? null;
-    const day = utcToLocal(record.startAt, record.startOffsetMin ?? 0).localDay;
     return (
-      this.inheritedBySourceDay.get(`${record.sourceName}\0${day}`) ??
+      this.inheritedByRecord.get(`${record.sourceName}\0${record.id}`) ??
       this.epochIds.get(epochKey(record.sourceName, "")) ??
       null
     );
@@ -303,122 +215,30 @@ function offsetZone(offset: number): string {
   return `UTC${offset < 0 ? "-" : "+"}${String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0")}:${String(Math.abs(offset) % 60).padStart(2, "0")}`;
 }
 
-function epochResolver(db: Database, persistedEpochs?: PersistedEpochDerivation): EpochResolver {
-  if (persistedEpochs)
-    return new EpochResolver(persistedEpochs.epochIds, persistedEpochs.inheritedEpochIds);
-  const epochIds = new Map<string, number>();
-  for (const row of db
-    .query("SELECT id, source_name AS sourceName, device_hw AS deviceHw FROM epochs")
-    .iterate() as Iterable<{ id: number; sourceName: string; deviceHw: string }>)
-    epochIds.set(epochKey(row.sourceName, row.deviceHw), row.id);
-  const relevantTypes = [
-    ...new Set(
-      Object.values(METRICS)
-        .flatMap((spec) => spec.types)
-        .concat(SLEEP_TYPE),
-    ),
-  ];
-  const typePlaceholders = relevantTypes.map(() => "?").join(",");
-  const sources = [
-    ...new Set(
-      [
-        ...(db
-          .query(
-            `SELECT DISTINCT source_name AS sourceName FROM records WHERE type IN (${typePlaceholders})`,
-          )
-          .iterate(...relevantTypes) as Iterable<{ sourceName: string }>),
-      ].map((row) => row.sourceName),
-    ),
-  ];
-  if (sources.length === 0) return new EpochResolver(epochIds, new Map());
-  const sourcePlaceholders = sources.map(() => "?").join(",");
-  const localDay = "date(start_at, printf('%+d minutes', coalesce(start_offset_min, 0)))";
-  const deviceDaysBySource = new Map<
-    string,
-    Map<string, Map<string, { firstAt: string; lastAt: string }>>
-  >();
-  for (const row of db
-    .query(
-      `SELECT source_name AS sourceName, ${localDay} AS localDay, device_hw AS deviceHw,
-            MIN(start_at) AS firstAt, MAX(start_at) AS lastAt FROM records
-     WHERE device_hw IS NOT NULL AND source_name IN (${sourcePlaceholders})
-     GROUP BY source_name, 2, device_hw ORDER BY source_name, 2`,
-    )
-    .iterate(...sources) as Iterable<{
-    sourceName: string;
-    localDay: string;
-    deviceHw: string;
-    firstAt: string;
-    lastAt: string;
-  }>) {
-    const days = deviceDaysBySource.get(row.sourceName) ?? new Map();
-    const devices = days.get(row.localDay) ?? new Map();
-    devices.set(row.deviceHw, { firstAt: row.firstAt, lastAt: row.lastAt });
-    days.set(row.localDay, devices);
-    deviceDaysBySource.set(row.sourceName, days);
-  }
-  const orderedDevices = new Map(
-    [...deviceDaysBySource].map(([source, days]) => [
-      source,
-      [...days]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([day, devices]) => ({ day, devices: [...devices] })),
-    ]),
+function utcOffsetAt(day: string, zone: string): number {
+  const fixed = /^UTC([+-])(\d{2}):(\d{2})$/.exec(zone);
+  if (fixed) return (fixed[1] === "-" ? -1 : 1) * (Number(fixed[2]) * 60 + Number(fixed[3]));
+  const instant = zoneLocalToUtc(day, 12 * 60, zone);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const localAsUtc = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second),
   );
-  const inheritedBySourceDay = new Map<string, number>();
-  for (const row of db
-    .query(
-      `SELECT source_name AS sourceName, ${localDay} AS localDay,
-            MIN(start_at) AS firstAt, MAX(start_at) AS lastAt FROM records
-     WHERE device_hw IS NULL AND source_name IN (${sourcePlaceholders})
-     GROUP BY source_name, 2 ORDER BY source_name, 2`,
-    )
-    .iterate(...sources) as Iterable<{
-    sourceName: string;
-    localDay: string;
-    firstAt: string;
-    lastAt: string;
-  }>) {
-    const candidates = orderedDevices.get(row.sourceName) ?? [];
-    let low = 0;
-    let high = candidates.length;
-    while (low < high) {
-      const middle = (low + high) >>> 1;
-      if ((candidates[middle]?.day ?? "") < row.localDay) low = middle + 1;
-      else high = middle;
-    }
-    let best: { hardware: string; dayDistance: number; timeDistance: number } | null = null;
-    const targetDay = Date.parse(`${row.localDay}T00:00:00Z`);
-    for (const index of [low - 1, low]) {
-      const candidateDay = candidates[index];
-      if (!candidateDay) continue;
-      const dayDistance =
-        Math.abs(Date.parse(`${candidateDay.day}T00:00:00Z`) - targetDay) / 86_400_000;
-      if (dayDistance > 30) continue;
-      for (const [hardware, timeRange] of candidateDay.devices) {
-        const first = Date.parse(timeRange.firstAt);
-        const last = Date.parse(timeRange.lastAt);
-        const start = Date.parse(row.firstAt);
-        const end = Date.parse(row.lastAt);
-        const timeDistance = end < first ? first - end : last < start ? start - last : 0;
-        if (
-          best === null ||
-          dayDistance < best.dayDistance ||
-          (dayDistance === best.dayDistance && timeDistance < best.timeDistance) ||
-          (dayDistance === best.dayDistance &&
-            timeDistance === best.timeDistance &&
-            hardware < best.hardware)
-        )
-          best = { hardware, dayDistance, timeDistance };
-      }
-    }
-    const epochId = best
-      ? epochIds.get(epochKey(row.sourceName, best.hardware))
-      : epochIds.get(epochKey(row.sourceName, ""));
-    if (epochId !== undefined)
-      inheritedBySourceDay.set(`${row.sourceName}\0${row.localDay}`, epochId);
-  }
-  return new EpochResolver(epochIds, inheritedBySourceDay);
+  return Math.round((localAsUtc - instant) / 60_000);
 }
 
 interface NightWindow {
@@ -655,12 +475,13 @@ function persistNightValues(
   aggregates: Map<string, MetricAggregate>,
   stints: Stint[],
   exportAt: string | null,
+  exportDay: string | null,
 ): DerivedNight[] {
   const primaryEpoch = buildStintIndex(stints);
   const nightDates = [...zonesByDay.keys()].sort();
   const nights: DerivedNight[] = [];
   const nightByDate = new Map<string, DerivedNight>();
-  let previousZone: string | null = null;
+  let previousOffset: number | null = null;
   for (const day of nightDates) {
     const zone =
       [...(zonesByDay.get(day) ?? [])].sort(
@@ -672,10 +493,11 @@ function persistNightValues(
     const stages = stageAgg?.stages ?? emptyStageSeconds();
     const asleepS =
       stages.asleepCore + stages.asleepDeep + stages.asleepREM + stages.asleepUnspecified;
+    const offset = utcOffsetAt(day, zone);
     const night: DerivedNight = {
       date: day,
       zone,
-      tzChange: previousZone !== null && previousZone !== zone ? 1 : 0,
+      tzChange: previousOffset !== null && previousOffset !== offset ? 1 : 0,
       partialReason: exportCutReason(day, zone, exportAt),
       asleepS,
       coreS: stages.asleepCore,
@@ -685,7 +507,7 @@ function persistNightValues(
     };
     nights.push(night);
     nightByDate.set(day, night);
-    previousZone = zone;
+    previousOffset = offset;
     if (epochId !== null && asleepS > 0) {
       for (const [metric, value] of [
         ["sleep_h", asleepS / 3600],
@@ -709,14 +531,17 @@ function persistNightValues(
     const [metric, rawEpoch, day] = key.split("\0");
     if (!metric || !rawEpoch || !day) continue;
     const spec = METRICS[metric];
-    if (!spec || primaryEpoch(metric, day) !== Number(rawEpoch)) continue;
+    if (!spec) continue;
     const value = aggregateValue(metric, aggregate);
     if (value === null) continue;
     const night = nightByDate.get(day);
     const unitKind = spec.kind === "daytime" || spec.kind === "trendOnly" ? "day" : "night";
     if (unitKind === "night" && !night) continue;
     const complete = unitKind !== "night" || night?.partialReason === null;
-    const usable = complete && aggregate.count >= spec.minSamples ? 1 : 0;
+    const usable =
+      complete && (unitKind !== "day" || day !== exportDay) && aggregate.count >= spec.minSamples
+        ? 1
+        : 0;
     insertMetric.run(metric, Number(rawEpoch), day, unitKind, value, aggregate.count, usable);
   }
 
@@ -744,22 +569,24 @@ type PhaseObserver = (phase: DerivePhase, elapsedMs: number) => void;
 
 function derivePresenceAndValues(
   db: Database,
-  rebuildEpochTable: boolean,
+  persistedEpochs: PersistedEpochDerivation,
   onPhase?: PhaseObserver,
-  persistedEpochs?: PersistedEpochDerivation,
 ): DerivedNight[] {
-  if (!persistedEpochs && rebuildEpochTable) persistedEpochs = rebuildEpochs(db);
-  const latestExport = db
+  const exportRows = db
     .query(
-      "SELECT export_date AS exportDate FROM imports WHERE export_date IS NOT NULL ORDER BY id DESC LIMIT 1",
+      "SELECT export_date AS exportDate FROM imports WHERE status = 'done' AND export_date IS NOT NULL UNION ALL SELECT export_date AS exportDate FROM imports WHERE status NOT IN ('done', 'failed') AND export_date IS NOT NULL",
     )
-    .get() as { exportDate: string } | null;
-  const parsedExport = latestExport ? parseHealthKitDate(latestExport.exportDate) : null;
+    .all() as Array<{ exportDate: string }>;
+  const parsedExports = exportRows
+    .map((row) => parseHealthKitDate(row.exportDate))
+    .filter((parsed) => parsed.ok)
+    .sort((a, b) => b.date.utcIso.localeCompare(a.date.utcIso));
+  const parsedExport = parsedExports[0] ?? null;
   const exportOffset = parsedExport?.ok ? parsedExport.date.offsetMinutes : 0;
   const exportDay = parsedExport?.ok ? parsedExport.date.localDay : null;
   const exportAt = parsedExport?.ok ? parsedExport.date.utcIso : null;
   let phaseStart = performance.now();
-  const resolver = epochResolver(db, persistedEpochs);
+  const resolver = new EpochResolver(persistedEpochs.epochIds, persistedEpochs.inheritedEpochIds);
   onPhase?.("resolver", performance.now() - phaseStart);
   phaseStart = performance.now();
   const epochKinds = new Map<number, MetricUnit["epochKind"]>();
@@ -789,9 +616,14 @@ function derivePresenceAndValues(
     if (!spec || record.value === null) continue;
     const epochId = resolver.get(record);
     if (epochId === null) continue;
+    if (spec.key === "rhr") {
+      const day = addDays(utcToLocal(record.startAt, exportOffset).localDay, -1);
+      addMetricValue(aggregates, spec.key, epochId, day, record.value);
+      continue;
+    }
     if (spec.kind === "daytime" || spec.kind === "trendOnly") {
       const day = utcToLocal(record.startAt, exportOffset).localDay;
-      if (day !== exportDay) addMetricValue(aggregates, spec.key, epochId, day, record.value);
+      addMetricValue(aggregates, spec.key, epochId, day, record.value);
       continue;
     }
     const night = nearestNightDay(
@@ -813,7 +645,7 @@ function derivePresenceAndValues(
     const asleep = asleepIntervalAt(asleepIndex, epochId, Date.parse(record.startAt));
     if (asleep) addMetricValue(aggregates, "sleep_hr", epochId, asleep.day, record.value);
     const day = utcToLocal(record.startAt, exportOffset).localDay;
-    if (day !== exportDay) addMetricValue(aggregates, "heart_rate", epochId, day, record.value);
+    addMetricValue(aggregates, "heart_rate", epochId, day, record.value);
   }
 
   onPhase?.("metrics", performance.now() - phaseStart);
@@ -825,7 +657,15 @@ function derivePresenceAndValues(
     onPhase?.("stints", performance.now() - phaseStart);
     phaseStart = performance.now();
     db.exec("DELETE FROM metric_values; DELETE FROM nights;");
-    const nightRows = persistNightValues(db, nights, zones, aggregates, stints, exportAt);
+    const nightRows = persistNightValues(
+      db,
+      nights,
+      zones,
+      aggregates,
+      stints,
+      exportAt,
+      exportDay,
+    );
     if (ownsTransaction) db.exec("COMMIT");
     onPhase?.("persist", performance.now() - phaseStart);
     return nightRows;
@@ -844,7 +684,7 @@ function rebuildEpochTableStints(
   const presence = new Map(aggregates);
   countPresence(presence, nights);
   const units = metricUnitRows(presence, epochKinds);
-  const stints = deriveStints(units, () => true);
+  const stints = deriveStints(units);
   persistStints(db, stints);
   return stints;
 }
@@ -857,12 +697,7 @@ export function rebuildNightPipeline(db: Database, onPhase?: PhaseObserver): Der
   const persistedEpochs = rebuildEpochs(db);
   onPhase?.("epochs", performance.now() - start);
   start = performance.now();
-  const nights = derivePresenceAndValues(db, false, onPhase, persistedEpochs);
+  const nights = derivePresenceAndValues(db, persistedEpochs, onPhase);
   onPhase?.("nights", performance.now() - start);
   return nights;
-}
-
-/** Rebuild nights and metric values using the persisted epoch table; streams relevant records. */
-export function rebuildNights(db: Database): DerivedNight[] {
-  return derivePresenceAndValues(db, false);
 }

@@ -1,4 +1,3 @@
-import type { Database } from "bun:sqlite";
 import { addDays } from "../domain/dates";
 
 export type UnitKind = "night" | "day";
@@ -32,7 +31,7 @@ export interface UsableUnit {
 
 export type UsablePredicate = (unit: UsableUnit) => boolean;
 
-const KIND_PRIORITY: Record<PrimaryKind, number> = { watch: 4, phone: 3, app: 2, other: 1 };
+const KIND_PRIORITY: Record<PrimaryKind, number> = { watch: 3, phone: 2, app: 1, other: 1 };
 const MINOR_WINDOW = 28;
 const MINOR_MINIMUM = 6;
 const SWITCH_RUN = 7;
@@ -98,7 +97,7 @@ function primaryAtStart(
     return nextDay === undefined
       ? null
       : selectCandidate(
-          units.filter((unit) => unit.unitDay === nextDay),
+          units.filter((unit) => unit.unitDay === nextDay && nonMinor.has(unit.epochId)),
           units[0]?.metric ?? "",
         );
   }
@@ -129,7 +128,7 @@ function selectCandidate(candidates: readonly MetricUnit[], metric: string): num
 }
 
 /** Derive non-minor candidates, sticky primaries and their stint boundaries. */
-export function deriveStints(units: readonly MetricUnit[], _usable: UsablePredicate): Stint[] {
+export function deriveStints(units: readonly MetricUnit[]): Stint[] {
   const byMetric = new Map<string, MetricUnit[]>();
   for (const unit of units) byMetric.set(unit.metric, [...(byMetric.get(unit.metric) ?? []), unit]);
   const result: Stint[] = [];
@@ -158,7 +157,7 @@ export function deriveStints(units: readonly MetricUnit[], _usable: UsablePredic
     for (let index = days.indexOf(startDay) + 1; index < days.length; index++) {
       const day = days[index];
       if (day === undefined) continue;
-      let choice: { day: string; epochId: number } | null = null;
+      const qualifying: Array<{ day: string; epochId: number; priority: number }> = [];
       for (const candidateId of candidateEpochIds) {
         if (candidateId === primary) continue;
         const candidateDays = candidateDaysByEpoch.get(candidateId);
@@ -172,13 +171,18 @@ export function deriveStints(units: readonly MetricUnit[], _usable: UsablePredic
         const incumbentKind = kindByEpoch.get(primary) ?? "other";
         const higher = KIND_PRIORITY[candidateKind] > KIND_PRIORITY[incumbentKind];
         const incumbentDays = candidateDaysByEpoch.get(primary) ?? new Set<string>();
-        const sameKindAndAbsent =
-          candidateKind === incumbentKind &&
+        const sameRankAndAbsent =
+          KIND_PRIORITY[candidateKind] === KIND_PRIORITY[incumbentKind] &&
           Array.from({ length: SWITCH_RUN }, (_, offset) => days[index + offset]).every(
             (runDay) => runDay !== undefined && !incumbentDays.has(runDay),
           );
-        if (higher || sameKindAndAbsent) choice = { day, epochId: candidateId };
+        if (higher || sameRankAndAbsent)
+          qualifying.push({ day, epochId: candidateId, priority: KIND_PRIORITY[candidateKind] });
       }
+      const preferred = qualifying.sort(
+        (a, b) => b.priority - a.priority || a.epochId - b.epochId,
+      )[0];
+      let choice = preferred ? { day: preferred.day, epochId: preferred.epochId } : null;
       if (choice === null && index + INCUMBENT_GAP <= days.length) {
         const incumbentDays = candidateDaysByEpoch.get(primary) ?? new Set<string>();
         let gapHasIncumbent = false;
@@ -192,9 +196,9 @@ export function deriveStints(units: readonly MetricUnit[], _usable: UsablePredic
         if (!gapHasIncumbent) {
           const gap = days.slice(index, index + INCUMBENT_GAP);
           const gapDays = new Set(gap);
-          const other = candidates.find(
-            (unit) => unit.epochId !== primary && gapDays.has(unit.unitDay),
-          );
+          const other = candidates
+            .filter((unit) => unit.epochId !== primary && gapDays.has(unit.unitDay))
+            .sort((a, b) => a.unitDay.localeCompare(b.unitDay) || a.epochId - b.epochId)[0];
           if (other) {
             const otherDays = candidateDaysByEpoch.get(other.epochId) ?? new Set<string>();
             choice = {
@@ -236,35 +240,4 @@ export function deriveStints(units: readonly MetricUnit[], _usable: UsablePredic
   return result.sort(
     (a, b) => a.metric.localeCompare(b.metric) || a.startDay.localeCompare(b.startDay),
   );
-}
-
-/** Keep only values recorded by the primary epoch on each unit; absence stays missing. */
-export function primaryUnits(stints: readonly Stint[], units: readonly MetricUnit[]): MetricUnit[] {
-  return units.filter((unit) => {
-    const stint = stints.find(
-      (candidate) =>
-        candidate.metric === unit.metric &&
-        candidate.startDay <= unit.unitDay &&
-        (candidate.endDay === null || candidate.endDay >= unit.unitDay),
-    );
-    return stint?.epochId === unit.epochId;
-  });
-}
-
-export function rebuildStints(db: Database, usable: UsablePredicate): Stint[] {
-  const units = db
-    .prepare(
-      `SELECT mv.metric, mv.epoch_id AS epochId, e.kind AS epochKind, mv.unit_day AS unitDay,
-            mv.unit_kind AS unitKind, mv.value, mv.n
-     FROM metric_values mv JOIN epochs e ON e.id = mv.epoch_id
-     ORDER BY mv.metric, mv.unit_day, mv.epoch_id`,
-    )
-    .all() as MetricUnit[];
-  const stints = deriveStints(units, usable);
-  db.exec("DELETE FROM stints");
-  const insert = db.prepare(
-    "INSERT INTO stints (metric, epoch_id, start_day, end_day) VALUES (?, ?, ?, ?)",
-  );
-  for (const stint of stints) insert.run(stint.metric, stint.epochId, stint.startDay, stint.endDay);
-  return stints;
 }

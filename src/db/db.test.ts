@@ -27,6 +27,7 @@ describe("migrations", () => {
       "0002_capture.sql",
       "0003_derived.sql",
       "0004_imports.sql",
+      "0005_import_progress_summary.sql",
     ]);
     const second = applyMigrations(db);
     expect(second).toEqual([]);
@@ -55,7 +56,7 @@ describe("migrations", () => {
        VALUES ('Synthetic Watch', '2026-01-06T00:00:00.000Z', '2026-01-06T00:01:00.000Z', 1, 7)`,
     );
 
-    expect(applyMigrations(db)).toEqual(["0004_imports.sql"]);
+    expect(applyMigrations(db)).toEqual(["0004_imports.sql", "0005_import_progress_summary.sql"]);
 
     const imported = db.query("SELECT id, export_date FROM imports").get() as {
       id: number;
