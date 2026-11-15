@@ -48,7 +48,7 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     expect(item.retryable).toBe(false);
   });
 
-  test("briefing, web shell and MCP initialize answer on the same origin", async () => {
+  test("changes, web shell and MCP initialize answer on the same origin", async () => {
     const dbPath = join(workdir, "midori.db");
     writeFileSync(
       join(workdir, "fixture.zip"),
@@ -106,7 +106,6 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     });
     const toolBody = (await tools.json()) as { result?: { tools?: { name: string }[] } };
     const names = toolBody.result?.tools?.map((t) => t.name) ?? [];
-    expect(names).toContain("briefing");
-    expect(names).toContain("deviations");
+    expect(names).toEqual(["changes", "metric_series", "nights", "epochs", "list_imports"]);
   });
 });
