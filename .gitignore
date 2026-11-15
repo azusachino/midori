@@ -35,3 +35,7 @@ playwright-report/
 # scratch from daily/findings stats tests
 .tmp-daily-test/
 .tmp-findings-test/
+
+# agent worktrees and scratch
+.worktrees/
+.tmp/
