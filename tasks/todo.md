@@ -246,12 +246,28 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
 ### Task 14 — Upload/job route [delegable]
 
 - AC:
-  - [ ] POST /api/imports → 202 + id; transitions queued→unpacking→parsing→storing→done|failed
-  - [ ] Single-import lock (409 while running); spool to temp + atomic rename; size/time limits
-  - [ ] Error payloads typed; retry idempotent (same pipeline as CLI)
-  - [ ] Synthetic-zip API integration test in CI
-- Verify: integration test incl. lock contention + failure injection.
-- Deps: T13. Files: src/http/import.ts. Scope: M
+  - [x] POST /api/imports → 202 + id; transitions queued→unpacking→parsing→storing→done|failed
+  - [x] Single-import lock (409 while running); spool to temp + atomic rename; size/time limits
+  - [x] Error payloads typed; retry idempotent (same pipeline as CLI)
+  - [x] Synthetic-zip API integration test in CI
+- Verify: integration test incl. lock contention + failure injection. DONE by worker t81
+  (claude-haiku-5-5 via herdr, 6min) + lead review 2026-11-15: src/http/import.ts
+  mountImportRoutes(app, {db, dbPath, archiveDir, spool?/backup?/runImport?/timeoutMs?/maxBytes?})
+  — raw-body zip upload (application/zip|octet-stream, else 415), Content-Length check 413 +
+  spool byte-count enforcement, temp+atomic rename into data/spool/<uuid>.zip, queued row then
+  202 {importId,status} BEFORE work; job = runImport({importId, signal}) with 10min AbortController
+  checked at record boundaries; in-process lock claimed synchronously pre-await (409 retryable
+  while held); post-success backup+prune+archive (added in lead review; failures logged, never flip
+  done→failed); failures before pipeline marked failed with status-guard. runImport gained
+  RunImportOptions {importId?, signal?} + ROLLBACK-before-failed fix (worker-verified: without it
+  malformed XML left status stuck at parsing; also fixes old wrong-row failed update).
+  14 tests tests/integration/upload.test.ts (happy path incl. real pipeline; corrupt zip; malformed
+  XML; retry; idempotent re-upload; 409 contention incl. concurrent double-POST; lock release on
+  throw; timeout abort; 413 honest+lying length; 415; read routes with upload mounted).
+  Worker deviations accepted: zip name via x-zip-name header (sanitized basename, default
+  upload.zip); failed import deletes spooled zip (retry = re-upload); cooperative abort only.
+  Commit ac98d80.
+- Deps: T13. Files: src/http/import.ts, tests/integration/upload.test.ts. Scope: M
 
 ### Task 15 — Web foundation [delegable]
 
@@ -297,13 +313,31 @@ status/evidence links, as-of everywhere, investigate reproduces the spike story.
 
 - AC: read-only tools list_imports, list_sources, metric_daily, deviations, findings, briefing;
   contract shared with REST; as-of + trust in every payload.
-- Verify: scripted MCP client session asserts tool outputs.
+- Verify: scripted MCP client session asserts tool outputs. DONE by lead 2026-11-15:
+  src/http/queries.ts (contract extraction — REST routes now thin Hono wiring over the same
+  queries the MCP tools call) + src/mcp/server.ts createMcpServer({db}) with 6 read-only tools
+  (briefing described as "start here"; metric_daily validates against METRICS → isError + known
+  list; deviations takes days [1,365] default 14; findings takes optional since=YYYY-MM-DD);
+  src/cli.ts mcp [--db] subcommand over StdioServerTransport; openDb(path, {readonly: true})
+  skips WAL/migrations (read-only handle). @modelcontextprotocol/sdk 1.32.2 + zod (stack-approved).
+  Tests src/mcp/server.test.ts: real Client + InMemoryTransport pair over imported spike corpus,
+  6 tests asserting as-of/trust travel + no wrist-temp z≥2.5 + since filtering. Live stdio smoke
+  on real db: initialize + tools/list + tools/call briefing → anchor 2026-11-07, 37 findings,
+  13 as-of entries. Commit 7390f3a.
 - Deps: T13. Files: src/mcp/. Scope: M
 
 ### Task 21 — Streamable HTTP transport [delegable]
 
 - AC: same tools over streamable HTTP mounted on the Hono app; tailnet-only binding documented.
-- Verify: MCP inspector/HTTP client against local server.
+- Verify: MCP inspector/HTTP client against local server. DONE by lead 2026-11-15:
+  src/mcp/http.ts mountMcp(app, {db, path?}) — stateless WebStandardStreamableHTTPServerTransport
+  per POST (enableJsonResponse, no session id; exactOptionalPropertyTypes: omit the key, SDK
+  types don't accept explicit undefined), fresh McpServer per request, Cache-Control no-store;
+  GET/DELETE → 405 typed (no SSE stream, no sessions). Security boundary = deployment binding:
+  tailnet-only per design.md Deployment, no auth layer — documented in the module header.
+  Tests src/mcp/http.test.ts: real Client + StreamableHTTPClientTransport against Bun.serve on
+  ephemeral port over imported spike corpus (handshake + briefing tool round-trip), raw fetch
+  initialize asserts no mcp-session-id + serverInfo.name=midori, 405s. Commit 7390f3a..
 - Deps: T20. Files: src/mcp/http.ts. Scope: S
 
 **Checkpoint 4** — a pi session answers "what changed recently and why" using only MCP tools;

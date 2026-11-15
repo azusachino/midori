@@ -58,7 +58,8 @@ export function metricAnchor(db: Database, metric: string): string | null {
 export function computeDeviceEvents(db: Database): DeviceEventRow[] {
   const events: DeviceEventRow[] = [];
   const spans = globalSpans(db);
-  const globalLast = spans.reduce((max, s) => (s.lastDay > max ? s.lastDay : max), "");
+  const globalLast =
+    [...spans].sort((a, b) => a.lastDay.localeCompare(b.lastDay)).at(-1)?.lastDay ?? "";
   if (spans.length === 0) return events;
 
   for (const s of spans) {
