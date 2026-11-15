@@ -1,21 +1,31 @@
 import { METRICS } from "@midori/domain/metrics";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import type { EChartsCoreOption } from "echarts/core";
 import { ArrowLeft } from "lucide-react";
 import { type MouseEvent, useCallback } from "react";
 import { apiClient } from "@/api/client";
 import type { MetricRange, MetricSeriesDTO, MetricTab } from "@/api/types";
-import { EChart } from "@/components/EChart";
+import { FindingRow } from "@/components/FindingRow";
 import { LoadingState } from "@/components/LoadingState";
+import { MetricChart } from "@/components/MetricChart";
 import { ReadError } from "@/components/ReadError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { copy } from "@/copy";
+import { displayUnit, unitNounFor } from "@/lib/finding-format";
+import { buildBaselineSummary, buildRecentUnitRows, nextWiderRange } from "@/lib/metric-chart";
 import { isKnownMetric, OVERNIGHT_ORDER } from "@/lib/metrics";
-import { type ChartTheme, epochColor } from "@/lib/theme";
 import { useAsyncQuery } from "@/lib/useAsyncQuery";
+import { cn } from "@/lib/utils";
 
 const RANGES: readonly MetricRange[] = ["90d", "180d", "1y", "all"];
 
@@ -31,55 +41,6 @@ export function MetricDetailPage() {
     return apiClient.metricSeries(key, search.range, signal);
   }, `${key}:${search.range}`);
 
-  const units = query.status === "ready" ? query.data.units : [];
-  const epochs = query.status === "ready" ? query.data.epochs : [];
-  const unitLabel = query.status === "ready" ? query.data.unit : "";
-
-  const buildOption = useCallback(
-    (theme: ChartTheme): EChartsCoreOption => {
-      const series = epochs.map((epoch, idx) => {
-        const color = epoch.minor ? theme.minor : epochColor(epoch.colorIndex ?? idx, theme.epochs);
-        const data = units.map((u) => (u.epochId === epoch.id ? u.value : null));
-        return {
-          name: epoch.label,
-          type: "line" as const,
-          connectNulls: false,
-          showSymbol: true,
-          symbolSize: epoch.minor ? 4 : 6,
-          lineStyle: { color, width: epoch.minor ? 1 : 1.5 },
-          itemStyle: { color },
-          data,
-        };
-      });
-
-      return {
-        grid: { left: 48, right: 20, top: 24, bottom: 32 },
-        tooltip: {
-          trigger: "axis",
-          backgroundColor: theme.card,
-          borderColor: theme.borderStrong,
-          textStyle: { color: theme.foreground, fontSize: 12 },
-        },
-        xAxis: {
-          type: "category",
-          data: units.map((u) => u.day),
-          axisLine: { lineStyle: { color: theme.borderStrong } },
-          axisLabel: { color: theme.mutedForeground, fontSize: 11 },
-        },
-        yAxis: {
-          type: "value",
-          name: unitLabel,
-          nameTextStyle: { color: theme.mutedForeground, fontSize: 11 },
-          scale: true,
-          splitLine: { lineStyle: { color: theme.border } },
-          axisLabel: { color: theme.mutedForeground, fontSize: 11 },
-        },
-        series,
-      };
-    },
-    [epochs, units, unitLabel],
-  );
-
   const handleTabChange = useCallback(
     (next: string) => {
       const tab: MetricTab = next === "long" ? "long" : "chart";
@@ -92,10 +53,51 @@ export function MetricDetailPage() {
     (event: MouseEvent<HTMLButtonElement>) => {
       const next = event.currentTarget.dataset.range as MetricRange | undefined;
       if (!next) return;
-      void navigate({ search: (prev) => ({ ...prev, range: next }) });
+      void navigate({
+        search: (prev) => {
+          const updated = { ...prev, range: next };
+          delete updated.zoomStart;
+          delete updated.zoomEnd;
+          return updated;
+        },
+      });
     },
     [navigate],
   );
+
+  const handleZoomChange = useCallback(
+    (zoom: { zoomStart: string; zoomEnd: string } | null) => {
+      void navigate({
+        replace: true,
+        search: (prev) => {
+          if (!zoom) {
+            if (!prev.zoomStart && !prev.zoomEnd) return prev;
+            const updated = { ...prev };
+            delete updated.zoomStart;
+            delete updated.zoomEnd;
+            return updated;
+          }
+          if (prev.zoomStart === zoom.zoomStart && prev.zoomEnd === zoom.zoomEnd) {
+            return prev;
+          }
+          return { ...prev, zoomStart: zoom.zoomStart, zoomEnd: zoom.zoomEnd };
+        },
+      });
+    },
+    [navigate],
+  );
+
+  const handleResetZoom = useCallback(() => {
+    void navigate({
+      replace: true,
+      search: (prev) => {
+        const updated = { ...prev };
+        delete updated.zoomStart;
+        delete updated.zoomEnd;
+        return updated;
+      },
+    });
+  }, [navigate]);
 
   if (!known) {
     const knownKeys = Array.from(new Set([...OVERNIGHT_ORDER, ...Object.keys(METRICS)]));
@@ -139,6 +141,12 @@ export function MetricDetailPage() {
 
   const data = query.data;
   const label = copy.metrics[data.metric] ?? data.metric;
+  const unitDisplay = displayUnit(data.metric, data.unit) || data.unit;
+  const noun = unitNounFor(data.kind);
+  const recentRows = buildRecentUnitRows(data, 7);
+  const baselineSummary = buildBaselineSummary(data);
+  const widerRange = nextWiderRange(search.range);
+  const isZoomed = Boolean(search.zoomStart && search.zoomEnd);
 
   return (
     <div className="space-y-5">
@@ -151,7 +159,9 @@ export function MetricDetailPage() {
             </Link>
           </Button>
           <h1 className="text-xl font-semibold tracking-tight">{label}</h1>
-          {data.unit ? <span className="text-sm text-muted-foreground">{data.unit}</span> : null}
+          {unitDisplay ? (
+            <span className="text-sm text-muted-foreground">{unitDisplay}</span>
+          ) : null}
           <Badge variant="secondary">{copy.trust[data.trust]}</Badge>
         </div>
 
@@ -163,69 +173,168 @@ export function MetricDetailPage() {
         </Tabs>
       </div>
 
-      <p className="text-xs text-muted-foreground">{copy.pages.metricDetail.placeholderNote}</p>
+      {data.kind === "trendOnly" ? (
+        <div
+          data-testid="trend-only-note"
+          className="rounded-md border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground"
+        >
+          {copy.pages.metricDetail.trendOnlyNote}
+        </div>
+      ) : data.finding ? (
+        <Card className="overflow-hidden">
+          <FindingRow row={data.finding} mode="header" />
+        </Card>
+      ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-1 rounded-md border border-border bg-card p-1">
-          {RANGES.map((r) => (
-            <Button
-              key={r}
-              data-range={r}
-              variant={search.range === r ? "secondary" : "ghost"}
-              size="sm"
-              onClick={handleRangeClick}
+      <Tabs value={search.tab} className="min-w-0">
+        <TabsContent value="chart" className="min-w-0 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <fieldset
+              aria-label={copy.pages.metricDetail.rangeGroupLabel}
+              className="m-0 inline-flex items-center gap-1 rounded-md border border-border bg-card p-1"
             >
-              {copy.pages.metricDetail.ranges[r]}
-            </Button>
-          ))}
-        </div>
+              {RANGES.map((r) => (
+                <Button
+                  key={r}
+                  data-range={r}
+                  aria-pressed={search.range === r}
+                  variant={search.range === r ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={handleRangeClick}
+                >
+                  {copy.pages.metricDetail.ranges[r]}
+                </Button>
+              ))}
+            </fieldset>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          {data.epochs.map((epoch, idx) => (
-            <span key={epoch.id} className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className="inline-block h-2 w-2 rounded-full"
-                style={{
-                  backgroundColor: epoch.minor ? undefined : epochColor(epoch.colorIndex ?? idx),
-                }}
-              />
-              <span>{epoch.label}</span>
-            </span>
-          ))}
-        </div>
-      </div>
+            {isZoomed ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="reset-zoom-btn"
+                onClick={handleResetZoom}
+              >
+                {copy.pages.metricDetail.resetZoom}
+              </Button>
+            ) : null}
+          </div>
 
-      <Tabs value={search.tab}>
-        <TabsContent value="chart">
-          <Card>
-            <CardContent className="pt-4">
-              <EChart
-                data-testid="metric-echart"
-                height={260}
-                buildOption={buildOption}
-                summary={copy.chart.smokeSummary(label, data.units.length)}
-                table={{
-                  columns: [
-                    { key: "day", label: copy.chart.dayCol },
-                    { key: "value", label: copy.chart.valueCol },
-                    { key: "usable", label: copy.chart.usableCol },
-                  ],
-                  rows: data.units.map((u) => ({
-                    day: u.day,
-                    value: u.value,
-                    usable: u.usable,
-                  })),
-                }}
-              />
-            </CardContent>
-          </Card>
+          {data.units.length === 0 ? (
+            <Card data-testid="empty-range-state">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {copy.pages.metricDetail.emptyRange(noun)}
+                </CardTitle>
+                <CardDescription>{copy.pages.metricDetail.ranges[search.range]}</CardDescription>
+              </CardHeader>
+              {widerRange ? (
+                <CardContent>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-range={widerRange}
+                    data-testid="widen-range-btn"
+                    onClick={handleRangeClick}
+                  >
+                    {copy.pages.metricDetail.widenRangeCta(
+                      copy.pages.metricDetail.ranges[widerRange],
+                    )}
+                  </Button>
+                </CardContent>
+              ) : null}
+            </Card>
+          ) : (
+            <>
+              <Card className="min-w-0 overflow-hidden">
+                <CardContent className="pt-4">
+                  <MetricChart
+                    series={data}
+                    zoomStart={search.zoomStart}
+                    zoomEnd={search.zoomEnd}
+                    onZoomChange={handleZoomChange}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card data-testid="recent-units-card" className="min-w-0 overflow-hidden">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">
+                    {copy.pages.metricDetail.recentUnitsTitle(noun)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <Table data-testid="recent-units-table">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="px-2 sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colDay}
+                        </TableHead>
+                        <TableHead className="px-2 sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colValue}
+                        </TableHead>
+                        <TableHead className="px-2 sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colZ}
+                        </TableHead>
+                        <TableHead className="hidden px-2 sm:table-cell sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colDevice}
+                        </TableHead>
+                        <TableHead className="px-2 sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colNotes}
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recentRows.map((row) => (
+                        <TableRow key={`${row.day}-${row.deviceLabel}`}>
+                          <TableCell className="px-2 tabular-nums sm:px-3">
+                            {row.dayLabel}
+                          </TableCell>
+                          <TableCell className="px-2 font-medium tabular-nums sm:px-3">
+                            {row.valueText}
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              "px-2 tabular-nums sm:px-3",
+                              row.zTone === "alert" && "text-alert font-medium",
+                              row.zTone === "notable" && "text-notable font-medium",
+                              (row.zTone === "within" || row.zTone === "none") &&
+                                "text-muted-foreground",
+                            )}
+                          >
+                            {row.zText}
+                          </TableCell>
+                          <TableCell className="hidden px-2 text-muted-foreground sm:table-cell sm:px-3">
+                            {row.deviceLabel}
+                          </TableCell>
+                          <TableCell className="px-2 text-xs whitespace-normal text-muted-foreground sm:px-3">
+                            {[row.partialNote, row.tzChange ? copy.chart.tzShiftNote : null]
+                              .filter(Boolean)
+                              .join(" · ") || "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  <p
+                    data-testid="baseline-summary"
+                    className="border-t border-border pt-3 text-xs text-muted-foreground tabular-nums"
+                  >
+                    {baselineSummary}
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
+
         <TabsContent value="long">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">{copy.pages.metricDetail.tabs.long}</CardTitle>
-              <CardDescription>{copy.pages.metricDetail.placeholderNote}</CardDescription>
+              <CardDescription>{copy.pages.metricDetail.longViewPlaceholder}</CardDescription>
             </CardHeader>
           </Card>
         </TabsContent>

@@ -486,9 +486,274 @@ export function metricsIndexStub(hasImports = true): MetricsIndexDTO {
   };
 }
 
+function rangeWindowDays(range: MetricRange): number {
+  if (range === "90d") return 90;
+  if (range === "180d") return 180;
+  if (range === "1y") return 365;
+  return 210;
+}
+
+function deterministicNoise(index: number, amplitude: number): number {
+  return Math.sin(index * 1.15) * amplitude * 0.65 + Math.cos(index * 0.45) * amplitude * 0.35;
+}
+
+interface MetricFixtureSpec {
+  baseA: number;
+  baseB: number;
+  recentShift: number;
+  spread: number;
+  seamKind: "offset" | "step";
+  seamValue: number;
+  bandLowOffset: number;
+  bandHighOffset: number;
+  bandMode: "both" | "watchAOnly" | "none";
+}
+
+function metricFixtureSpecFor(metric: string, kind: MetricSeriesDTO["kind"]): MetricFixtureSpec {
+  if (metric === "wrist_temp") {
+    return {
+      baseA: -0.28,
+      baseB: 0.24,
+      recentShift: 0.04,
+      spread: 0.14,
+      seamKind: "step",
+      seamValue: 0.52,
+      bandLowOffset: -0.18,
+      bandHighOffset: 0.17,
+      bandMode: "watchAOnly",
+    };
+  }
+  if (metric === "hrv_sdnn") {
+    return {
+      baseA: 60,
+      baseB: 55,
+      recentShift: -13,
+      spread: 6.5,
+      seamKind: "offset",
+      seamValue: -5,
+      bandLowOffset: -7,
+      bandHighOffset: 7,
+      bandMode: "both",
+    };
+  }
+  if (metric === "spo2" || metric === "hrv_rmssd") {
+    return {
+      baseA: metric === "spo2" ? 97.4 : 42,
+      baseB: metric === "spo2" ? 97.6 : 44,
+      recentShift: 0.2,
+      spread: metric === "spo2" ? 0.6 : 5,
+      seamKind: "offset",
+      seamValue: 0.2,
+      bandLowOffset: -1,
+      bandHighOffset: 1,
+      bandMode: "none",
+    };
+  }
+  if (kind === "trendOnly") {
+    return {
+      baseA: 42.5,
+      baseB: 45.2,
+      recentShift: 0.8,
+      spread: 1.1,
+      seamKind: "step",
+      seamValue: 2.7,
+      bandLowOffset: -1.5,
+      bandHighOffset: 1.5,
+      bandMode: "none",
+    };
+  }
+  if (metric === "steps") {
+    return {
+      baseA: 6200,
+      baseB: 6000,
+      recentShift: 3100,
+      spread: 1100,
+      seamKind: "offset",
+      seamValue: -200,
+      bandLowOffset: -1800,
+      bandHighOffset: 1800,
+      bandMode: "both",
+    };
+  }
+  if (metric === "active_kj") {
+    return {
+      baseA: 1700,
+      baseB: 1650,
+      recentShift: 150,
+      spread: 260,
+      seamKind: "offset",
+      seamValue: -50,
+      bandLowOffset: -450,
+      bandHighOffset: 450,
+      bandMode: "both",
+    };
+  }
+  const defaults: Record<string, { base: number; spread: number; shift: number }> = {
+    sleep_h: { base: 7.1, spread: 0.55, shift: -0.2 },
+    deep_h: { base: 0.9, spread: 0.2, shift: 0.1 },
+    rem_h: { base: 1.4, spread: 0.25, shift: 0.1 },
+    sleep_hr: { base: 54, spread: 2.4, shift: 4.0 },
+    rhr: { base: 55, spread: 2.2, shift: 1.0 },
+    resp_rate: { base: 14.5, spread: 0.6, shift: -0.2 },
+    heart_rate: { base: 70, spread: 3.5, shift: 1.0 },
+  };
+  const d = defaults[metric] ?? { base: 50, spread: 4, shift: 0 };
+  return {
+    baseA: d.base,
+    baseB: d.base,
+    recentShift: d.shift,
+    spread: d.spread,
+    seamKind: "offset",
+    seamValue: 0,
+    bandLowOffset: -d.spread * 1.4,
+    bandHighOffset: d.spread * 1.4,
+    bandMode: "both",
+  };
+}
+
+function roundMetricVal(value: number, metric: string): number {
+  if (metric === "steps" || metric === "active_kj") return Math.round(value);
+  if (metric === "wrist_temp") return Number(value.toFixed(2));
+  return Number(value.toFixed(1));
+}
+
 export function metricSeriesStub(metric: string, range: MetricRange = "180d"): MetricSeriesDTO {
   const spec = METRICS[metric];
   const kind = metricKindFor(metric);
+  const asOfDay = "2026-03-01";
+  const seamDay = "2026-02-22";
+  const totalDays = 210;
+  const visibleDays = rangeWindowDays(range);
+  const cutoffDay = isoDayOffset(asOfDay, -(Math.min(visibleDays, totalDays) - 1));
+  const fx = metricFixtureSpecFor(metric, kind);
+
+  const epochs: MetricSeriesDTO["epochs"] = [
+    {
+      id: 1,
+      sourceName: "Synthetic Watch A",
+      deviceHw: "Watch6,1",
+      label: "Synthetic Watch A",
+      kind: "watch",
+      colorIndex: 0,
+      minor: false,
+    },
+    {
+      id: 2,
+      sourceName: "Synthetic Watch B",
+      deviceHw: "Watch7,5",
+      label: "Synthetic Watch B",
+      kind: "watch",
+      colorIndex: 1,
+      minor: false,
+    },
+    {
+      id: 3,
+      sourceName: "Synthetic Phone App",
+      deviceHw: "iPhone16,1",
+      label: "Synthetic Phone App",
+      kind: "phone",
+      colorIndex: null,
+      minor: true,
+    },
+  ];
+
+  const units: MetricSeriesDTO["units"] = [];
+  const band: MetricSeriesDTO["band"] = [];
+  const minorDays = new Set(["2026-01-20", "2026-02-05", "2026-02-14", "2026-02-25"]);
+  const gapDay = "2026-02-10";
+
+  for (let i = totalDays - 1; i >= 0; i--) {
+    const day = isoDayOffset(asOfDay, -i);
+    if (day < cutoffDay) continue;
+
+    const isWatchB = day >= seamDay;
+    const isRecent = day >= "2026-02-23";
+    const epochId = isWatchB ? 2 : 1;
+    const base = isWatchB ? fx.baseB : fx.baseA;
+
+    if (day === gapDay) {
+      units.push({
+        day,
+        epochId,
+        value: null,
+        n: 0,
+        usable: false,
+        partialReason: "missing",
+        tzChange: false,
+        z: null,
+        isRecent: false,
+      });
+    } else {
+      const shift = isRecent ? fx.recentShift : 0;
+      const raw = base + shift + deterministicNoise(i, fx.spread * 0.55);
+      const value = roundMetricVal(raw, metric);
+      const isExportCut = day === "2026-03-01";
+      const isBelowMin = day === "2026-02-24";
+      const usable = !(isExportCut || isBelowMin);
+      const partialReason = isExportCut ? "export_cut" : isBelowMin ? "below_minimum" : null;
+      const sigmaEst = Math.max(0.05, fx.spread * 0.65);
+      const z = fx.bandMode === "none" ? null : Number(((value - base) / sigmaEst).toFixed(2));
+
+      units.push({
+        day,
+        epochId,
+        value,
+        n: usable ? 8 : 2,
+        usable,
+        partialReason,
+        tzChange: day === "2026-02-27",
+        z,
+        isRecent,
+      });
+    }
+
+    const includeBandForDay = fx.bandMode === "both" || (fx.bandMode === "watchAOnly" && !isWatchB);
+    if (includeBandForDay) {
+      const medianBase = isWatchB ? fx.baseB : fx.baseA;
+      band.push({
+        day,
+        low: roundMetricVal(medianBase + fx.bandLowOffset, metric),
+        high: roundMetricVal(medianBase + fx.bandHighOffset, metric),
+        median: roundMetricVal(medianBase, metric),
+      });
+    }
+
+    if (minorDays.has(day)) {
+      const minorRaw = base + fx.spread * 0.75 + deterministicNoise(i + 7, fx.spread * 0.25);
+      units.push({
+        day,
+        epochId: 3,
+        value: roundMetricVal(minorRaw, metric),
+        n: 2,
+        usable: true,
+        partialReason: null,
+        tzChange: false,
+        z: null,
+        isRecent: false,
+      });
+    }
+  }
+
+  const allSeam = {
+    seamDay,
+    fromEpochId: 1,
+    toEpochId: 2,
+    kind: fx.seamKind,
+    value: fx.seamValue,
+    nOld: 28,
+    nNew: 8,
+  } as const;
+
+  const allOsUpdates = [
+    { epochId: 1, day: "2026-01-12", fromSw: "10.2", toSw: "10.4" },
+    { epochId: 2, day: "2026-02-26", fromSw: "10.4", toSw: "11.0" },
+  ];
+
+  const stints = [
+    { epochId: 1, startDay: cutoffDay < seamDay ? cutoffDay : "2026-02-15", endDay: "2026-02-21" },
+    { epochId: 2, startDay: seamDay, endDay: asOfDay },
+  ].filter((s) => s.endDay >= cutoffDay);
+
   return {
     metric,
     kind,
@@ -496,55 +761,28 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
     trust: spec?.trust ?? "moderate",
     trustNote: spec?.trustNote ?? "Trend metric.",
     range,
-    asOfDay: "2026-03-01",
+    asOfDay,
     finding: kind === "trendOnly" ? null : buildStubFinding(metric),
-    epochs: [
-      {
-        id: 1,
-        sourceName: "Synthetic Watch A",
-        deviceHw: "Watch6,1",
-        label: "Synthetic Watch A",
-        kind: "watch",
-        colorIndex: 0,
-        minor: false,
-      },
-      {
-        id: 2,
-        sourceName: "Synthetic Watch B",
-        deviceHw: "Watch7,5",
-        label: "Synthetic Watch B",
-        kind: "watch",
-        colorIndex: 1,
-        minor: false,
-      },
-    ],
-    units: SYNTHETIC_DAYS.map((day, idx) => ({
-      day,
-      epochId: idx < 7 ? 1 : 2,
-      value: SYNTHETIC_WRIST_TEMP_VALUES[idx] ?? 36.4,
-      n: 4,
-      usable: true,
-      partialReason: null,
-      tzChange: false,
-      z: null,
-      isRecent: idx >= 8,
-    })),
+    epochs,
+    units,
+    band,
+    stints,
+    seams: seamDay >= cutoffDay ? [allSeam] : [],
+    osUpdates: allOsUpdates.filter((u) => u.day >= cutoffDay),
+  };
+}
+
+export function emptyRangeMetricSeriesStub(
+  metric: string,
+  range: MetricRange = "90d",
+): MetricSeriesDTO {
+  const base = metricSeriesStub(metric, range);
+  return {
+    ...base,
+    units: [],
     band: [],
-    stints: [
-      { epochId: 1, startDay: "2026-02-15", endDay: "2026-02-21" },
-      { epochId: 2, startDay: "2026-02-22", endDay: "2026-03-01" },
-    ],
-    seams: [
-      {
-        seamDay: "2026-02-22",
-        fromEpochId: 1,
-        toEpochId: 2,
-        kind: "step",
-        value: 0.52,
-        nOld: 7,
-        nNew: 8,
-      },
-    ],
+    stints: [],
+    seams: [],
     osUpdates: [],
   };
 }

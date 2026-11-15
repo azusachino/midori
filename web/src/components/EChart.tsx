@@ -1,5 +1,13 @@
-import { LineChart } from "echarts/charts";
-import { GridComponent, TooltipComponent } from "echarts/components";
+import { CustomChart, LineChart, ScatterChart } from "echarts/charts";
+import {
+  DataZoomComponent,
+  GridComponent,
+  LegendComponent,
+  MarkAreaComponent,
+  MarkLineComponent,
+  MarkPointComponent,
+  TooltipComponent,
+} from "echarts/components";
 import type { EChartsCoreOption, EChartsType } from "echarts/core";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
@@ -7,7 +15,19 @@ import { useEffect, useRef } from "react";
 import { type ChartTheme, readChartTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+echarts.use([
+  LineChart,
+  ScatterChart,
+  CustomChart,
+  GridComponent,
+  TooltipComponent,
+  MarkAreaComponent,
+  MarkLineComponent,
+  MarkPointComponent,
+  DataZoomComponent,
+  LegendComponent,
+  CanvasRenderer,
+]);
 
 export interface AccessibleTableColumn {
   key: string;
@@ -19,6 +39,13 @@ export interface AccessibleTableData {
   rows: ReadonlyArray<Record<string, string | number | boolean | null | undefined>>;
 }
 
+export interface EChartZoomEvent {
+  start: number;
+  end: number;
+  startValue?: string | number | undefined;
+  endValue?: string | number | undefined;
+}
+
 export interface EChartProps {
   /** Builds the ECharts option using the resolved CSS-variable theme. */
   buildOption: (theme: ChartTheme) => EChartsCoreOption;
@@ -26,9 +53,18 @@ export interface EChartProps {
   summary: string;
   /** Optional tabular mirror rendered in a visually hidden table for screen readers. */
   table?: AccessibleTableData;
+  /** Called after interactive dataZoom slider/inside gestures complete. */
+  onDataZoom?: (event: EChartZoomEvent) => void;
   className?: string;
   height?: number;
   "data-testid"?: string;
+}
+
+interface RawDataZoomOption {
+  start?: number;
+  end?: number;
+  startValue?: string | number;
+  endValue?: string | number;
 }
 
 /**
@@ -39,12 +75,15 @@ export function EChart({
   buildOption,
   summary,
   table,
+  onDataZoom,
   className,
   height = 240,
   "data-testid": testId,
 }: EChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<EChartsType | null>(null);
+  const onDataZoomRef = useRef(onDataZoom);
+  onDataZoomRef.current = onDataZoom;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -52,6 +91,29 @@ export function EChart({
 
     const chart = echarts.init(el, undefined, { renderer: "canvas" });
     instanceRef.current = chart;
+
+    chart.on("datazoom", (rawEvent: unknown) => {
+      const handler = onDataZoomRef.current;
+      if (!handler) return;
+      const opt = chart.getOption() as { dataZoom?: RawDataZoomOption[] } | undefined;
+      const resolved = opt?.dataZoom?.[0];
+      const evObj = rawEvent as {
+        batch?: Array<{ start?: number; end?: number; startValue?: number; endValue?: number }>;
+        start?: number;
+        end?: number;
+        startValue?: number;
+        endValue?: number;
+      };
+      const firstBatch = evObj.batch?.[0];
+      const start = firstBatch?.start ?? evObj.start ?? resolved?.start ?? 0;
+      const end = firstBatch?.end ?? evObj.end ?? resolved?.end ?? 100;
+      handler({
+        start,
+        end,
+        startValue: firstBatch?.startValue ?? evObj.startValue ?? resolved?.startValue,
+        endValue: firstBatch?.endValue ?? evObj.endValue ?? resolved?.endValue,
+      });
+    });
 
     const ro =
       typeof ResizeObserver !== "undefined"
@@ -86,40 +148,45 @@ export function EChart({
   }, [buildOption]);
 
   return (
-    <figure className={cn("w-full", className)} data-testid={testId}>
+    <figure
+      className={cn("relative w-full min-w-0 overflow-hidden", className)}
+      data-testid={testId}
+    >
       <div
         ref={containerRef}
         role="img"
         aria-label={summary}
         style={{ height: `${height}px` }}
-        className="w-full"
+        className="w-full overflow-hidden"
       />
       <figcaption className="sr-only">{summary}</figcaption>
       {table && table.rows.length > 0 ? (
-        <table className="sr-only">
-          <caption>{summary}</caption>
-          <thead>
-            <tr>
-              {table.columns.map((col) => (
-                <th key={col.key} scope="col">
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {table.rows.map((row) => {
-              const rowKey = table.columns.map((c) => String(row[c.key] ?? "")).join("|");
-              return (
-                <tr key={rowKey}>
-                  {table.columns.map((col) => (
-                    <td key={col.key}>{String(row[col.key] ?? "")}</td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="sr-only">
+          <table>
+            <caption>{summary}</caption>
+            <thead>
+              <tr>
+                {table.columns.map((col) => (
+                  <th key={col.key} scope="col">
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row) => {
+                const rowKey = table.columns.map((c) => String(row[c.key] ?? "")).join("|");
+                return (
+                  <tr key={rowKey}>
+                    {table.columns.map((col) => (
+                      <td key={col.key}>{String(row[col.key] ?? "")}</td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </figure>
   );

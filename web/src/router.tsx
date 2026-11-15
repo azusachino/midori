@@ -14,6 +14,8 @@ export interface MetricDetailSearch {
   range: MetricRange;
   tab: MetricTab;
   night?: string | undefined;
+  zoomStart?: string | undefined;
+  zoomEnd?: string | undefined;
 }
 
 const VALID_RANGES = new Set<MetricRange>(["90d", "180d", "1y", "all"]);
@@ -36,7 +38,21 @@ function validateMetricSearch(raw: Record<string, unknown>): MetricDetailSearch 
   const rawNight = raw.night;
   const night = typeof rawNight === "string" && DAY_RE.test(rawNight) ? rawNight : undefined;
 
-  return night === undefined ? { range, tab } : { range, tab, night };
+  const rawZoomStart = raw.zoomStart;
+  const zoomStart =
+    typeof rawZoomStart === "string" && DAY_RE.test(rawZoomStart) ? rawZoomStart : undefined;
+
+  const rawZoomEnd = raw.zoomEnd;
+  const zoomEnd =
+    typeof rawZoomEnd === "string" && DAY_RE.test(rawZoomEnd) ? rawZoomEnd : undefined;
+
+  const result: MetricDetailSearch = { range, tab };
+  if (night !== undefined) result.night = night;
+  if (zoomStart !== undefined && zoomEnd !== undefined) {
+    result.zoomStart = zoomStart;
+    result.zoomEnd = zoomEnd;
+  }
+  return result;
 }
 
 const rootRoute = createRootRoute({
