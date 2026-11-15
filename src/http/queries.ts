@@ -471,9 +471,9 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
       `SELECT s.seam_day seamDay,s.kind,s.value,s.n_old nOld,s.n_new nNew,
         (SELECT epoch_id FROM stints WHERE metric=s.metric AND start_day < s.seam_day ORDER BY start_day DESC LIMIT 1) fromEpochId,
         (SELECT epoch_id FROM stints WHERE metric=s.metric AND start_day = s.seam_day ORDER BY start_day DESC LIMIT 1) toEpochId
-       FROM seam_steps s WHERE s.metric=? ORDER BY s.seam_day`,
+       FROM seam_steps s WHERE s.metric=? AND s.seam_day<=? ${from ? "AND s.seam_day>=?" : ""} ORDER BY s.seam_day`,
     )
-    .all(metric) as {
+    .all(...(from ? [metric, day ?? "9999-12-31", from] : [metric, day ?? "9999-12-31"])) as {
     seamDay: string;
     kind: "offset" | "step";
     value: number;
@@ -484,9 +484,17 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
   }[];
   const updateRows = db
     .query(
-      "SELECT epoch_id epochId,day,detail FROM epoch_events WHERE kind='os_update' AND day<=? ORDER BY day",
+      `SELECT ev.epoch_id epochId,ev.day,ev.detail FROM epoch_events ev
+       WHERE ev.kind='os_update' AND ev.day<=? ${from ? "AND ev.day>=?" : ""}
+         AND EXISTS (SELECT 1 FROM stints st WHERE st.metric=? AND st.epoch_id=ev.epoch_id
+           AND st.start_day<=ev.day AND (st.end_day IS NULL OR st.end_day>=ev.day))
+       ORDER BY ev.day`,
     )
-    .all(day ?? "9999-12-31") as { epochId: number; day: string; detail: string }[];
+    .all(...(from ? [day ?? "9999-12-31", from, metric] : [day ?? "9999-12-31", metric])) as {
+    epochId: number;
+    day: string;
+    detail: string;
+  }[];
   return {
     metric,
     kind: spec.kind,
@@ -701,7 +709,6 @@ export function getUnitEvidence(db: Database, metric: string, day: string): Unit
 }
 export function getEpochs(db: Database): EpochsDTO {
   const day = asOf(db);
-  const findings = apiFindings(db);
   const epochTraits = getEpochTraits(db);
   const epochs = db.query("SELECT * FROM epochs ORDER BY first_day,id").all() as {
     id: number;
@@ -733,15 +740,35 @@ export function getEpochs(db: Database): EpochsDTO {
         .map((s) => {
           const stint = db
             .query(
-              "SELECT start_day,end_day FROM stints WHERE metric=? AND epoch_id=? AND start_day<=? AND (end_day IS NULL OR end_day>=?) ORDER BY start_day DESC LIMIT 1",
+              "SELECT id,start_day,end_day FROM stints WHERE metric=? AND epoch_id=? AND start_day<=? AND (end_day IS NULL OR end_day>=?) ORDER BY start_day DESC LIMIT 1",
             )
             .get(s.key, e.id, day ?? "9999-12-31", day ?? "9999-12-31") as {
+            id: number;
             start_day: string;
             end_day: string | null;
           } | null;
-          const metricFinding = findings.find(
-            (finding) => finding.metric === s.key && finding.epochId === e.id,
-          );
+          const role: EpochMetricRoleDTO["role"] = stint
+            ? "primary"
+            : epochTraits.minorByMetric.get(s.key)?.has(e.id)
+              ? "minor"
+              : "candidate";
+          const metricFinding =
+            role === "primary" && stint
+              ? (db
+                  .query("SELECT state FROM findings WHERE metric=? AND stint_id=?")
+                  .get(s.key, stint.id) as { state: string } | null)
+              : null;
+          const currentStintUnits =
+            role === "primary" && stint
+              ? Number(
+                  (
+                    db
+                      .query(`SELECT COUNT(*) AS count FROM metric_values
+                        WHERE metric=? AND epoch_id=? AND unit_day>=? AND unit_day<=? AND usable=1`)
+                      .get(s.key, e.id, stint.start_day, day ?? "9999-12-31") as { count: number }
+                  ).count,
+                )
+              : 0;
           const seam = db
             .query(`SELECT ss.seam_day seamDay,ss.kind,ss.value,ss.n_old nOld,ss.n_new nNew,
           (SELECT epoch_id FROM stints WHERE metric=ss.metric AND start_day<ss.seam_day ORDER BY start_day DESC LIMIT 1) fromEpochId,
@@ -749,25 +776,26 @@ export function getEpochs(db: Database): EpochsDTO {
           FROM seam_steps ss JOIN stints target ON target.metric=ss.metric AND target.start_day=ss.seam_day
           WHERE ss.metric=? AND target.epoch_id=? AND ss.seam_day<=? ORDER BY ss.seam_day DESC LIMIT 1`)
             .get(s.key, e.id, day ?? "9999-12-31") as EpochMetricRoleDTO["seamFromPrevious"];
+          const baselineState: EpochMetricRoleDTO["baselineState"] =
+            role !== "primary"
+              ? null
+              : s.kind === "trendOnly"
+                ? "trend_only"
+                : metricFinding?.state === "warming_up"
+                  ? "warming_up"
+                  : metricFinding?.state === "computed"
+                    ? Math.max(0, Math.min(28, currentStintUnits - 7)) >= 14
+                      ? "full"
+                      : "early"
+                    : "insufficient";
           return {
             metric: s.key,
-            role: (stint
-              ? "primary"
-              : epochTraits.minorByMetric.get(s.key)?.has(e.id)
-                ? "minor"
-                : "candidate") as EpochMetricRoleDTO["role"],
-            baselineState: (s.kind === "trendOnly"
-              ? "trend_only"
-              : metricFinding?.state === "warming_up"
-                ? "warming_up"
-                : metricFinding?.state === "computed"
-                  ? metricFinding.baselineCount >= 14
-                    ? "full"
-                    : "early"
-                  : "insufficient") as EpochMetricRoleDTO["baselineState"],
-            warmup: metricFinding?.warmup
-              ? { current: metricFinding.warmup.current, target: metricFinding.warmup.target }
-              : null,
+            role,
+            baselineState,
+            warmup:
+              role === "primary" && metricFinding?.state === "warming_up"
+                ? { current: currentStintUnits, target: 14 }
+                : null,
             seamFromPrevious: seam,
           };
         });

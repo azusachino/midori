@@ -320,6 +320,28 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - Lead resolved a rebase type conflict: `newEpochs` is `string[]` of new epoch labels.
 `docs/reviews/`.
 
+
+### Slices 9b + 9c — API fixes from UI integration and real-data inspection `[midori-engine]`
+
+- **9b** (`a6d5347`, PR #13): fixed the server defects the UI integration had worked around:
+  - seam `fromEpochId` join
+  - epoch labels = source name
+  - epochs list only metrics they recorded
+  - colorIndex by start order
+  - per-(metric, epoch) minor flag
+  - `range=all` buckets per (epoch, week)
+- **9c** (`eaf333f`, `686367c`): defects found by the lead's real-data screenshot pass:
+  - SpO2 exported as a fraction is now derived in percent, so its 1-point floor applies.
+    Before this, its z was always near 0.
+  - `/api/epochs` baselineState comes from all persisted findings; daytime rows were missing
+    from the Changes list. Null for non-current stints.
+  - seams and OS updates are filtered to the requested range.
+- Lead real-data verification:
+  - SpO2 values 92–99
+  - current watch: 13 `full`, 1 `trend_only`
+  - `hrv_sdnn` 90d: 90 units, 1 seam, 3 OS updates
+  - full import 58 s, 1.29 GB peak RSS: within B-I9 and the 2 GiB limit, but headroom has
+    shrunk since non-primary values are kept. Watch this.
 ## Phase 2 — read API + MCP
 
 ### Slice 9 — REST v1 `[midori-engine]`
