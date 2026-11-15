@@ -64,9 +64,31 @@ export class ImportNotFoundError extends Error {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+export interface XhrProgressEventLike {
+  lengthComputable: boolean;
+  loaded: number;
+  total: number;
+}
+
+export interface XhrLike {
+  upload: {
+    onprogress: ((event: XhrProgressEventLike) => void) | null;
+  };
+  onload: (() => void) | null;
+  onerror: (() => void) | null;
+  onabort: (() => void) | null;
+  status: number;
+  responseText: string;
+  open(method: string, url: string): void;
+  setRequestHeader(name: string, value: string): void;
+  send(body: File | Blob): void;
+  abort(): void;
+}
+
 export interface ApiClientOptions {
   baseUrl?: string;
   fetch?: FetchLike;
+  createXhr?: () => XhrLike;
   /**
    * Override 404 synthetic stub fallback for unit tests.
    * Defaults to `Boolean(import.meta.env?.DEV)` — strictly false in production builds.
@@ -83,6 +105,7 @@ export interface PollOptions {
 export interface UploadOptions {
   name?: string;
   signal?: AbortSignal;
+  onProgress?: (loaded: number, total: number) => void;
 }
 
 export interface ApiClient {
@@ -123,6 +146,93 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const baseUrl = options.baseUrl ?? "";
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
   const fallbackOn404 = options.fallbackOn404 ?? IS_DEV;
+  const xhrFactory: (() => XhrLike) | null =
+    options.createXhr ??
+    (!options.fetch && typeof XMLHttpRequest !== "undefined"
+      ? () => new XMLHttpRequest() as unknown as XhrLike
+      : null);
+
+  function uploadViaXhr(file: File | Blob, opts: UploadOptions): Promise<UploadAcceptedDTO> {
+    return new Promise((resolve, reject) => {
+      if (!xhrFactory) {
+        reject(new ApiError("network", copy.api.networkError));
+        return;
+      }
+      const signal = opts.signal;
+      if (signal?.aborted) {
+        reject(abortError());
+        return;
+      }
+      const xhr = xhrFactory();
+      let settled = false;
+
+      const cleanup = () => {
+        signal?.removeEventListener("abort", onAbort);
+      };
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        xhr.abort();
+        reject(abortError());
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+
+      xhr.upload.onprogress = (event) => {
+        const total = event.lengthComputable && event.total > 0 ? event.total : file.size;
+        opts.onProgress?.(event.loaded, total);
+      };
+
+      xhr.onload = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        let parsed: unknown = null;
+        if (xhr.responseText.length > 0) {
+          try {
+            parsed = JSON.parse(xhr.responseText);
+          } catch {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              reject(new ApiError("parse", copy.api.unknownError, xhr.status));
+              return;
+            }
+          }
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          const body = isErrorBody(parsed) ? parsed : null;
+          reject(new ApiError("http", body?.error ?? copy.api.unknownError, xhr.status, body));
+          return;
+        }
+        if (parsed === null) {
+          reject(new ApiError("parse", copy.api.unknownError, xhr.status));
+          return;
+        }
+        resolve(parsed as UploadAcceptedDTO);
+      };
+
+      xhr.onerror = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new ApiError("network", copy.api.networkError));
+      };
+
+      xhr.onabort = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(abortError());
+      };
+
+      xhr.open("POST", `${baseUrl}/api/imports`);
+      xhr.setRequestHeader("accept", "application/json");
+      xhr.setRequestHeader("content-type", "application/zip");
+      if (opts.name !== undefined) {
+        xhr.setRequestHeader("x-zip-name", opts.name);
+      }
+      xhr.send(file);
+    });
+  }
 
   async function send<T>(path: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
     let res: Response;
@@ -270,6 +380,12 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     },
 
     upload(file, opts = {}) {
+      if (
+        xhrFactory &&
+        (opts.onProgress !== undefined || options.createXhr !== undefined || !options.fetch)
+      ) {
+        return uploadViaXhr(file, opts);
+      }
       const headers: Record<string, string> = {
         accept: "application/json",
         "content-type": "application/zip",

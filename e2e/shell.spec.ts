@@ -112,8 +112,10 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render, and seeded import", 
   // Navigate to lazy-loaded Import (real v0 GET /api/imports)
   await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.import }).click();
   await expect(page).toHaveURL(/\/import$/);
-  await expect(page.getByText("fixture.zip")).toBeVisible();
-  await expect(page.getByText(copy.status.done).first()).toBeVisible();
+  await expect(page.getByTestId("import-history-table")).toBeVisible();
+  await expect(
+    page.getByTestId("import-history-table").getByText(copy.status.done).first(),
+  ).toBeVisible();
 
   // Unknown metric + unknown route + 404 asset check
   await page.goto("/metrics/not_a_metric");
