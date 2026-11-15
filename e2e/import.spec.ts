@@ -180,6 +180,20 @@ test("real server 390px: upload through file input", async ({ page }) => {
   await expect(summary).toBeVisible({ timeout: 15_000 });
   await expect(summary).toContainText("new records");
 
+  const table = page.getByTestId("import-history-table");
+  const statusHeader = table.getByRole("columnheader", { name: copy.pages.import.rowStatus });
+  const firstDone = table.locator("tbody tr").first().getByText(copy.status.done);
+  await expect(statusHeader).toBeVisible();
+  await expect(firstDone).toBeVisible();
+  const statusBox = await statusHeader.boundingBox();
+  const doneBox = await firstDone.boundingBox();
+  expect(statusBox).not.toBeNull();
+  expect(doneBox).not.toBeNull();
+  expect((statusBox?.x ?? 0) >= 0 && (statusBox?.x ?? 0) + (statusBox?.width ?? 0) <= 390).toBe(
+    true,
+  );
+  expect((doneBox?.x ?? 0) >= 0 && (doneBox?.x ?? 0) + (doneBox?.width ?? 0) <= 390).toBe(true);
+
   await snap(page, "s12-summary-390.png");
   await assertNoHorizontalOverflow(page);
   expect(errors).toEqual([]);

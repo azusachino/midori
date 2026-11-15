@@ -624,11 +624,19 @@ export function ImportPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{copy.pages.import.rowWhen}</TableHead>
-                  <TableHead>{copy.pages.import.rowExportDate}</TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    {copy.pages.import.rowExportDate}
+                  </TableHead>
                   <TableHead className="text-right">{copy.pages.import.rowNew}</TableHead>
-                  <TableHead className="text-right">{copy.pages.import.rowKnown}</TableHead>
-                  <TableHead className="text-right">{copy.pages.import.rowNightsAdded}</TableHead>
-                  <TableHead className="text-right">{copy.pages.import.rowDuration}</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">
+                    {copy.pages.import.rowKnown}
+                  </TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">
+                    {copy.pages.import.rowNightsAdded}
+                  </TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">
+                    {copy.pages.import.rowDuration}
+                  </TableHead>
                   <TableHead>{copy.pages.import.rowStatus}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -641,19 +649,19 @@ export function ImportPage() {
                   return (
                     <TableRow key={row.id}>
                       <TableCell className="tabular-nums">{row.createdAt.slice(0, 10)}</TableCell>
-                      <TableCell className="tabular-nums text-muted-foreground">
+                      <TableCell className="hidden tabular-nums text-muted-foreground sm:table-cell">
                         {row.exportDate ? row.exportDate.slice(0, 10) : "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {row.recordsInserted !== null ? row.recordsInserted.toLocaleString() : "—"}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
                         {row.recordsDeduped !== null ? row.recordsDeduped.toLocaleString() : "—"}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
                         {row.newUsableNights != null ? row.newUsableNights.toLocaleString() : "—"}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
                         {formatDurationMs(row.durationMs)}
                       </TableCell>
                       <TableCell>
