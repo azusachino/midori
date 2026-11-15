@@ -1,11 +1,17 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { boundarySpec } from "../../tests/fixtures/boundary";
 import { generalSpec, SLEEP_APP, WATCH } from "../../tests/fixtures/general";
 import { SLEEP_VALUE } from "../../tests/fixtures/model";
-import { parseHealthKitDate } from "../domain/dates";
+import { applyMigrations } from "../db/db";
+import { instantInZone, parseHealthKitDate, zoneLocalToUtc } from "../domain/dates";
 import {
   assembleNights,
+  continuesNight,
+  exportCutReason,
+  inHrvNightWindow,
   nightKeyForSleepRecord,
+  rebuildNightPipeline,
   type SleepRecordInput,
   type SleepStage,
 } from "./nights";
@@ -51,7 +57,7 @@ function rec(
   return { source, stage, startUtcIso, endUtcIso, startLocalDay, startLocalMinute };
 }
 
-describe("nightKeyForSleepRecord", () => {
+describe("night boundaries (B-N2, B-N3)", () => {
   test("boundary minutes: 14:59 nap, 15:00 same date, 08:59 previous, 09:00 nap", () => {
     expect(nightKeyForSleepRecord("2026-01-10", 899)).toBeNull();
     expect(nightKeyForSleepRecord("2026-01-10", 900)).toBe("2026-01-10");
@@ -66,6 +72,52 @@ describe("nightKeyForSleepRecord", () => {
 
   test("12:00 start is a nap", () => {
     expect(nightKeyForSleepRecord("2026-01-06", 12 * 60)).toBeNull();
+  });
+
+  test("B-N4 09:00–12:00 sleep continues within 60 minutes; later sleep is a nap", () => {
+    const end = "2026-01-11T16:00:00.000Z";
+    expect(continuesNight("2026-01-11T17:00:00.000Z", end)).toBe(true);
+    expect(continuesNight("2026-01-11T17:00:01.000Z", end)).toBe(false);
+    expect(continuesNight("2026-01-11T15:59:59.000Z", end)).toBe(false);
+    expect(continuesNight("2026-01-11T17:00:00.000Z", null)).toBe(false);
+  });
+
+  test("B-N5 HRV window includes 21:00 and excludes 09:00", () => {
+    expect(inHrvNightWindow(20 * 60 + 59)).toBe(false);
+    expect(inHrvNightWindow(21 * 60)).toBe(true);
+    expect(inHrvNightWindow(8 * 60 + 59)).toBe(true);
+    expect(inHrvNightWindow(9 * 60)).toBe(false);
+  });
+});
+
+describe("night timezone and completeness (B-N1, B-N6, B-N8)", () => {
+  test("B-N1 IANA zone controls local assignment across an export-offset date boundary", () => {
+    expect(instantInZone("2026-01-11T01:00:00.000Z", "America/Los_Angeles")).toEqual({
+      localDay: "2026-01-10",
+      localMinute: 17 * 60,
+    });
+    expect(zoneLocalToUtc("2026-01-11", 12 * 60, "America/Los_Angeles")).toBe(
+      Date.parse("2026-01-11T20:00:00.000Z"),
+    );
+  });
+
+  test("cached IANA offsets preserve the DST transition hour", () => {
+    expect(instantInZone("2026-03-08T09:30:00.000Z", "America/Los_Angeles")).toEqual({
+      localDay: "2026-03-08",
+      localMinute: 90,
+    });
+    expect(instantInZone("2026-03-08T10:30:00.000Z", "America/Los_Angeles")).toEqual({
+      localDay: "2026-03-08",
+      localMinute: 210,
+    });
+  });
+
+  test("B-N6 only an export cut makes a night partial; short nights stay complete", () => {
+    expect(exportCutReason("2026-01-10", "UTC+09:00", "2026-01-11T02:59:59.000Z")).toBe(
+      "export_cut",
+    );
+    expect(exportCutReason("2026-01-10", "UTC+09:00", "2026-01-11T03:00:00.000Z")).toBeNull();
+    expect(exportCutReason("2026-01-10", "UTC+09:00", null)).toBeNull();
   });
 });
 
@@ -113,6 +165,274 @@ describe("general corpus (tests/fixtures/general.ts)", () => {
     expect(n06?.stageSeconds.asleepDeep).toBe(40 * 60);
     expect(n06?.stageSeconds.asleepREM).toBe(40 * 60);
     expect(n06?.sourceSeconds[WATCH]).toBeUndefined();
+  });
+});
+
+describe("B-N1–B-N9 persisted derivation", () => {
+  test("B-N1 night abroad assigned in its own zone; sleep_h primary, HRV, usability, tz and export day", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    db.prepare(`INSERT INTO imports (created_at, zip_name, zip_size, status, export_date)
+      VALUES ('2026-01-14T00:00:00Z', 'synthetic.zip', 1, 'done', '2026-01-18 20:00:00 +0900')`).run();
+    const add = db.prepare(`INSERT INTO records
+      (type, source_name, start_at, end_at, start_offset_min, end_offset_min, value, value_str,
+       import_id, device_hw, meta_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`);
+    const insert = (
+      type: string,
+      source: string,
+      start: string,
+      end: string,
+      hw: string,
+      value: number | null = null,
+      stage: string | null = null,
+      zone: string | null = null,
+    ) => {
+      add.run(
+        type,
+        source,
+        start,
+        end,
+        540,
+        540,
+        value,
+        stage,
+        hw,
+        zone ? JSON.stringify({ HKTimeZone: zone }) : null,
+      );
+    };
+    insert(
+      "HKCategoryTypeIdentifierSleepAnalysis",
+      "Watch",
+      "2026-01-11T06:00:00.000Z",
+      "2026-01-11T17:00:00.000Z",
+      "Watch7,5",
+      null,
+      SLEEP_VALUE.core,
+      "America/Los_Angeles",
+    );
+    insert(
+      "HKCategoryTypeIdentifierSleepAnalysis",
+      "Watch",
+      "2026-01-11T17:30:00.000Z",
+      "2026-01-11T17:45:00.000Z",
+      "Watch7,5",
+      null,
+      SLEEP_VALUE.deep,
+      "America/Los_Angeles",
+    );
+    insert(
+      "HKCategoryTypeIdentifierSleepAnalysis",
+      "Watch",
+      "2026-01-11T18:46:00.000Z",
+      "2026-01-11T18:55:00.000Z",
+      "Watch7,5",
+      null,
+      SLEEP_VALUE.rem,
+      "America/Los_Angeles",
+    );
+    insert(
+      "HKCategoryTypeIdentifierSleepAnalysis",
+      "Phone",
+      "2026-01-11T06:00:00.000Z",
+      "2026-01-11T19:30:00.000Z",
+      "iPhone17,1",
+      null,
+      SLEEP_VALUE.deep,
+      "America/Los_Angeles",
+    );
+    insert(
+      "HKCategoryTypeIdentifierSleepAnalysis",
+      "Watch",
+      "2026-01-11T14:00:00.000Z",
+      "2026-01-11T14:20:00.000Z",
+      "Watch7,5",
+      null,
+      SLEEP_VALUE.rem,
+      "Asia/Tokyo",
+    );
+    insert(
+      "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      "Watch",
+      "2026-01-11T05:00:00.000Z",
+      "2026-01-11T05:00:00.000Z",
+      "Watch7,5",
+      40,
+    );
+    insert(
+      "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      "Watch",
+      "2026-01-11T05:30:00.000Z",
+      "2026-01-11T05:30:00.000Z",
+      "Watch7,5",
+      42,
+    );
+    insert(
+      "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      "Watch",
+      "2026-01-11T00:00:00.000Z",
+      "2026-01-11T00:00:00.000Z",
+      "Watch7,5",
+      99,
+    );
+    insert(
+      "HKQuantityTypeIdentifierHeartRate",
+      "Watch",
+      "2026-01-11T06:15:00.000Z",
+      "2026-01-11T06:15:00.000Z",
+      "Watch7,5",
+      50,
+    );
+    insert(
+      "HKQuantityTypeIdentifierHeartRate",
+      "Watch",
+      "2026-01-11T06:30:00.000Z",
+      "2026-01-11T06:30:00.000Z",
+      "Watch7,5",
+      60,
+    );
+    for (let i = 0; i < 8; i++) {
+      const sampleAt = new Date(
+        Date.parse("2026-01-11T06:40:00.000Z") + i * 10 * 60_000,
+      ).toISOString();
+      insert("HKQuantityTypeIdentifierHeartRate", "Watch", sampleAt, sampleAt, "Watch7,5", 52 + i);
+    }
+    insert(
+      "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      "Watch",
+      "2026-01-11T06:00:00.000Z",
+      "2026-01-11T06:00:00.000Z",
+      "Watch7,5",
+      44,
+    );
+    insert(
+      "HKQuantityTypeIdentifierHeartRate",
+      "Watch",
+      "2026-01-11T17:15:00.000Z",
+      "2026-01-11T17:15:00.000Z",
+      "Watch7,5",
+      120,
+    );
+    insert(
+      "HKQuantityTypeIdentifierStepCount",
+      "Watch",
+      "2026-01-12T01:00:00.000Z",
+      "2026-01-12T01:00:00.000Z",
+      "Watch7,5",
+      75,
+    );
+    insert(
+      "HKQuantityTypeIdentifierStepCount",
+      "Watch",
+      "2026-01-18T01:00:00.000Z",
+      "2026-01-18T01:00:00.000Z",
+      "Watch7,5",
+      100,
+    );
+    for (const day of ["2026-01-13", "2026-01-14", "2026-01-15", "2026-01-16", "2026-01-17"]) {
+      const sampleAt = `${day}T01:00:00.000Z`;
+      insert("HKQuantityTypeIdentifierStepCount", "Watch", sampleAt, sampleAt, "Watch7,5", 80);
+    }
+    const laterNights = [
+      ["2026-01-12", "2026-01-13T06:00:00.000Z"],
+      ["2026-01-13", "2026-01-14T06:00:00.000Z"],
+      ["2026-01-14", "2026-01-15T06:00:00.000Z"],
+      ["2026-01-15", "2026-01-16T06:00:00.000Z"],
+      ["2026-01-16", "2026-01-17T06:00:00.000Z"],
+    ] as const;
+    for (const [, start] of laterNights) {
+      const startMs = Date.parse(start);
+      insert(
+        "HKCategoryTypeIdentifierSleepAnalysis",
+        "Watch",
+        start,
+        new Date(startMs + 60 * 60_000).toISOString(),
+        "Watch7,5",
+        null,
+        SLEEP_VALUE.core,
+        "America/Los_Angeles",
+      );
+      for (let i = 0; i < 10; i++) {
+        const sampleAt = new Date(startMs + (i + 1) * 3 * 60_000).toISOString();
+        insert(
+          "HKQuantityTypeIdentifierHeartRate",
+          "Watch",
+          sampleAt,
+          sampleAt,
+          "Watch7,5",
+          50 + i,
+        );
+      }
+      for (let i = 0; i < 3; i++) {
+        const sampleAt = new Date(startMs + (i + 1) * 10 * 60_000).toISOString();
+        insert(
+          "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+          "Watch",
+          sampleAt,
+          sampleAt,
+          "Watch7,5",
+          40 + i,
+        );
+      }
+    }
+
+    const nights = rebuildNightPipeline(db);
+    expect(
+      nights.map(({ date, zone, tzChange, partialReason, asleepS }) => ({
+        date,
+        zone,
+        tzChange,
+        partialReason,
+        asleepS,
+      })),
+    ).toEqual([
+      {
+        date: "2026-01-10",
+        zone: "America/Los_Angeles",
+        tzChange: 0,
+        partialReason: null,
+        asleepS: 3600 * 11 + 900,
+      },
+      { date: "2026-01-11", zone: "Asia/Tokyo", tzChange: 1, partialReason: null, asleepS: 1200 },
+      ...["2026-01-12", "2026-01-13", "2026-01-14", "2026-01-15", "2026-01-16"].map((date) => ({
+        date,
+        zone: "America/Los_Angeles",
+        tzChange: date === "2026-01-12" ? 1 : 0,
+        partialReason: null,
+        asleepS: 3600,
+      })),
+    ]);
+    expect(
+      db
+        .query(
+          "SELECT metric, unit_day AS day, value, n, usable FROM metric_values WHERE metric IN ('sleep_hr','hrv_sdnn','deep_h') AND unit_day = '2026-01-10' ORDER BY metric, day",
+        )
+        .all(),
+    ).toEqual([
+      { metric: "deep_h", day: "2026-01-10", value: 0.25, n: 1, usable: 1 },
+      { metric: "hrv_sdnn", day: "2026-01-10", value: 42, n: 3, usable: 1 },
+      { metric: "sleep_hr", day: "2026-01-10", value: 55.5, n: 10, usable: 1 },
+    ]);
+    expect(
+      db
+        .query(
+          "SELECT unit_day AS day, value, n FROM metric_values WHERE metric = 'steps' AND unit_day = '2026-01-12'",
+        )
+        .all(),
+    ).toEqual([{ day: "2026-01-12", value: 75, n: 1 }]);
+    expect(
+      db
+        .query(
+          "SELECT COUNT(*) AS count FROM metric_values WHERE metric = 'steps' AND unit_day = '2026-01-18'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+    expect(
+      db
+        .query(`SELECT e.device_hw AS hardware, COUNT(*) AS count FROM metric_values mv
+        JOIN epochs e ON e.id = mv.epoch_id WHERE mv.metric = 'sleep_h' GROUP BY e.device_hw`)
+        .all(),
+    ).toEqual([{ hardware: "Watch7,5", count: 7 }]);
+    db.close();
   });
 });
 

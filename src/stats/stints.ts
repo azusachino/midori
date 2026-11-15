@@ -145,56 +145,63 @@ export function deriveStints(units: readonly MetricUnit[], _usable: UsablePredic
     );
     if (startDay === undefined) continue;
     const switches: Array<{ day: string; epochId: number }> = [];
+    const candidateEpochIds = [...new Set(candidates.map((unit) => unit.epochId))];
+    const candidateDaysByEpoch = new Map<number, Set<string>>();
+    const kindByEpoch = new Map<number, PrimaryKind>();
+    for (const unit of candidates) {
+      const present = candidateDaysByEpoch.get(unit.epochId) ?? new Set<string>();
+      present.add(unit.unitDay);
+      candidateDaysByEpoch.set(unit.epochId, present);
+      kindByEpoch.set(unit.epochId, unit.epochKind);
+    }
 
     for (let index = days.indexOf(startDay) + 1; index < days.length; index++) {
       const day = days[index];
       if (day === undefined) continue;
-      const currentIndex = days.indexOf(day);
-      const future = days.slice(currentIndex);
       let choice: { day: string; epochId: number } | null = null;
-      for (const candidateId of [...new Set(candidates.map((unit) => unit.epochId))]) {
+      for (const candidateId of candidateEpochIds) {
         if (candidateId === primary) continue;
-        const candidate = candidates.find((unit) => unit.epochId === candidateId);
-        if (!candidate) continue;
-        const candidateDays = new Set(
-          candidates.filter((unit) => unit.epochId === candidateId).map((unit) => unit.unitDay),
-        );
-        const incumbentDays = new Set(
-          candidates.filter((unit) => unit.epochId === primary).map((unit) => unit.unitDay),
-        );
-        const run = future.slice(0, SWITCH_RUN);
-        if (run.length === SWITCH_RUN && run.every((runDay) => candidateDays.has(runDay))) {
-          const higher =
-            KIND_PRIORITY[candidate.epochKind] >
-            KIND_PRIORITY[
-              candidates.find((unit) => unit.epochId === primary)?.epochKind ?? "other"
-            ];
-          const sameKindAndAbsent =
-            candidate.epochKind ===
-              (candidates.find((unit) => unit.epochId === primary)?.epochKind ?? "other") &&
-            run.every((runDay) => !incumbentDays.has(runDay));
-          if (higher || sameKindAndAbsent) choice = { day, epochId: candidateId };
-        }
-      }
-      if (choice === null && currentIndex + INCUMBENT_GAP <= days.length) {
-        const gap = days.slice(currentIndex, currentIndex + INCUMBENT_GAP);
-        const incumbentDays = new Set(
-          candidates.filter((unit) => unit.epochId === primary).map((unit) => unit.unitDay),
-        );
-        if (gap.every((gapDay) => !incumbentDays.has(gapDay))) {
-          const other = candidates.find(
-            (unit) => unit.epochId !== primary && gap.some((gapDay) => unit.unitDay === gapDay),
+        const candidateDays = candidateDaysByEpoch.get(candidateId);
+        if (!candidateDays || index + SWITCH_RUN > days.length) continue;
+        const runPresent = Array.from(
+          { length: SWITCH_RUN },
+          (_, offset) => days[index + offset],
+        ).every((runDay) => runDay !== undefined && candidateDays.has(runDay));
+        if (!runPresent) continue;
+        const candidateKind = kindByEpoch.get(candidateId) ?? "other";
+        const incumbentKind = kindByEpoch.get(primary) ?? "other";
+        const higher = KIND_PRIORITY[candidateKind] > KIND_PRIORITY[incumbentKind];
+        const incumbentDays = candidateDaysByEpoch.get(primary) ?? new Set<string>();
+        const sameKindAndAbsent =
+          candidateKind === incumbentKind &&
+          Array.from({ length: SWITCH_RUN }, (_, offset) => days[index + offset]).every(
+            (runDay) => runDay !== undefined && !incumbentDays.has(runDay),
           );
-          if (other)
+        if (higher || sameKindAndAbsent) choice = { day, epochId: candidateId };
+      }
+      if (choice === null && index + INCUMBENT_GAP <= days.length) {
+        const incumbentDays = candidateDaysByEpoch.get(primary) ?? new Set<string>();
+        let gapHasIncumbent = false;
+        for (let offset = 0; offset < INCUMBENT_GAP; offset++) {
+          const gapDay = days[index + offset];
+          if (gapDay !== undefined && incumbentDays.has(gapDay)) {
+            gapHasIncumbent = true;
+            break;
+          }
+        }
+        if (!gapHasIncumbent) {
+          const gap = days.slice(index, index + INCUMBENT_GAP);
+          const gapDays = new Set(gap);
+          const other = candidates.find(
+            (unit) => unit.epochId !== primary && gapDays.has(unit.unitDay),
+          );
+          if (other) {
+            const otherDays = candidateDaysByEpoch.get(other.epochId) ?? new Set<string>();
             choice = {
-              day:
-                gap.find((gapDay) =>
-                  candidates.some(
-                    (unit) => unit.epochId === other.epochId && unit.unitDay === gapDay,
-                  ),
-                ) ?? day,
+              day: gap.find((gapDay) => otherDays.has(gapDay)) ?? day,
               epochId: other.epochId,
             };
+          }
         }
       }
       if (choice) {
