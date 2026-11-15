@@ -5,10 +5,10 @@ import { unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { Hono } from "hono";
 import { spike } from "../../tests/fixtures";
 import { buildStoredZip } from "../../tests/util/mkzip";
 import { openDb } from "../db/db";
+import { createApp } from "../http/routes";
 import { runImport } from "../ingest/import";
 import { MCP_HTTP_PATH, mountMcp } from "./http";
 
@@ -34,7 +34,7 @@ beforeAll(async () => {
   await runImport(dbPath, zipPath);
   db = openDb(dbPath, { readonly: true });
 
-  const app = new Hono();
+  const app = createApp({ db });
   mountMcp(app, { db });
   server = Bun.serve({ port: 0, fetch: app.fetch });
   url = `http://localhost:${server.port}${MCP_HTTP_PATH}`;
@@ -58,17 +58,51 @@ afterAll(() => {
 });
 
 describe("MCP over streamable HTTP", () => {
-  test("client handshake + derived tool response reports temporary unavailability", async () => {
+  test("changes rows match the REST rows and ordering", async () => {
     const client = new Client({ name: "midori-http-test-client", version: "0.0.0" });
     await client.connect(new StreamableHTTPClientTransport(new URL(url)));
     try {
-      const res = await client.callTool({ name: "briefing", arguments: {} });
-      const content = res.content;
-      if (!Array.isArray(content) || content.length === 0) throw new Error("no content");
-      const first = content[0];
-      if (first?.type !== "text") throw new Error("non-text content");
-      expect(res.isError).toBe(true);
-      expect(first.text).toBe("v1 derived reads arrive in slice 10");
+      const [mcpResult, restResponse] = await Promise.all([
+        client.callTool({ name: "changes", arguments: {} }),
+        fetch(url.replace(MCP_HTTP_PATH, "/api/changes")),
+      ]);
+      expect(mcpResult.isError).toBeUndefined();
+      expect(restResponse.status).toBe(200);
+      const mcpContent = mcpResult.content;
+      if (!Array.isArray(mcpContent) || mcpContent[0]?.type !== "text")
+        throw new Error("missing MCP changes response");
+      const mcp = JSON.parse(mcpContent[0].text) as {
+        asOf: string | null;
+        rows: Array<Record<string, unknown> & { asOf: string | null }>;
+      };
+      const rest = (await restResponse.json()) as {
+        asOfDay: string | null;
+        overnight: Array<Record<string, unknown>>;
+        daytime: Array<Record<string, unknown>>;
+      };
+      expect(mcp.asOf).toBe(rest.asOfDay);
+      expect(mcp.rows.map(({ metric }) => metric)).toEqual(
+        [...rest.overnight, ...rest.daytime].map(({ metric }) => metric),
+      );
+      expect(
+        mcp.rows.map(({ asOf: _asOf, epoch: _epoch, caveats: _caveats, ...row }) => row),
+      ).toEqual([...rest.overnight, ...rest.daytime]);
+      for (const row of mcp.rows) {
+        expect(row.asOf).toBe(rest.asOfDay);
+        expect(row).toHaveProperty("state");
+        expect(row).toHaveProperty("confidence");
+        expect(row).toHaveProperty("onset");
+        expect(row).toHaveProperty("checks");
+        expect(row).toHaveProperty("trust");
+        expect(Array.isArray(row.caveats)).toBe(true);
+        if (row.epochId === null) expect(row.epoch).toBeNull();
+        else
+          expect(row.epoch).toMatchObject({
+            id: row.epochId,
+            label: row.epochLabel,
+            hardware: row.epochLabel,
+          });
+      }
     } finally {
       await client.close();
     }

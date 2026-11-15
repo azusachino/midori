@@ -2,117 +2,134 @@ import type { Database } from "bun:sqlite";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { METRICS } from "../domain/metrics";
-import { listImports, listSources } from "../http/queries";
+import { getChanges, getEpochs, getNights, getSeries, listImports } from "../http/queries";
 
-/**
- * MCP server (T20): read-only tools over the same queries as REST. Every
- * payload carries as-of + trust (shared contract — these tools return exactly
- * the REST DTOs). Transport-agnostic: stdio wiring lives in cli.ts mcp, the
- * streamable HTTP mount in src/mcp/http.ts (T21).
- */
+const KNOWN_METRICS = Object.keys(METRICS);
+const AGENT_GUIDANCE =
+  "Cite the specific nights behind findings. Device changes, OS updates, partial data, and travel are confounders; midori does not assert causes.";
 
+const CHECK_CAVEATS: Record<string, string> = {
+  device_change: "A device change overlaps this finding.",
+  os_update: "An operating system update overlaps this finding.",
+  partial_nights: "Partial nights were skipped in the recent window.",
+  tz_change: "A timezone change appears in the recent window.",
+  missing_nights: "The recent observations are spread across a long calendar span.",
+  low_trust: "This metric has low trust.",
+};
+
+function caveatsFor(row: ReturnType<typeof getChanges>["overnight"][number]): string[] {
+  const caveats = row.checks
+    .filter((check) => check.flagged)
+    .map((check) => CHECK_CAVEATS[check.key] ?? "A data check is flagged.");
+  if (row.state === "warming_up") caveats.push("The baseline is still warming up.");
+  else if (row.state === "insufficient") caveats.push("There is not enough data for a finding.");
+  else if (row.state === "stale") caveats.push("The latest usable data is stale.");
+  return caveats;
+}
+
+/** Read-only MCP tools over the same query functions used by REST. */
 export function createMcpServer({ db }: { db: Database }): McpServer {
   const server = new McpServer(
     { name: "midori", version: "0.1.0" },
     {
       instructions:
-        "Read-only access to an Apple Health warehouse. Never a substitute for medical advice.",
+        "Read-only access to an Apple Health warehouse. Never a substitute for medical advice. " +
+        AGENT_GUIDANCE,
     },
   );
 
   server.registerTool(
-    "list_imports",
+    "changes",
     {
-      description:
-        "Import history: newest first. Status lifecycle queued→unpacking→parsing→storing→done|failed.",
+      description: `Ranked findings from the Changes view, with as-of, epoch, checks, confidence, state, onset, trust, and caveats. ${AGENT_GUIDANCE}`,
       inputSchema: {},
     },
-    async () => ({
-      content: [{ type: "text", text: JSON.stringify(listImports(db)) }],
-    }),
-  );
-
-  server.registerTool(
-    "list_sources",
-    {
-      description:
-        "Devices/apps in the warehouse (record counts, first/last seen). Useful for device-switch questions.",
-      inputSchema: {},
+    async () => {
+      const changes = getChanges(db);
+      const rows = [...changes.overnight, ...changes.daytime].map((row) => ({
+        ...row,
+        asOf: changes.asOfDay,
+        epoch:
+          row.epochId === null
+            ? null
+            : { id: row.epochId, label: row.epochLabel, hardware: row.epochLabel },
+        caveats: caveatsFor(row),
+      }));
+      return { content: [{ type: "text", text: JSON.stringify({ asOf: changes.asOfDay, rows }) }] };
     },
-    async () => ({
-      content: [{ type: "text", text: JSON.stringify(listSources(db)) }],
-    }),
   );
 
   server.registerTool(
-    "metric_daily",
+    "metric_series",
     {
-      description:
-        "Daily series per source for one metric, with unit, method, trust label and per-source as-of day. Known metrics: " +
-        Object.keys(METRICS).join(", "),
+      description: `Per-unit metric series with epoch, usability, checks, and trend context; range=all returns weekly medians. Known metrics: ${KNOWN_METRICS.join(", ")}. ${AGENT_GUIDANCE}`,
       inputSchema: {
         metric: z.string().describe("metric key, e.g. wrist_temp, sleep_h, rhr"),
+        range: z.enum(["90d", "180d", "1y", "all"]).default("180d"),
       },
     },
-    async ({ metric }) => {
-      if (!(metric in METRICS)) {
+    async ({ metric, range }) => {
+      const series = getSeries(db, metric, range);
+      if (!series) {
         return {
           isError: true,
           content: [
             {
               type: "text",
-              text: JSON.stringify({
-                error: `unknown metric: ${metric}`,
-                known: Object.keys(METRICS),
-              }),
+              text: JSON.stringify({ error: `unknown metric: ${metric}`, known: KNOWN_METRICS }),
             },
           ],
         };
       }
-      return {
-        isError: true,
-        content: [{ type: "text", text: "v1 derived reads arrive in slice 10" }],
-      };
+      return { content: [{ type: "text", text: JSON.stringify(series) }] };
     },
   );
 
   server.registerTool(
-    "deviations",
+    "nights",
     {
-      description:
-        "Robust-z deviations (baseline = per-source median+MAD over anchor−90..−29, recent = last 14d of that source). Rows carry trust labels; cross_source suppression indicates a source coverage boundary, not proof of a device switch.",
-      inputSchema: {},
+      description: `Night-level sleep, timezone, and completeness data for an inclusive date range. Ranges over 400 days are rejected. ${AGENT_GUIDANCE}`,
+      inputSchema: {
+        from: z.string().describe("First date, YYYY-MM-DD"),
+        to: z.string().describe("Last date, YYYY-MM-DD"),
+      },
     },
-    async () => ({
-      isError: true,
-      content: [{ type: "text", text: "v1 derived reads arrive in slice 10" }],
-    }),
+    async ({ from, to }) => {
+      const nights = getNights(db, from, to);
+      if (nights === false) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: "nights range cannot exceed 400 days; narrow the date range" },
+          ],
+        };
+      }
+      if (!nights) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: "valid from and to dates are required (YYYY-MM-DD)" }],
+        };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(nights) }] };
+    },
   );
 
   server.registerTool(
-    "findings",
+    "epochs",
     {
-      description:
-        "Persisted finding ledger from the last import: deviation | recalibration (inferred source coverage boundary) | coverage (series start/gap), with evidence refs. A boundary does not establish a device switch or its cause; older persisted evidence may use stronger wording.",
+      description: `Device epochs, primary metric roles, seams, and operating system updates. ${AGENT_GUIDANCE}`,
       inputSchema: {},
     },
-    async () => ({
-      isError: true,
-      content: [{ type: "text", text: "v1 derived reads arrive in slice 10" }],
-    }),
+    async () => ({ content: [{ type: "text", text: JSON.stringify(getEpochs(db)) }] }),
   );
 
   server.registerTool(
-    "briefing",
+    "list_imports",
     {
-      description:
-        "One call for the whole story: anchor day, per-metric as-of, finding ledger, sources, last import + staleness hint. Start here.",
+      description: `Import history, newest first, including status and record counts. ${AGENT_GUIDANCE}`,
       inputSchema: {},
     },
-    async () => ({
-      isError: true,
-      content: [{ type: "text", text: "v1 derived reads arrive in slice 10" }],
-    }),
+    async () => ({ content: [{ type: "text", text: JSON.stringify(listImports(db)) }] }),
   );
 
   return server;
