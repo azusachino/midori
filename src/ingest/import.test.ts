@@ -182,4 +182,42 @@ describe("CLI", () => {
     expect(out2.archivedPath).toBeNull();
     expect(await Bun.file(zipPath2).exists()).toBeTrue();
   });
+
+  test("`bun src/cli.ts backup` snapshots + prunes without an import", async () => {
+    // Self-contained: build a db through the library, then exercise the CLI.
+    const dbPath2 = freshDb();
+    const zipPath0 = await fixtureZip(general, "cli-backup");
+    zips.push(zipPath0);
+    const backupDir = `${tmp}/backups-${runId}-${seq}`;
+    seq += 1;
+    const imp = await runImport(dbPath2, zipPath0);
+    expect(imp.status).toBe("done");
+    const proc = Bun.spawnSync([
+      "bun",
+      "src/cli.ts",
+      "backup",
+      "--db",
+      dbPath2,
+      "--backup-dir",
+      backupDir,
+    ]);
+    expect(proc.exitCode).toBe(0);
+    const out = JSON.parse(proc.stdout.toString()) as {
+      ok: boolean;
+      snapshotPath: string;
+      bytes: number;
+      pruned: number;
+    };
+    expect(out.ok).toBe(true);
+    expect(out.snapshotPath).toMatch(/midori-\d{8}-\d{6}(-\d+)?\.db$/);
+    expect(out.bytes).toBeGreaterThan(0);
+    expect(await Bun.file(out.snapshotPath).exists()).toBeTrue();
+    expect(out.pruned).toBe(0); // fresh dir holds only this run's snapshot
+  });
+
+  test("`bun src/cli.ts backup` rejects a non-positive retention", () => {
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", "backup", "--retention-days", "0"]);
+    expect(proc.exitCode).not.toBe(0);
+    expect(proc.exitCode).not.toBe(0);
+  });
 });

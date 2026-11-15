@@ -24,6 +24,7 @@ function usage(): never {
   console.error(
     "usage: bun src/cli.ts import <export.zip> [--db <path>] [--backup-dir <dir>] " +
       "[--archive-dir <dir>] [--keep-zip]\n" +
+      "       bun src/cli.ts backup [--db <path>] [--backup-dir <dir>] [--retention-days <n>]\n" +
       "       bun src/cli.ts mcp [--db <path>]",
   );
   process.exit(2);
@@ -49,6 +50,30 @@ if (command === "mcp") {
   await server.connect(new StdioServerTransport());
 } else if (command === "import") {
   await runImportCommand(args);
+} else if (command === "backup") {
+  // Nightly CronJob entry (T24): snapshot + integrity check + retention prune.
+  let dbPath = "data/midori.db";
+  let backupDir = DEFAULT_BACKUP_DIR;
+  let retentionDays = 30;
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--db") {
+      dbPath = args[i + 1] ?? usage();
+      i += 1;
+    } else if (a === "--backup-dir") {
+      backupDir = args[i + 1] ?? usage();
+      i += 1;
+    } else if (a === "--retention-days") {
+      retentionDays = Number(args[i + 1] ?? usage());
+      if (!Number.isInteger(retentionDays) || retentionDays < 1) usage();
+      i += 1;
+    } else {
+      usage();
+    }
+  }
+  const { snapshotPath, bytes } = backupDatabase(dbPath, { backupDir });
+  const pruned = pruneBackups(backupDir, { now: new Date(), retentionDays });
+  console.log(JSON.stringify({ ok: true, snapshotPath, bytes, pruned: pruned.length }, null, 2));
 } else {
   usage();
 }
