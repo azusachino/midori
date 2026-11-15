@@ -1,4 +1,9 @@
-import type { BriefingDTO, DeviationDTO, FindingDTO, MetricDailyDTO } from "@midori/domain/api";
+import type {
+  BriefingDTO,
+  DeviationDTO,
+  LegacyFindingDTO as FindingDTO,
+  MetricDailyDTO,
+} from "@midori/domain/api";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, createApiClient } from "../api/client";
 import { valueFmt } from "../components/chartData";
@@ -191,7 +196,7 @@ function TrustChip({ trust, note }: { trust: "high" | "moderate" | "low"; note: 
   );
 }
 
-function SeverityChip({ severity }: { severity: "info" | "notable" | "alert" }) {
+function SeverityChip({ severity }: { severity: "within" | "notable" | "alert" }) {
   return <span className={`chip chip--${severity}`}>{copy.severity[severity]}</span>;
 }
 
@@ -207,7 +212,7 @@ function DeviationRow({ row }: { row: DeviationDTO }) {
   return (
     <li className={`deviation deviation--${suppressed ? "suppressed" : row.severity}`}>
       <div className="deviation__head">
-        <SeverityChip severity={suppressed ? "info" : row.severity} />
+        <SeverityChip severity={suppressed ? "within" : row.severity} />
         <span className="deviation__metric">{label}</span>
         <span className="muted">{row.sourceName}</span>
         <a className="deviation__link" href={investigateHref(row.metric, row.sourceName)}>

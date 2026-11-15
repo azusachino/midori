@@ -1,4 +1,8 @@
-import type { DeviationDTO, FindingDTO, MetricDailyDTO } from "@midori/domain/api";
+import type {
+  DeviationDTO,
+  LegacyFindingDTO as FindingDTO,
+  MetricDailyDTO,
+} from "@midori/domain/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, createApiClient } from "../api/client";
 import { Chart } from "../components/Chart";

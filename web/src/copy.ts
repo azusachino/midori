@@ -130,7 +130,7 @@ export const copy = {
     low: "Low trust",
   },
   severity: {
-    info: "Info",
+    within: "Within",
     notable: "Notable",
     alert: "Alert",
   },

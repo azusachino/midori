@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS findings (
   recent REAL,
   unit TEXT,
   z REAL,                                  -- NULL for recalibration/coverage findings
-  severity TEXT NOT NULL CHECK (severity IN ('info','notable','alert')),
+  severity TEXT NOT NULL CHECK (severity IN ('within','notable','alert')),
   evidence TEXT NOT NULL,                  -- JSON array of EvidenceRef (src/domain)
   created_at TEXT NOT NULL
 );

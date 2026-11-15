@@ -1,5 +1,5 @@
 import { trustFor } from "./metrics";
-import type { Finding, Severity, TrustLabel } from "./types";
+import type { Finding, TrustLabel } from "./types";
 
 /**
  * Wire DTOs for REST + MCP (T4). One contract for both surfaces; MCP tools
@@ -58,7 +58,10 @@ export interface ErrorResponse {
   retryable: boolean;
 }
 
-export interface FindingDTO {
+export type LegacySeverity = "within" | "notable" | "alert";
+
+/** Kept for the pre-v1 read routes until Slice 11 removes them. */
+export interface LegacyFindingDTO {
   kind: Finding["kind"];
   metric: string;
   sourceName: string;
@@ -68,9 +71,59 @@ export interface FindingDTO {
   recent: number | null;
   unit: string | null;
   z: number | null;
-  severity: Severity;
+  severity: LegacySeverity;
   evidence: Finding["evidence"];
 }
+
+export type FindingState = "computed" | "warming_up" | "insufficient" | "stale";
+export type FindingDirection = "higher" | "lower" | "within";
+export type FindingSeverity = "within" | "notable" | "alert";
+
+export interface CheckDTO {
+  key:
+    | "device_change"
+    | "os_update"
+    | "partial_nights"
+    | "tz_change"
+    | "missing_nights"
+    | "low_trust";
+  flagged: boolean;
+  detailKey?: string;
+  day?: string;
+  count?: number;
+}
+
+export type CheckResultDTO = CheckDTO;
+
+/** Shape consumed by the v1 Changes and metric detail UI. */
+export interface FindingRowDTO {
+  metric: string;
+  kind: "overnight" | "daytime" | "trendOnly";
+  unit: string;
+  trust: TrustLabel;
+  trustNote: string;
+  epochId: number | null;
+  epochLabel: string | null;
+  state: FindingState;
+  direction: FindingDirection | null;
+  severity: FindingSeverity;
+  confidence: "high" | "medium" | "low" | null;
+  z: number | null;
+  recentMedian: number | null;
+  baselineMedian: number | null;
+  baselineLow: number | null;
+  baselineHigh: number | null;
+  kOutside: number | null;
+  recentCount: number;
+  baselineCount: number;
+  warmup: { current: number; target: number; estimatedReadyDay: string | null } | null;
+  onset: { day: string; openEnded: boolean } | null;
+  checks: CheckDTO[];
+  sparkline: Array<{ day: string; value: number | null; z: number | null; usable: boolean }>;
+  caveats: string[];
+}
+
+export type FindingDTO = FindingRowDTO;
 
 export interface SourceDTO {
   name: string;
@@ -87,7 +140,7 @@ export interface AsOfEntry {
 export interface BriefingDTO {
   anchorDay: string;
   asOf: Record<string, AsOfEntry>;
-  findings: FindingDTO[];
+  findings: LegacyFindingDTO[];
   sources: SourceDTO[];
   lastImport: ImportDTO | null;
   /** e.g. "last import 34 days ago" — nudge shown when staleness exceeds the cadence target. */
@@ -123,7 +176,7 @@ export interface DeviationDTO {
   baselineHigh: number | null;
   recent: number | null;
   z: number | null;
-  severity: Severity;
+  severity: LegacySeverity;
   nBaseline: number;
   nRecent: number;
   trust: TrustLabel;
