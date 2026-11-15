@@ -58,7 +58,7 @@ afterAll(() => {
 });
 
 describe("MCP over streamable HTTP", () => {
-  test("changes rows match the REST rows and ordering", async () => {
+  test("B-A1 changes rows match the REST rows and ordering", async () => {
     const client = new Client({ name: "midori-http-test-client", version: "0.0.0" });
     await client.connect(new StreamableHTTPClientTransport(new URL(url)));
     try {

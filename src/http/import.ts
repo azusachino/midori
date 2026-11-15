@@ -6,7 +6,8 @@ import type { Hono } from "hono";
 import { archiveZip, backupDatabase, DEFAULT_BACKUP_DIR, pruneBackups } from "../backup/backup";
 import type { ErrorResponse, ImportDTO, UploadAcceptedDTO } from "../domain/api";
 import { MAX_UPLOAD_BYTES } from "../domain/api";
-import { type ImportSummary, type RunImportOptions, runImport } from "../ingest/import";
+import type { ImportSummary, RunImportOptions } from "../ingest/import";
+import { runImportInWorker } from "../ingest/worker";
 import { checkHealthExportZip } from "../ingest/zip";
 
 /**
@@ -48,6 +49,7 @@ export interface ImportRouteOptions {
   spoolDir?: string;
   backupDir?: string;
   runImport?: ImportRunner;
+  deriveSpinMs?: number;
   timeoutMs?: number;
   maxBytes?: number;
 }
@@ -122,7 +124,8 @@ function spoolIsFresh(path: string, now = Date.now()): boolean {
 export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
   const spoolDir = opts.spoolDir ?? DEFAULT_SPOOL_DIR;
   const backupDir = opts.backupDir ?? DEFAULT_BACKUP_DIR;
-  const runner = opts.runImport ?? runImport;
+  const runner = opts.runImport ?? runImportInWorker;
+  const deriveSpinMs = opts.deriveSpinMs;
   const timeoutMs = opts.timeoutMs ?? IMPORT_TIMEOUT_MS;
   const maxBytes = opts.maxBytes ?? MAX_UPLOAD_BYTES;
   const { db, dbPath, archiveDir } = opts;
@@ -134,7 +137,8 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       .query(
         `SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
                 new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
-                records_seen, records_inserted, records_deduped, duration_ms
+                records_seen, records_inserted, records_deduped, duration_ms,
+                (SELECT MAX(unit_day) FROM metric_values WHERE metric = 'sleep_h' AND usable = 1) AS as_of_day
          FROM imports WHERE id = ?`,
       )
       .get(id) as {
@@ -156,6 +160,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       records_inserted: number | null;
       records_deduped: number | null;
       duration_ms: number | null;
+      as_of_day: string | null;
     } | null;
     if (!row) return undefined;
     const path = join(spoolDir, `${id}.zip`);
@@ -172,6 +177,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       error: row.error,
       exportVersion: row.export_version,
       exportDate: row.export_date,
+      asOfDay: row.as_of_day,
       olderThanStored: row.older_than_stored === 1,
       recordsSeen: row.records_seen,
       recordsInserted: row.records_inserted,
@@ -189,13 +195,21 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       timeoutMs,
     );
     try {
-      await runner(dbPath, zipPath, { importId, signal: controller.signal });
+      await runner(dbPath, zipPath, {
+        importId,
+        signal: controller.signal,
+        ...(deriveSpinMs === undefined ? {} : { deriveSpinMs }),
+      });
+      try {
+        archiveZip(zipPath, { archiveDir });
+      } catch (err) {
+        console.error(`import ${importId}: archive failed: ${String(err)}`);
+      }
       try {
         backupDatabase(dbPath, { backupDir });
         pruneBackups(backupDir, { now: new Date() });
-        archiveZip(zipPath, { archiveDir });
       } catch (err) {
-        console.error(`import ${importId}: post-import maintenance failed: ${String(err)}`);
+        console.error(`import ${importId}: backup failed: ${String(err)}`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

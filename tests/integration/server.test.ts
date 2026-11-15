@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { openDb } from "../../src/db/db";
 import { runImport } from "../../src/ingest/import";
 import { startServer } from "../../src/server";
-import { spike } from "../../tests/fixtures";
+import { renderExport, SLEEP_VALUE, spike, TYPE } from "../../tests/fixtures";
 import { buildStoredZip } from "../util/mkzip";
 
 const workdir = join(import.meta.dir, "..", "..", ".tmp-server-test");
@@ -46,6 +46,84 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     expect(item.stage).toBe("parsing");
     expect(item.error).toBe("interrupted by restart");
     expect(item.retryable).toBe(false);
+  });
+
+  test("GET /api/health returns ok", async () => {
+    const dbPath = join(workdir, "health.db");
+    server = startServer({ db: openDb(dbPath), dbPath, port: 0, spoolDir: join(workdir, "spool") });
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/health`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
+  test("M1 /api/changes stays responsive while a worker import is deriving", async () => {
+    const dbPath = join(workdir, "worker.db");
+    const zipPath = join(workdir, "fixture.zip");
+    const device =
+      "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>";
+    const records = Array.from({ length: 7 }, (_, index) => {
+      const day = String(index + 1).padStart(2, "0");
+      return {
+        type: TYPE.sleep,
+        sourceName: "Synthetic Watch",
+        startDate: `2026-02-${day} 22:00:00 +0000`,
+        endDate: `2026-02-${String(index + 2).padStart(2, "0")} 06:00:00 +0000`,
+        value: SLEEP_VALUE.core,
+        device,
+      };
+    });
+    writeFileSync(
+      zipPath,
+      buildStoredZip([
+        {
+          name: "apple_health_export/export.xml",
+          data: renderExport({ exportDate: "2026-02-21 08:00:00 +0000", records, workouts: [] }),
+        },
+      ]),
+    );
+    const initial = await runImport(dbPath, zipPath);
+    expect(initial.asOfDay).toBe("2026-02-07");
+
+    server = startServer({
+      db: openDb(dbPath),
+      dbPath,
+      port: 0,
+      spoolDir: join(workdir, "spool"),
+      deriveSpinMs: 800,
+    });
+    const origin = `http://127.0.0.1:${server.port}`;
+    const upload = await fetch(`${origin}/api/imports`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/zip",
+        "x-zip-name": "synthetic.zip",
+      },
+      body: await Bun.file(zipPath).arrayBuffer(),
+    });
+    expect(upload.status).toBe(202);
+    const { importId } = (await upload.json()) as { importId: number };
+    const deadline = Date.now() + 10_000;
+    let stage = "";
+    while (stage !== "deriving" && Date.now() < deadline) {
+      const detail = await fetch(`${origin}/api/imports/${importId}`);
+      stage = ((await detail.json()) as { stage: string }).stage;
+      if (stage !== "deriving") await Bun.sleep(5);
+    }
+    expect(stage).toBe("deriving");
+
+    const started = performance.now();
+    const changes = await fetch(`${origin}/api/changes`);
+    const elapsedMs = performance.now() - started;
+    expect(changes.status).toBe(200);
+    expect(elapsedMs).toBeLessThan(500);
+    expect(((await changes.json()) as { asOfDay: string | null }).asOfDay).toBe(initial.asOfDay);
+    let status = "running";
+    while (status !== "done" && status !== "failed" && Date.now() < deadline) {
+      const detail = await fetch(`${origin}/api/imports/${importId}`);
+      status = ((await detail.json()) as { status: string }).status;
+      if (status !== "done" && status !== "failed") await Bun.sleep(5);
+    }
+    expect(status).toBe("done");
   });
 
   test("changes, web shell and MCP initialize answer on the same origin", async () => {

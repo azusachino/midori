@@ -55,7 +55,9 @@ export function listImports(db: Database): ImportDTO[] {
     db
       .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
       new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
-      records_seen, records_inserted, records_deduped, duration_ms FROM imports ORDER BY id DESC`)
+      records_seen, records_inserted, records_deduped, duration_ms,
+      (SELECT MAX(unit_day) FROM metric_values WHERE metric='sleep_h' AND usable=1) AS as_of_day
+      FROM imports ORDER BY id DESC`)
       .all() as ImportRow[]
   ).map((r) => importDto(r));
 }
@@ -79,6 +81,7 @@ type ImportRow = {
   records_inserted: number | null;
   records_deduped: number | null;
   duration_ms: number | null;
+  as_of_day: string | null;
 };
 function importDto(r: ImportRow): ImportDTO {
   return {
@@ -94,6 +97,7 @@ function importDto(r: ImportRow): ImportDTO {
     error: r.error,
     exportVersion: r.export_version,
     exportDate: r.export_date,
+    asOfDay: r.as_of_day,
     olderThanStored: r.older_than_stored === 1,
     recordsSeen: r.records_seen,
     recordsInserted: r.records_inserted,
@@ -106,7 +110,9 @@ export function getImport(db: Database, id: number): ImportDTO | null {
   const row = db
     .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
       new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
-      records_seen, records_inserted, records_deduped, duration_ms FROM imports WHERE id=?`)
+      records_seen, records_inserted, records_deduped, duration_ms,
+      (SELECT MAX(unit_day) FROM metric_values WHERE metric='sleep_h' AND usable=1) AS as_of_day
+      FROM imports WHERE id=?`)
     .get(id) as ImportRow | null;
   return row ? importDto(row) : null;
 }
@@ -303,13 +309,19 @@ export function getChanges(db: Database): ChangesDTO {
   };
 }
 function weekly(db: Database, metric: string) {
+  const asOfDay = asOf(db);
+  if (!asOfDay) return [];
+  const from = addDays(asOfDay, -363);
   const rows = db
     .query(
       `SELECT v.unit_day,v.value,v.epoch_id,v.usable,n.partial_reason
-       FROM metric_values v LEFT JOIN nights n ON n.date=v.unit_day
-       WHERE v.metric=? ORDER BY v.unit_day`,
+       FROM metric_values v
+       JOIN stints s ON s.metric=v.metric AND s.epoch_id=v.epoch_id
+         AND s.end_day IS NULL AND v.unit_day>=s.start_day
+       LEFT JOIN nights n ON n.date=v.unit_day
+       WHERE v.metric=? AND v.unit_day BETWEEN ? AND ? ORDER BY v.unit_day`,
     )
-    .all(metric) as {
+    .all(metric, from, asOfDay) as {
     unit_day: string;
     value: number;
     epoch_id: number;
@@ -329,12 +341,15 @@ function weekly(db: Database, metric: string) {
     b.hasPartial ||= r.partial_reason !== null;
     buckets.set(key, b);
   }
-  return [...buckets].map(([weekStart, b]) => ({
-    weekStart,
-    median: median(b.values),
-    epochId: b.epochs.every((x) => x === b.epochs[0]) ? (b.epochs[0] ?? null) : null,
-    hasPartial: b.hasPartial,
-  }));
+  return [...buckets]
+    .map(([weekStart, b]) => ({
+      weekStart,
+      median: median(b.values),
+      epochId: b.epochs[0] ?? null,
+      hasPartial: b.hasPartial,
+    }))
+    .filter((point): point is typeof point & { epochId: number } => point.epochId !== null)
+    .slice(-52);
 }
 function weeklyByEpoch(db: Database, metric: string) {
   const rows = db
@@ -450,11 +465,37 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
       .slice(-7)
       .map((point) => point.day) ?? [],
   );
+  const currentStint = db
+    .query(
+      `SELECT epoch_id epochId,start_day startDay FROM stints
+       WHERE metric=? AND end_day IS NULL LIMIT 1`,
+    )
+    .get(metric) as { epochId: number; startDay: string } | null;
+  const baselineRankDays = currentStint
+    ? new Set(
+        (
+          db
+            .query(
+              `SELECT unit_day FROM metric_values
+               WHERE metric=? AND epoch_id=? AND unit_day>=? AND usable=1
+               ORDER BY unit_day DESC LIMIT 28 OFFSET 7`,
+            )
+            .all(metric, currentStint.epochId, currentStint.startDay) as Array<{
+            unit_day: string;
+          }>
+        ).map((unit) => unit.unit_day),
+      )
+    : new Set<string>();
   const band = units.flatMap((unit) => {
     const low = row?.baselineLow;
     const high = row?.baselineHigh;
     const center = row?.baselineMedian;
-    return unit.usable && low != null && high != null && center != null
+    return unit.usable &&
+      unit.epoch_id === currentStint?.epochId &&
+      baselineRankDays.has(unit.day) &&
+      low != null &&
+      high != null &&
+      center != null
       ? [{ day: unit.day, low, high, median: center }]
       : [];
   });

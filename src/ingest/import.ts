@@ -19,6 +19,7 @@ export interface ImportSummary extends WriteCounters {
   totalEntries: number;
   exportVersion: string | null;
   exportDate: string | null;
+  asOfDay: string | null;
   malformedDates: number;
   newUsableNights: number;
   newEpochs: string[];
@@ -34,6 +35,8 @@ export interface RunImportOptions {
   importId?: number;
   /** Checked at each record boundary; an aborted run ends `failed` with the reason. */
   signal?: AbortSignal;
+  /** Test seam: simulate expensive synchronous derive work inside the import worker. */
+  deriveSpinMs?: number;
 }
 
 export async function runImport(
@@ -140,6 +143,12 @@ export async function runImport(
       ).map((epoch) => JSON.stringify([epoch.source_name, epoch.device_hw])),
     );
     setStatus("deriving");
+    if (options.deriveSpinMs) {
+      const until = performance.now() + options.deriveSpinMs;
+      while (performance.now() < until) {
+        checkAborted();
+      }
+    }
     derive(db);
     const nextUsableNights = Number(
       (
@@ -165,6 +174,11 @@ export async function runImport(
       })
       .sort((a, b) => a.localeCompare(b));
 
+    const asOfDay = (
+      db
+        .query("SELECT MAX(unit_day) day FROM metric_values WHERE metric='sleep_h' AND usable=1")
+        .get() as { day: string | null }
+    ).day;
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");
     db.run(
@@ -192,6 +206,7 @@ export async function runImport(
       totalEntries: handle.totalEntries,
       exportVersion: stats.exportVersion,
       exportDate: stats.exportDate,
+      asOfDay,
       malformedDates,
       newUsableNights,
       newEpochs,

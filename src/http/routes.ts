@@ -21,6 +21,10 @@ export function createApp({ db, upload }: RouteDeps): Hono {
   const app = new Hono();
   if (upload) mountImportRoutes(app, { ...upload, db });
 
+  app.get("/api/health", (c) => {
+    db.query("SELECT 1").get();
+    return c.json({ ok: true as const });
+  });
   app.get("/api/imports", (c) => c.json(listImports(db)));
   app.get("/api/changes", (c) => c.json(getChanges(db)));
   app.get("/api/metrics", (c) => c.json(getMetrics(db)));
