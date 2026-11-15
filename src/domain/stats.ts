@@ -1,25 +1,17 @@
 import type { CoverageBoundary, SourceSpan } from "./types";
 
-/**
- * Stats contracts (T4). Semantics ported from the 2026-11 spike (analyze.py),
- * with the baseline off-by-one fixed: the spike's range(29,90) covered -89..-29
- * while its comment claimed -90..-29; here the contract is anchor-90..anchor-29
- * INCLUSIVE (62 days), recent is anchor-13..anchor INCLUSIVE (14 days).
- */
+/** Shared robust-statistics helpers; current windows are ordinal in baselines.ts. */
 
 export const BASELINE_MIN_OFFSET_DAYS = -90; // inclusive
 export const BASELINE_MAX_OFFSET_DAYS = -29; // inclusive
 export const RECENT_MIN_OFFSET_DAYS = -13; // inclusive
 export const RECENT_MAX_OFFSET_DAYS = 0; // anchor itself inclusive
 
-export const MIN_BASELINE_DAYS = 15;
-export const MIN_RECENT_DAYS = 7;
-
 export const NOTABLE_ABS_Z = 1.5;
 export const ALERT_ABS_Z = 2.5;
 
 export const MAD_SCALE = 1.4826;
-export const ZERO_MAD_EPSILON = 1e-9;
+export const MAX_ABS_Z = 10;
 
 /** Day offsets [min..max], both inclusive. Length must be max-min+1. */
 export function offsetsInclusive(min: number, max: number): number[] {
@@ -51,21 +43,9 @@ export function scaledMAD(xs: number[], med: number): number {
   return median(xs.map((x) => Math.abs(x - med))) * MAD_SCALE;
 }
 
-/**
- * Dispersion used as the z denominator, port of analyze.py:110-113:
- *   mad = scaledMAD(baseline)
- *   if mad < 1e-9: mad = (max - min) / 4 or 1e-9
- * A perfectly flat baseline therefore yields 1e-9, making any nonzero recent
- * shift an alert — pinned deliberately (the spike's behavior).
- */
-export function dispersionForZ(baseline: number[]): number {
-  const med = median(baseline);
-  let mad = scaledMAD(baseline, med);
-  if (mad < ZERO_MAD_EPSILON) {
-    const range = Math.max(...baseline) - Math.min(...baseline);
-    mad = range / 4 || ZERO_MAD_EPSILON;
-  }
-  return mad;
+/** Robust sigma is bounded below by the metric registry's measurement floor. */
+export function dispersionForZ(baseline: number[], floor: number): number {
+  return Math.max(scaledMAD(baseline, median(baseline)), floor);
 }
 
 export interface ZResult {
@@ -77,17 +57,14 @@ export interface ZResult {
   nRecent: number;
 }
 
-/**
- * Robust z of recent vs baseline. Returns null when the gates fail
- * (fewer than MIN_BASELINE_DAYS baseline values or MIN_RECENT_DAYS recent values).
- */
-export function robustZ(baseline: number[], recent: number[]): ZResult | null {
-  if (baseline.length < MIN_BASELINE_DAYS || recent.length < MIN_RECENT_DAYS) return null;
+/** Robust z from already-gated ordinal windows, capped for display and ranking. */
+export function robustZ(baseline: number[], recent: number[], floor: number): ZResult | null {
+  if (baseline.length === 0 || recent.length === 0) return null;
   const baselineMedian = median(baseline);
   const recentMedian = median(recent);
-  const dispersion = dispersionForZ(baseline);
+  const dispersion = dispersionForZ(baseline, floor);
   return {
-    z: (recentMedian - baselineMedian) / dispersion,
+    z: Math.max(-MAX_ABS_Z, Math.min(MAX_ABS_Z, (recentMedian - baselineMedian) / dispersion)),
     baselineMedian,
     recentMedian,
     dispersion,
