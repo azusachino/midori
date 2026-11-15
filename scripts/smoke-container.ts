@@ -1,6 +1,6 @@
 /**
  * Container smoke (T22): prove the built image works end-to-end in isolation —
- * synthetic import through the HTTP upload route, briefing with real content,
+ * synthetic import through the HTTP upload route, changes with real content,
  * MCP over HTTP — and that the image carries no personal data files.
  *
  * Usage: bun scripts/smoke-container.ts [--image azusachino.com/midori:v0.1.0]
@@ -8,8 +8,8 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spike } from "../tests/fixtures";
 import { buildStoredZip } from "../tests/util/mkzip";
+import { buildE2eCorpusXml } from "./e2e/corpus";
 
 const root = join(import.meta.dir, "..");
 const workdir = join(root, ".tmp-container");
@@ -95,13 +95,13 @@ try {
     const logs = run(["podman", "logs", container], { stdout: "pipe" });
     fail(`server never answered; logs:\n${logs.out}`);
   }
-  console.log("smoke-container: server up, empty-store briefing answers 200");
+  console.log("smoke-container: server up, empty-store /api/changes answers 200");
 
   // 3. Fresh store must have no imports yet, then upload the synthetic zip.
   const zipPath = join(workdir, "fixture.zip");
   writeFileSync(
     zipPath,
-    buildStoredZip([{ name: "apple_health_export/export.xml", data: spike.xml }]),
+    buildStoredZip([{ name: "apple_health_export/export.xml", data: buildE2eCorpusXml() }]),
   );
   const zip = Bun.file(zipPath);
   const post = await fetch(`${baseUrl}/api/imports`, {
@@ -134,12 +134,16 @@ try {
   if (!done) fail("import job never reached done");
   console.log("smoke-container: synthetic import completed inside the container");
 
-  // 5. Briefing carries real content from the fixture corpus.
+  // 5. Changes carries real content from the synthetic corpus (it has sleep, so as-of is set).
   const changes = (await (await fetch(`${baseUrl}/api/changes`)).json()) as {
     asOfDay: string | null;
+    overnight: unknown[];
   };
-  if (changes.asOfDay !== "2026-03-01") fail(`asOfDay=${changes.asOfDay}, expected 2026-03-01`);
-  console.log("smoke-container: changes asOfDay = 2026-03-01 (fixture corpus)");
+  if (!changes.asOfDay) fail("asOfDay is null after importing a corpus with sleep");
+  if (changes.overnight.length === 0) fail("no overnight rows after import");
+  console.log(
+    `smoke-container: changes asOfDay = ${changes.asOfDay}, ${changes.overnight.length} overnight rows`,
+  );
 
   // 6. MCP over HTTP: initialize + tools/list on the same origin.
   const mcpPost = (payload: unknown) =>
@@ -169,7 +173,7 @@ try {
     result?: { tools?: { name: string }[] };
   };
   const names = tools.result?.tools?.map((t) => t.name) ?? [];
-  if (!names.includes("briefing")) fail(`tools/list missing briefing: ${names.join(",")}`);
+  if (!names.includes("changes")) fail(`tools/list missing changes: ${names.join(",")}`);
   console.log(`smoke-container: MCP over HTTP ok (${names.length} tools)`);
 
   // 7. Backup + archive landed on the volume path (the archive keeps the spooled

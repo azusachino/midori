@@ -12,6 +12,8 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY tsconfig.json ./
 COPY web ./web
+# web imports the shared DTOs/registry from src/domain via the @midori/domain alias
+COPY src/domain ./src/domain
 RUN bun run build
 
 # --- deps stage: production node_modules only -------------------------------------
@@ -26,7 +28,7 @@ ARG SOURCE_REVISION
 RUN test -n "$SOURCE_REVISION"
 LABEL org.opencontainers.image.title=midori
 LABEL org.opencontainers.image.revision=$SOURCE_REVISION
-LABEL org.opencontainers.image.description="Self-hosted Apple Health admin dashboard"
+LABEL org.opencontainers.image.description="Personal Apple Health analyst"
 WORKDIR /app
 ENV NODE_ENV=production
 # midori runs as the image's existing uid-1000 `bun` user; the k8s workload uses
