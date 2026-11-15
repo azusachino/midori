@@ -78,6 +78,9 @@ describe("rolling stint baselines", () => {
     warming.close();
 
     const db = makeDb("wrist_temp", 7);
+    db.query(
+      "UPDATE metric_values SET value = 10.1 WHERE metric = 'wrist_temp' AND unit_day >= '2026-01-08'",
+    ).run();
     db.prepare(
       "INSERT INTO epochs (source_name, device_hw, kind, first_day, last_day, days_present) VALUES ('old watch', 'Watch0,1', 'watch', '2025-01-01', '2025-12-31', 300)",
     ).run();
@@ -94,6 +97,7 @@ describe("rolling stint baselines", () => {
     expect(row?.state).toBe("computed");
     expect(row?.confidence).toBe("low");
     expect(row?.baseline).toBe(10);
+    expect(row?.z).toBeLessThan(4);
     expect(
       db.query("SELECT COUNT(*) AS count FROM seam_steps WHERE metric = 'wrist_temp'").get(),
     ).toEqual({ count: 1 });
