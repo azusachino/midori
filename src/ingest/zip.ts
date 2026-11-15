@@ -49,6 +49,16 @@ export async function listZipEntries(zipPath: string): Promise<ZipEntryInfo[]> {
   return out;
 }
 
+/** Validate the central directory without opening or decompressing the XML entry. */
+export async function checkHealthExportZip(zipPath: string): Promise<boolean> {
+  try {
+    const entries = await listZipEntries(zipPath);
+    return entries.some((entry) => /^apple_health_export\/export\.xml$/i.test(entry.fileName));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Locates export.xml inside the archive and returns a chunk stream over its
  * decompressed contents plus summary info. The archive itself is never fully

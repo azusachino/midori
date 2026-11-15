@@ -84,12 +84,22 @@ export function createFetchHandler(app: Hono, webDist: string) {
 }
 
 export function startServer(opts: ServerOptions): Bun.Server<undefined> {
+  const spoolDir = opts.spoolDir ?? DEFAULT_SPOOL_DIR;
+  const reconcileDb = openDb(opts.dbPath);
+  try {
+    reconcileDb.run(
+      `UPDATE imports SET status = 'failed', stage = 'failed', error = 'interrupted by restart'
+       WHERE status NOT IN ('done', 'failed')`,
+    );
+  } finally {
+    reconcileDb.close();
+  }
   const app = createApp({
     db: opts.db,
     upload: {
       dbPath: opts.dbPath,
       archiveDir: opts.archiveDir ?? DEFAULT_ARCHIVE_DIR,
-      spoolDir: opts.spoolDir ?? DEFAULT_SPOOL_DIR,
+      spoolDir,
       backupDir: opts.backupDir ?? DEFAULT_BACKUP_DIR,
     },
   });

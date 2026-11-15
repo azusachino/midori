@@ -1,6 +1,7 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { unlinkSync } from "node:fs";
 import { drizzle } from "drizzle-orm/bun-sqlite";
+import { openDb } from "../src/db/db";
 import { records } from "../src/db/schema";
 
 /**
@@ -51,18 +52,11 @@ function freshDb(label: string): Database {
       unlinkSync(path + suffix);
     } catch {}
   }
-  const db = new Database(path);
-  db.exec("PRAGMA journal_mode = WAL");
-  db.exec("PRAGMA synchronous = NORMAL");
-  db.exec(`CREATE TABLE records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type TEXT NOT NULL, source_name TEXT NOT NULL, unit TEXT,
-    start_at TEXT NOT NULL, end_at TEXT NOT NULL,
-    start_offset_min INTEGER, end_offset_min INTEGER,
-    value REAL, value_str TEXT, import_id INTEGER NOT NULL
-  )`);
-  db.exec(`CREATE UNIQUE INDEX uq_records_dedup ON records
-    (type, source_name, start_at, end_at, coalesce(value, value_str, '<NULL>'))`);
+  const db = openDb(path);
+  db.run(
+    `INSERT INTO imports (created_at, zip_name, zip_size, status)
+     VALUES ('2026-01-01T00:00:00.000Z', 'synthetic.zip', 0, 'done')`,
+  );
   return db;
 }
 

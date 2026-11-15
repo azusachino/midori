@@ -257,14 +257,24 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - `src/backup/backup.ts`
   - `tests/integration/upload.test.ts`
 - AC:
-  - [ ] The non-export zip is rejected with 400 before any job row exists.
-  - [ ] 409 while an import is running.
-  - [ ] `POST /api/imports/:id/retry` works while the spool exists (24 h), and 410 after.
-  - [ ] `progress` is updated while parsing.
-  - [ ] Orphaned non-terminal rows are marked failed on boot.
-  - [ ] Backups keep ≤30 days and ≤10 snapshots.
-  - [ ] Each rule has an integration test through HTTP.
+  - [x] The non-export zip is rejected with 400 before any job row exists.
+  - [x] 409 while an import is running.
+  - [x] `POST /api/imports/:id/retry` works while the spool exists (24 h), and 410 after.
+  - [x] `progress` is updated while parsing.
+  - [x] Orphaned non-terminal rows are marked failed on boot.
+  - [x] Backups keep ≤30 days and ≤10 snapshots.
+  - [x] Each rule has an integration test through HTTP.
 - Verify: `bun run check`.
+- **Done 2026-11-15** — `midori-engine-s8` (second pi session, gpt-6-luna high), commits `311e311`
+  (rebased by the lead) and `13d2678`.
+  - `bun run check` (lead): exit 0, 191 tests.
+  - The lead's real-data import first failed at migration 0004 (`FOREIGN KEY constraint
+    failed`): the table rebuild left deferred FK violations from referencing records, and the
+    rebuild also dropped `export_date`. Fixed with a runner marker for the 12-step rebuild
+    (`foreign_keys` OFF, `foreign_key_check`), plus a test on a db with referencing rows.
+  - After the fix (counts only): import exit 0 in 25 s, 100 MB peak RSS; 0 inserted; 7 import
+    rows kept with their export dates; 0 FK violations; stage/progress persisted; 1 snapshot.
+  - `scripts/bench-insert.ts` fixed (slice 1 follow-up).
 
 **Gate A**: fresh verifier on slices 1–8 against B-D/B-N/B-F/B-C/B-I. Report persisted in
 `docs/reviews/`.

@@ -12,6 +12,8 @@ export const imports = sqliteTable("imports", {
   zipName: text("zip_name").notNull(),
   zipSize: integer("zip_size").notNull(),
   status: text("status").notNull().default("queued"),
+  stage: text("stage"),
+  progress: integer("progress"),
   error: text("error"),
   exportVersion: text("export_version"),
   recordsSeen: integer("records_seen"),
@@ -19,6 +21,7 @@ export const imports = sqliteTable("imports", {
   recordsDeduped: integer("records_deduped"),
   durationMs: integer("duration_ms"),
   exportDate: text("export_date"),
+  olderThanStored: integer("older_than_stored"),
 });
 
 export const sources = sqliteTable("sources", {

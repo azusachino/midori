@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getTableColumns } from "drizzle-orm";
@@ -22,9 +22,56 @@ describe("migrations", () => {
   test("applies all migrations and is idempotent on re-run", () => {
     const db = new Database(":memory:");
     const first = applyMigrations(db);
-    expect(first).toEqual(["0001_init.sql", "0002_capture.sql", "0003_derived.sql"]);
+    expect(first).toEqual([
+      "0001_init.sql",
+      "0002_capture.sql",
+      "0003_derived.sql",
+      "0004_imports.sql",
+    ]);
     const second = applyMigrations(db);
     expect(second).toEqual([]);
+    db.close();
+  });
+
+  test("B-I8 migration 0004 preserves imports and export_date on a db with referencing records", () => {
+    const v3Migrations = mkdtempSync(join(dir, "migrations-v3-"));
+    for (const name of ["0001_init.sql", "0002_capture.sql", "0003_derived.sql"]) {
+      copyFileSync(join(import.meta.dir, "../../migrations", name), join(v3Migrations, name));
+    }
+    const db = new Database(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    applyMigrations(db, v3Migrations);
+    db.run(
+      `INSERT INTO imports (id, created_at, zip_name, zip_size, status, export_date)
+       VALUES (7, '2026-01-07T00:00:00.000Z', 'export.zip', 10, 'done', '2026-01-07 08:00:00 +0900')`,
+    );
+    db.run(
+      `INSERT INTO records (id, type, source_name, start_at, end_at, import_id)
+       VALUES (42, 'HKQuantityTypeIdentifierHeartRate', 'Synthetic Watch',
+               '2026-01-06T00:00:00.000Z', '2026-01-06T00:01:00.000Z', 7)`,
+    );
+    db.run(
+      `INSERT INTO sources (name, first_seen_at, last_seen_at, record_count, last_import_id)
+       VALUES ('Synthetic Watch', '2026-01-06T00:00:00.000Z', '2026-01-06T00:01:00.000Z', 1, 7)`,
+    );
+
+    expect(applyMigrations(db)).toEqual(["0004_imports.sql"]);
+
+    const imported = db.query("SELECT id, export_date FROM imports").get() as {
+      id: number;
+      export_date: string;
+    };
+    expect(imported).toEqual({ id: 7, export_date: "2026-01-07 08:00:00 +0900" });
+    expect(db.query("SELECT id, import_id FROM records").get()).toEqual({ id: 42, import_id: 7 });
+    expect(db.query("SELECT name, last_import_id FROM sources").get()).toEqual({
+      name: "Synthetic Watch",
+      last_import_id: 7,
+    });
+    expect(db.query("SELECT COUNT(*) AS count FROM imports").get()).toEqual({ count: 1 });
+    expect(db.query("SELECT COUNT(*) AS count FROM records").get()).toEqual({ count: 1 });
+    expect(db.query("SELECT COUNT(*) AS count FROM sources").get()).toEqual({ count: 1 });
+    expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+    expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
     db.close();
   });
 

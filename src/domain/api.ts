@@ -7,13 +7,21 @@ import type { Finding, Severity, TrustLabel } from "./types";
  * never strip it in a consumer.
  */
 
-export type ImportStatus = "queued" | "unpacking" | "parsing" | "storing" | "done" | "failed";
+export type ImportStatus =
+  | "queued"
+  | "unpacking"
+  | "parsing"
+  | "storing"
+  | "deriving"
+  | "done"
+  | "failed";
 
 export const IMPORT_STATUSES: readonly ImportStatus[] = [
   "queued",
   "unpacking",
   "parsing",
   "storing",
+  "deriving",
   "done",
   "failed",
 ];
@@ -23,7 +31,12 @@ export interface ImportDTO {
   zipName: string;
   zipSize: number;
   status: ImportStatus;
+  stage?: string | null;
+  progress?: number | null;
   error: string | null;
+  exportDate?: string | null;
+  retryable?: boolean;
+  olderThanStored?: boolean;
   exportVersion: string | null;
   recordsSeen: number | null;
   recordsInserted: number | null;

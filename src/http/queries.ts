@@ -4,8 +4,8 @@ import type { ImportDTO, SourceDTO } from "../domain/api";
 export function listImports(db: Database): ImportDTO[] {
   const rows = db
     .prepare(
-      `SELECT id, created_at, zip_name, zip_size, status, error, export_version,
-              records_seen, records_inserted, records_deduped, duration_ms
+      `SELECT id, created_at, zip_name, zip_size, status, stage, progress, error, export_version,
+              export_date, older_than_stored, records_seen, records_inserted, records_deduped, duration_ms
        FROM imports ORDER BY id DESC`,
     )
     .all() as Array<{
@@ -14,8 +14,12 @@ export function listImports(db: Database): ImportDTO[] {
     zip_name: string;
     zip_size: number;
     status: string;
+    stage: string | null;
+    progress: number | null;
     error: string | null;
     export_version: string | null;
+    export_date: string | null;
+    older_than_stored: number | null;
     records_seen: number | null;
     records_inserted: number | null;
     records_deduped: number | null;
@@ -26,8 +30,12 @@ export function listImports(db: Database): ImportDTO[] {
     zipName: row.zip_name,
     zipSize: row.zip_size,
     status: row.status as ImportDTO["status"],
+    stage: row.stage,
+    progress: row.progress,
     error: row.error,
     exportVersion: row.export_version,
+    exportDate: row.export_date,
+    olderThanStored: row.older_than_stored === 1,
     recordsSeen: row.records_seen,
     recordsInserted: row.records_inserted,
     recordsDeduped: row.records_deduped,
