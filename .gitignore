@@ -22,3 +22,9 @@ apple_health_export/
 
 # scratch from upload route tests
 .tmp-upload-*/
+
+# scratch from server smoke test
+.tmp-server-test/
+
+# web build output
+web/dist/

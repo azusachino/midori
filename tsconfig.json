@@ -11,7 +11,10 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@midori/domain/*": ["./src/domain/*"]
+    }
   },
   "include": ["src", "tests", "scripts"]
 }

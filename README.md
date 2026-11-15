@@ -16,7 +16,9 @@ agents. Single user, tailnet-only. See `docs/design.md` for the approved design.
 | `bun test`                    | test suite                             |
 | `bun run privacy-guard`       | refuse tracked personal-data files     |
 | `bun run import <export.zip>` | import an Apple Health export (T6+)    |
-| `bun run dev`                 | dev server (T15+)                      |
+| `bun run dev`                 | API (:5174) + Vite web (:5173, /api proxied) |
+| `bun run build`               | production web build into `web/dist`   |
+| `bun run start`               | serve API + built web on :5174         |
 
 ## Rules
 
