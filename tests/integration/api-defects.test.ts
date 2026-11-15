@@ -273,12 +273,12 @@ describe("API regression fixes from UI integration", () => {
   });
 
   test("B-F2 epoch baseline state belongs only to the current primary stint", async () => {
-    const { api, db, insertEpoch } = setup();
+    const { api, db, insertEpoch, insertValue } = setup();
     addEpoch(insertEpoch, 1, "Old watch", "Watch5,1", "watch", "2025-11-01");
     addEpoch(insertEpoch, 2, "Current watch", "Watch7,5", "watch", "2025-12-01");
     db.prepare(
       `INSERT INTO metric_values (metric,epoch_id,unit_day,unit_kind,value,n,usable)
-       VALUES ('steps',1,'2025-11-20','day',1000,1,1),('steps',2,'2026-02-28','day',1000,1,1),
+       VALUES ('steps',1,'2025-11-20','day',1000,1,1),
               ('sleep_h',2,'2026-02-28','night',7,1,1)`,
     ).run();
     db.prepare(
@@ -286,10 +286,15 @@ describe("API regression fixes from UI integration", () => {
        (1,'steps',1,'2025-11-01','2025-11-30'),(2,'steps',2,'2025-12-01',NULL),
        (3,'sleep_h',2,'2025-12-01',NULL)`,
     ).run();
+    for (let index = 0; index < 22; index++) {
+      const date = new Date("2026-01-01T00:00:00Z");
+      date.setUTCDate(date.getUTCDate() + index);
+      insertValue.run("steps", 2, date.toISOString().slice(0, 10), 1000);
+    }
     db.prepare(
       `INSERT INTO findings (metric,state,asof_day,stint_id,z,severity,confidence,recent,baseline,
          k_outside,checks_json)
-       VALUES ('steps','computed','2026-02-28',2,2.5,'notable','high',1100,1000,1,'[]')`,
+       VALUES ('steps','computed','2026-02-28',2,0,'within','high',1000,1000,0,'[]')`,
     ).run();
 
     const payload = (await (await api.request("/api/epochs")).json()) as {
@@ -302,8 +307,12 @@ describe("API regression fixes from UI integration", () => {
       expect.objectContaining({ metric: "steps", role: "minor", baselineState: null }),
     );
     expect(payload.epochs.find((epoch) => epoch.id === 2)?.metrics).toContainEqual(
-      expect.objectContaining({ metric: "steps", role: "primary", baselineState: "early" }),
+      expect.objectContaining({ metric: "steps", role: "primary", baselineState: "full" }),
     );
+    const changes = (await (await api.request("/api/changes")).json()) as {
+      daytime: Array<{ metric: string }>;
+    };
+    expect(changes.daytime.some((row) => row.metric === "steps")).toBe(false);
   });
 
   test("B-A4 / API all-range weekly buckets retain each contributing epoch", async () => {
