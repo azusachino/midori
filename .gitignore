@@ -19,3 +19,6 @@ apple_health_export/
 
 # scratch from import tests
 .tmp-import-test/
+
+# scratch from upload route tests
+.tmp-upload-*/

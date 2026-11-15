@@ -26,31 +26,59 @@ export interface ImportSummary extends WriteCounters {
   status: "done" | "failed";
 }
 
-export async function runImport(dbPath: string, zipPath: string): Promise<ImportSummary> {
+export interface RunImportOptions {
+  /**
+   * Drive an existing `queued` imports row (HTTP path, which creates the row
+   * before answering 202). Omit to insert a new row (CLI path).
+   */
+  importId?: number;
+  /** Checked at each record boundary; an aborted run ends `failed` with the reason. */
+  signal?: AbortSignal;
+}
+
+export async function runImport(
+  dbPath: string,
+  zipPath: string,
+  options: RunImportOptions = {},
+): Promise<ImportSummary> {
   const t0 = performance.now();
   const zipStat = await Bun.file(zipPath).stat();
   const db = openDb(dbPath);
+  let importId: number | null = options.importId ?? null;
+
+  const checkAborted = () => {
+    const signal = options.signal;
+    if (!signal?.aborted) return;
+    const reason = signal.reason;
+    throw new Error(
+      `import aborted: ${reason instanceof Error ? reason.message : String(reason ?? "aborted")}`,
+    );
+  };
 
   try {
-    db.run(
-      `INSERT INTO imports (created_at, zip_name, zip_size, status)
-       VALUES (?, ?, ?, 'queued')`,
-      [new Date().toISOString(), zipPath.split("/").pop() ?? zipPath, zipStat.size],
-    );
-    const importId = Number(
-      (db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
-    );
+    if (importId === null) {
+      db.run(
+        `INSERT INTO imports (created_at, zip_name, zip_size, status)
+         VALUES (?, ?, ?, 'queued')`,
+        [new Date().toISOString(), zipPath.split("/").pop() ?? zipPath, zipStat.size],
+      );
+      importId = Number((db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
+    }
+    const id: number = importId;
     const setStatus = (status: string, error: string | null = null) =>
-      db.run(`UPDATE imports SET status = ?, error = ? WHERE id = ?`, [status, error, importId]);
+      db.run(`UPDATE imports SET status = ?, error = ? WHERE id = ?`, [status, error, id]);
 
+    checkAborted();
     setStatus("unpacking");
     const handle = await openExportXml(zipPath);
 
+    checkAborted();
     setStatus("parsing");
-    const writer = new RecordWriter(db, importId);
+    const writer = new RecordWriter(db, id);
     let malformedDates = 0;
     const stats = await parseExportXml(handle.chunks, {
       onRecord: (row) => {
+        checkAborted();
         const mapped = mapRecord(row);
         if (mapped.ok) writer.add(mapped.record);
         else malformedDates += 1;
@@ -58,34 +86,28 @@ export async function runImport(dbPath: string, zipPath: string): Promise<Import
     });
     await handle.closed;
 
+    checkAborted();
     setStatus("storing");
     const counters = writer.finish();
-    refreshSources(db, importId);
+    refreshSources(db, id);
 
     // Stats are a derived cache, recomputed on every import (design.md).
     // Runs within the storing phase (~1s on 2M records): 'analyzing' is not a
     // user-visible lifecycle state worth a schema CHECK update.
-    computeDailyMetrics(db, importId);
-    persistDeviceEvents(db, importId);
-    recomputeFindings(db, importId);
+    computeDailyMetrics(db, id);
+    persistDeviceEvents(db, id);
+    recomputeFindings(db, id);
 
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");
     db.run(
       `UPDATE imports SET records_seen = ?, records_inserted = ?, records_deduped = ?,
          duration_ms = ?, export_version = ? WHERE id = ?`,
-      [
-        stats.recordCount,
-        counters.inserted,
-        counters.deduped,
-        durationMs,
-        stats.exportVersion,
-        importId,
-      ],
+      [stats.recordCount, counters.inserted, counters.deduped, durationMs, stats.exportVersion, id],
     );
 
     return {
-      importId,
+      importId: id,
       zipPath,
       entryName: handle.entryName,
       totalEntries: handle.totalEntries,
@@ -97,12 +119,13 @@ export async function runImport(dbPath: string, zipPath: string): Promise<Import
       ...counters,
     };
   } catch (err) {
+    // A parse failure can leave RecordWriter's transaction open; close() would
+    // roll the status update back with it, so discard it explicitly first.
+    if (db.inTransaction) db.exec("ROLLBACK");
     const message = err instanceof Error ? err.message : String(err);
-    db.run(
-      `UPDATE imports SET status = 'failed', error = ? WHERE id = (
-       SELECT id FROM imports ORDER BY id DESC LIMIT 1)`,
-      [message],
-    );
+    if (importId !== null) {
+      db.run(`UPDATE imports SET status = 'failed', error = ? WHERE id = ?`, [message, importId]);
+    }
     throw err;
   } finally {
     db.close();
