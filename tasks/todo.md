@@ -52,25 +52,37 @@ existing rows.
   - `src/domain/types.ts`
   - `tests/fixtures/model.ts` (+ snapshot), and the matching tests
 - AC:
-  - [ ] Columns `records.device_hw`, `records.device_sw`, `records.meta_json` (JSON object of
+  - [x] Columns `records.device_hw`, `records.device_sw`, `records.meta_json` (JSON object of
     MetadataEntry key→value, NULL when there is none), and `imports.export_date`.
-  - [ ] The parser extracts `hardware:` and `software:` from the `device` attribute string
+  - [x] The parser extracts `hardware:` and `software:` from the `device` attribute string
     (`<<HKDevice: …>, name:…, hardware:Watch7,5, software:26.1, …>`). An absent attribute
     gives NULLs.
-  - [ ] `export_date` is persisted from `<ExportDate value=…>`.
-  - [ ] The store upserts on the existing dedup key and fills `device_hw`, `device_sw` and
+  - [x] `export_date` is persisted from `<ExportDate value=…>`.
+  - [x] The store upserts on the existing dedup key and fills `device_hw`, `device_sw` and
     `meta_json` only where the stored value is NULL. Insert/dedup counts keep their v0
     meaning.
-  - [ ] Test `B-I12 re-import fills device columns on pre-v1 rows`: import a fixture with the
+  - [x] Test `B-I12 re-import fills device columns on pre-v1 rows`: import a fixture with the
     columns stripped (simulating v0 rows), re-import the full fixture, and assert the columns
     are filled with 0 new records.
-  - [ ] The fixture model gains a device attribute on sensor records, device-less sleep and
+  - [x] The fixture model gains a device attribute on sensor records, device-less sleep and
     resting-HR records from a watch source, and `HKTimeZone` metadata on sleep records.
-  - [ ] The insert benchmark (`scripts/bench-insert.ts`) is re-run; throughput loss vs v0 is
+  - [x] The insert benchmark (`scripts/bench-insert.ts`) is re-run; throughput loss vs v0 is
     reported in the hand-back.
 - Verify: `bun run check`; `bun test src/ingest`.
 - Hand-back extra: the expected db-size growth from `meta_json`, estimated by fixture scaling.
   The lead measures the real number.
+- **Done 2026-11-15** — `midori-engine` (pi, magpie/codex/gpt-6-luna high), commit `70a9824`.
+  - Lead re-ran `bun run check`: exit 0, 199 tests.
+  - Real-data re-import over a copy of the db (lead, counts only): exit 0 in 22 s; 0 inserted,
+    2,047,778 deduped.
+  - After the re-import, `device_hw` is NULL on 355 of 449,143 HR/HRV/resp rows, and 6
+    distinct hardware values exist. Most remaining NULLs are device-less sleep/RHR records,
+    which B-D2 inherits in slice 2.
+  - `meta_json` is set on 853,835 rows; the db grew 787 → 898 MB (+14%, under the 30% risk
+    threshold).
+  - Follow-up: `scripts/bench-insert.ts` builds its own table and now fails ("no column
+    device_hw"); the writer's scratch benchmark measured 474k rows/s, about −7% vs v0's figure.
+    Fixing the script is assigned to slice 8.
 
 ### Slice 2 — Derived schema + epochs `[midori-engine]`
 
