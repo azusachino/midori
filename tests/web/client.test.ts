@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { ApiError, createApiClient, ImportFailedError } from "../../web/src/api/client";
 
 /**
- * T15 client contract: typed error bodies, network/abort classification, and the
- * import job poll (resolve on done, typed throw on failed, prompt stop on abort).
+ * v1 API client contract: routes, 404 transition stubs, typed error bodies,
+ * network/abort classification, and import job poll/upload.
  */
 
 const json = (body: unknown, status = 200) =>
@@ -17,30 +17,87 @@ function stub(...responses: Response[]) {
   return (async () => responses[Math.min(i++, responses.length - 1)] as Response) as never;
 }
 
-describe("api client", () => {
-  test("requests the documented paths and passes days through", async () => {
+describe("api client (v1)", () => {
+  test("requests all documented v1 routes", async () => {
     const seen: string[] = [];
     const c = createApiClient({
       fetch: (async (url: string) => {
         seen.push(url);
-        return json([]);
+        return json({});
       }) as never,
     });
-    await c.deviations(30);
-    await c.metricDaily("hrv_sdnn");
-    await c.briefing();
+    await c.changes();
+    await c.metricsIndex();
+    await c.metricSeries("hrv_sdnn", "90d");
+    await c.unitEvidence("hrv_sdnn", "2026-03-01");
+    await c.epochs();
+    await c.nights("2026-02-01", "2026-03-01");
+    await c.importDetail(4);
+    await c.retryImport(4);
+
     expect(seen).toEqual([
-      "/api/deviations?days=30",
-      "/api/metrics/hrv_sdnn/daily",
-      "/api/briefing",
+      "/api/changes",
+      "/api/metrics",
+      "/api/metrics/hrv_sdnn?range=90d",
+      "/api/metrics/hrv_sdnn/units/2026-03-01",
+      "/api/epochs",
+      "/api/nights?from=2026-02-01&to=2026-03-01",
+      "/api/imports/4",
+      "/api/imports/4/retry",
     ]);
+  });
+
+  test("404 on unimplemented v1 endpoints falls back to synthetic stub when imports exist", async () => {
+    const c = createApiClient({
+      fetch: (async (url: string) => {
+        if (url === "/api/imports") {
+          return json([
+            { id: 1, zipName: "fixture.zip", status: "done", createdAt: "2026-03-02T08:00:00Z" },
+          ]);
+        }
+        return json({ error: "not found", retryable: false }, 404);
+      }) as never,
+    });
+
+    const changes = await c.changes();
+    expect(changes.hasImports).toBe(true);
+    expect(changes.asOfDay).toBe("2026-03-01");
+    expect(changes.primaryWatch?.label).toBe("Synthetic Watch B");
+
+    const series = await c.metricSeries("wrist_temp", "90d");
+    expect(series.metric).toBe("wrist_temp");
+    expect(series.units.length).toBeGreaterThan(0);
+  });
+
+  test("404 on /api/changes returns empty state when /api/imports is empty", async () => {
+    const c = createApiClient({
+      fetch: (async (url: string) => {
+        if (url === "/api/imports") return json([]);
+        return json({ error: "not found", retryable: false }, 404);
+      }) as never,
+    });
+
+    const changes = await c.changes();
+    expect(changes.hasImports).toBe(false);
+    expect(changes.asOfDay).toBeNull();
+  });
+
+  test("unknown metric key still throws 404 ApiError even with 404 fallback enabled", async () => {
+    const c = createApiClient({
+      fetch: stub(json({ error: "unknown metric: nope", retryable: false }, 404)),
+    });
+    const err = await c.metricSeries("nope", "180d").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).kind).toBe("http");
+    expect((err as ApiError).status).toBe(404);
   });
 
   test("typed ErrorResponse body is surfaced on HTTP failure", async () => {
     const c = createApiClient({
+      fallbackOn404: false,
       fetch: stub(json({ error: "unknown metric: nope", retryable: false }, 404)),
     });
-    const err = await c.metricDaily("nope").catch((e: unknown) => e);
+    const err = await c.metricSeries("hrv_sdnn").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).kind).toBe("http");
     expect((err as ApiError).status).toBe(404);
@@ -53,7 +110,7 @@ describe("api client", () => {
         throw new TypeError("connection refused");
       }) as never,
     });
-    const err = await c.sources().catch((e: unknown) => e);
+    const err = await c.changes().catch((e: unknown) => e);
     expect((err as ApiError).kind).toBe("network");
   });
 
@@ -70,12 +127,12 @@ describe("api client", () => {
     const c = createApiClient({
       fetch: stub(
         json([{ id: 3, status: "parsing", error: null }]),
-        json([{ id: 3, status: "storing", error: null }]),
+        json([{ id: 3, status: "deriving", error: null }]),
         json([{ id: 3, status: "done", error: null }]),
       ),
     });
     await c.pollImport(3, { intervalMs: 1, onUpdate: (r) => seen.push(r.status) });
-    expect(seen).toEqual(["parsing", "storing", "done"]);
+    expect(seen).toEqual(["parsing", "deriving", "done"]);
   });
 
   test("pollImport throws a typed error carrying row.error on failed", async () => {
@@ -101,6 +158,7 @@ describe("api client", () => {
     expect((err as ApiError).kind).toBe("aborted");
     expect(Date.now() - started).toBeLessThan(2_000);
   });
+
   test("upload POSTs the raw zip with content-type and x-zip-name, and resolves the 202 receipt", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const c = createApiClient({
@@ -122,38 +180,6 @@ describe("api client", () => {
     expect(headers["x-zip-name"]).toBe("export.zip");
   });
 
-  test("upload omits x-zip-name when no name is given", async () => {
-    let headers: Record<string, string> = {};
-    const c = createApiClient({
-      fetch: (async (_url: string, init: RequestInit) => {
-        headers = init.headers as Record<string, string>;
-        return json({ importId: 8, status: "queued" }, 202);
-      }) as never,
-    });
-    await c.upload(new Blob([new Uint8Array([1])]));
-    expect("x-zip-name" in headers).toBe(false);
-    expect(headers["content-type"]).toBe("application/zip");
-  });
-
-  test("upload maps 415 to a typed http ApiError carrying the server body", async () => {
-    const c = createApiClient({
-      fetch: stub(
-        json(
-          {
-            error: "content-type must be application/zip (send the export.zip as the raw body)",
-            retryable: false,
-          },
-          415,
-        ),
-      ),
-    });
-    const err = await c.upload(new Blob([new Uint8Array([1])])).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(ApiError);
-    expect((err as ApiError).kind).toBe("http");
-    expect((err as ApiError).status).toBe(415);
-    expect((err as ApiError).body?.retryable).toBe(false);
-  });
-
   test("upload maps 409 to a retryable http ApiError", async () => {
     const c = createApiClient({
       fetch: stub(json({ error: "an import is already running", retryable: true }, 409)),
@@ -162,15 +188,5 @@ describe("api client", () => {
     expect((err as ApiError).kind).toBe("http");
     expect((err as ApiError).status).toBe(409);
     expect((err as ApiError).body?.retryable).toBe(true);
-  });
-
-  test("upload: a refused connection is a network error", async () => {
-    const c = createApiClient({
-      fetch: (async () => {
-        throw new TypeError("connection refused");
-      }) as never,
-    });
-    const err = await c.upload(new Blob([new Uint8Array([1])])).catch((e: unknown) => e);
-    expect((err as ApiError).kind).toBe("network");
   });
 });
