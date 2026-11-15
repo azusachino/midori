@@ -340,8 +340,11 @@ status/evidence links, as-of everywhere, investigate reproduces the spike story.
   initialize asserts no mcp-session-id + serverInfo.name=midori, 405s. Commit 7390f3a..
 - Deps: T20. Files: src/mcp/http.ts. Scope: S
 
-**Checkpoint 4** — a pi session answers "what changed recently and why" using only MCP tools;
-transcript preserved as evidence.
+**Checkpoint 4** — PASSED 2026-11-15: fresh pi session (claude-haiku-5-5, project MCP config
+  .pi/mcp.json → stdio server) answered "what changed recently and why" using only the six
+  mcp__midori__ tools: device switch Oct 8–10 with recalibration ledger, suppressed cross_source
+  baselines, per-metric stability with real numbers, declined clinical claims. Transcript
+  evidence: tasks/checkpoint-4-mcp-session.md.
 
 ## Phase 5 — Ship to cluster
 
