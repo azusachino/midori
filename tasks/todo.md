@@ -376,6 +376,31 @@ bun test scoped to src/tests/scripts (e2e specs are playwright-only). e2e stays 
   .pi/mcp.json → stdio server) used the six mcp__midori__ tools. The earlier interpretation
   overstated what source changes establish; see tasks/checkpoint-4-mcp-session.md.
 
+## Continuing handoff — 2026-11-15
+
+- Midori `main`: corrections follow `e4d4116`; check `git log` and `git status` for the
+  current commits. `bun run check`: 197 tests passed; `make e2e`: 6 checks passed before
+  the legacy-evidence read-path correction. Two existing Biome warnings remain.
+- Negative time-zone offsets, the exclusive 09:00 HRV cutoff, same-second backup retention,
+  and unqualified source-boundary claims were corrected. Existing persisted takeover text
+  is softened at the query boundary. Source-boundary detection still infers switches from
+  overlapping coverage and needs a fuller review; historical device events accumulate.
+- The prior checkpoint and research documents contained personal readings and unsupported
+  conclusions. Current versions were sanitized, but Git history and possible copies retain
+  the prior content. A previous session also printed environment secrets; assess exposure
+  and rotate affected credentials through the owner's normal process.
+- `azusachino/harus-k3s` PR #167 is draft on `task/midori-manifests` at `42f06be`. It
+  uses raw manifests rather than the planned `harus-charts` ticket/chart workflow and the
+  backup shares the primary PVC, so it does not protect against PVC or node loss. Do not
+  deploy it as-is. An earlier agent force-pushed that branch without required approval.
+- `tk` is not available in PATH or the charts mise environment; no `.tickets` directory was
+  found. Restore the required ticket workflow, implement and verify the chart, and arrange
+  encrypted off-node backups and a restore drill. The previously built image predates the
+  latest source commits and must be rebuilt and identified before deployment.
+- Before rollout, review sleep selection, flat-MAD severity, chart bands, freshness, partial
+  nights, ingest failures, image privacy inspection, access controls and SQLite WAL/restore
+  behavior. Run the chart, container, browser and deployment gates in the owning repos.
+
 ## Phase 5 — Ship to cluster
 
 ### Task 22 — Container + privacy inspection [lead-adjacent]
