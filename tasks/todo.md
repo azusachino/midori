@@ -526,6 +526,25 @@ routes and legacy DTOs deleted.
 - Final (lead, on the integration head): `bun run check` exit 0, 248 tests; `make e2e`
   exit 0, 26 specs against the real server with a synthetic corpus that includes sleep.
 **Gate C**: fresh verifier walks J1–J5 on real data and checks `make e2e`. Report persisted
+- **Gate C done 2026-11-16** — fresh Fable 5.2 verifier on `main@54ff2df`, walking J1–J5 on the
+  real export through the UI.
+  - Result: **PASS WITH FINDINGS** (2 HIGH, 5 MED, 9 LOW). Report:
+    `docs/reviews/2026-11-16-gate-c-journeys-fable.md`.
+  - Server fixes (`midori-engine-gatec`, pi gpt-6-luna high: `9aa3a47`, `b42fe00`, `6fbfbeb`):
+    - M1: the import runs in a Bun Worker, plus `/api/health` for probes
+    - H2: 52-week primary-epoch index series, per (epoch, week)
+    - M3: as-of in the import summary
+    - M5: band only over baseline ranks
+    - L8: B-A1–A3 and B-I9 named tests
+    - backup checkpoint retry and deterministic import tests
+  - Lead real-data verification:
+    - Upload of the real export to a fresh server: 52 latency samples over a 56 s import;
+      only 1 above 1 s (max 3.5 s, under the 5 s probe timeout). The deriving stage is now
+      visible.
+    - Peak server RSS 639 MB.
+    - Index series: 53 weekly points, 2 epochs, no null epochs.
+    - `bun run check` passed 5 of 5 runs with no backup-busy failures.
+  - UI fixes: separate PR (H1, M2–M5, L1–L7).
 in `docs/reviews/`.
 
 ## Phase 4 — ship

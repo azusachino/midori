@@ -42,7 +42,7 @@ const textContent = (result: unknown) => {
 };
 
 describe("MCP v1 tools", () => {
-  test("registers only the v1 read tools", async () => {
+  test("B-A3 tool descriptions require cautious evidence and no cause claims", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name)).toEqual([
       "changes",
@@ -60,13 +60,14 @@ describe("MCP v1 tools", () => {
     }
   });
 
-  test("changes includes as-of and row-level epoch context", async () => {
+  test("B-A1 changes includes as-of and row-level epoch context", async () => {
     const result = await client.callTool({ name: "changes", arguments: {} });
     expect(result.isError).toBeUndefined();
     expect(JSON.parse(textContent(result))).toEqual({ asOf: null, rows: [] });
   });
 
-  test("unknown metric is an MCP error with the known list", async () => {
+  test("B-A2 any tool is read-only and unknown metrics return the known list", async () => {
+    const before = db.query("SELECT COUNT(*) count FROM imports").get();
     const result = await client.callTool({
       name: "metric_series",
       arguments: { metric: "unknown_metric" },
@@ -76,6 +77,7 @@ describe("MCP v1 tools", () => {
       error: "unknown metric: unknown_metric",
       known: Object.keys(METRICS),
     });
+    expect(db.query("SELECT COUNT(*) count FROM imports").get()).toEqual(before);
   });
 
   test("nights rejects ranges over 400 days with a narrowing hint", async () => {
@@ -88,7 +90,7 @@ describe("MCP v1 tools", () => {
     expect(textContent(result)).toContain("narrow the date range");
   });
 
-  test("import listing remains available and read-only", async () => {
+  test("B-A2 import listing remains available and read-only", async () => {
     const result = await client.callTool({ name: "list_imports", arguments: {} });
     expect(result.isError).toBeUndefined();
     expect(JSON.parse(textContent(result))).toMatchObject([

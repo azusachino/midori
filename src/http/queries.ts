@@ -55,7 +55,9 @@ export function listImports(db: Database): ImportDTO[] {
     db
       .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
       new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
-      records_seen, records_inserted, records_deduped, duration_ms FROM imports ORDER BY id DESC`)
+      records_seen, records_inserted, records_deduped, duration_ms,
+      (SELECT MAX(unit_day) FROM metric_values WHERE metric='sleep_h' AND usable=1) AS as_of_day
+      FROM imports ORDER BY id DESC`)
       .all() as ImportRow[]
   ).map((r) => importDto(r));
 }
@@ -79,6 +81,7 @@ type ImportRow = {
   records_inserted: number | null;
   records_deduped: number | null;
   duration_ms: number | null;
+  as_of_day: string | null;
 };
 function importDto(r: ImportRow): ImportDTO {
   return {
@@ -94,6 +97,7 @@ function importDto(r: ImportRow): ImportDTO {
     error: r.error,
     exportVersion: r.export_version,
     exportDate: r.export_date,
+    asOfDay: r.as_of_day,
     olderThanStored: r.older_than_stored === 1,
     recordsSeen: r.records_seen,
     recordsInserted: r.records_inserted,
@@ -106,7 +110,9 @@ export function getImport(db: Database, id: number): ImportDTO | null {
   const row = db
     .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
       new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
-      records_seen, records_inserted, records_deduped, duration_ms FROM imports WHERE id=?`)
+      records_seen, records_inserted, records_deduped, duration_ms,
+      (SELECT MAX(unit_day) FROM metric_values WHERE metric='sleep_h' AND usable=1) AS as_of_day
+      FROM imports WHERE id=?`)
     .get(id) as ImportRow | null;
   return row ? importDto(row) : null;
 }
@@ -303,38 +309,56 @@ export function getChanges(db: Database): ChangesDTO {
   };
 }
 function weekly(db: Database, metric: string) {
+  const asOfDay = asOf(db);
+  if (!asOfDay) return [];
+  const from = addDays(asOfDay, -363);
   const rows = db
     .query(
       `SELECT v.unit_day,v.value,v.epoch_id,v.usable,n.partial_reason
-       FROM metric_values v LEFT JOIN nights n ON n.date=v.unit_day
-       WHERE v.metric=? ORDER BY v.unit_day`,
+       FROM metric_values v
+       JOIN stints s ON s.metric=v.metric AND s.epoch_id=v.epoch_id
+         AND s.start_day<=v.unit_day AND (s.end_day IS NULL OR s.end_day>=v.unit_day)
+       LEFT JOIN nights n ON n.date=v.unit_day
+       WHERE v.metric=? AND v.unit_day BETWEEN ? AND ? ORDER BY v.unit_day,v.epoch_id`,
     )
-    .all(metric) as {
+    .all(metric, from, asOfDay) as {
     unit_day: string;
     value: number;
     epoch_id: number;
     usable: number;
     partial_reason: string | null;
   }[];
-  const buckets = new Map<string, { values: number[]; epochs: number[]; hasPartial: boolean }>();
-  for (const r of rows) {
-    const d = new Date(`${r.unit_day}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-    const key = d.toISOString().slice(0, 10);
-    const b = buckets.get(key) ?? { values: [], epochs: [], hasPartial: false };
-    if (r.usable === 1) {
-      b.values.push(r.value);
-      b.epochs.push(r.epoch_id);
-    }
-    b.hasPartial ||= r.partial_reason !== null;
-    buckets.set(key, b);
+  const buckets = new Map<
+    string,
+    { weekStart: string; epochId: number; values: number[]; hasPartial: boolean }
+  >();
+  for (const row of rows) {
+    const date = new Date(`${row.unit_day}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+    const weekStart = date.toISOString().slice(0, 10);
+    const key = `${weekStart}:${row.epoch_id}`;
+    const bucket = buckets.get(key) ?? {
+      weekStart,
+      epochId: row.epoch_id,
+      values: [],
+      hasPartial: false,
+    };
+    if (row.usable === 1) bucket.values.push(row.value);
+    bucket.hasPartial ||= row.partial_reason !== null;
+    buckets.set(key, bucket);
   }
-  return [...buckets].map(([weekStart, b]) => ({
-    weekStart,
-    median: median(b.values),
-    epochId: b.epochs.every((x) => x === b.epochs[0]) ? (b.epochs[0] ?? null) : null,
-    hasPartial: b.hasPartial,
-  }));
+  const points = [...buckets.values()].sort(
+    (a, b) => a.weekStart.localeCompare(b.weekStart) || a.epochId - b.epochId,
+  );
+  const visibleWeeks = new Set([...new Set(points.map((point) => point.weekStart))].slice(-52));
+  return points
+    .filter((point) => visibleWeeks.has(point.weekStart))
+    .map(({ weekStart, epochId, values, hasPartial }) => ({
+      weekStart,
+      median: median(values),
+      epochId,
+      hasPartial,
+    }));
 }
 function weeklyByEpoch(db: Database, metric: string) {
   const rows = db
@@ -450,11 +474,37 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
       .slice(-7)
       .map((point) => point.day) ?? [],
   );
+  const currentStint = db
+    .query(
+      `SELECT epoch_id epochId,start_day startDay FROM stints
+       WHERE metric=? AND end_day IS NULL LIMIT 1`,
+    )
+    .get(metric) as { epochId: number; startDay: string } | null;
+  const baselineRankDays = currentStint
+    ? new Set(
+        (
+          db
+            .query(
+              `SELECT unit_day FROM metric_values
+               WHERE metric=? AND epoch_id=? AND unit_day>=? AND usable=1
+               ORDER BY unit_day DESC LIMIT 28 OFFSET 7`,
+            )
+            .all(metric, currentStint.epochId, currentStint.startDay) as Array<{
+            unit_day: string;
+          }>
+        ).map((unit) => unit.unit_day),
+      )
+    : new Set<string>();
   const band = units.flatMap((unit) => {
     const low = row?.baselineLow;
     const high = row?.baselineHigh;
     const center = row?.baselineMedian;
-    return unit.usable && low != null && high != null && center != null
+    return unit.usable &&
+      unit.epoch_id === currentStint?.epochId &&
+      baselineRankDays.has(unit.day) &&
+      low != null &&
+      high != null &&
+      center != null
       ? [{ day: unit.day, low, high, median: center }]
       : [];
   });

@@ -62,6 +62,88 @@ function sixDaysFrom(start: string) {
 }
 
 describe("API regression fixes from UI integration", () => {
+  test("H2 / metrics index keeps 52 weeks of primary values and splits a seam week", async () => {
+    const { api, insertEpoch, insertValue, db } = setup();
+    addEpoch(insertEpoch, 1, "Old watch", "Watch5,1", "watch", "2024-12-01");
+    addEpoch(insertEpoch, 2, "Current watch", "Watch7,5", "watch", "2025-10-15");
+    db.prepare(
+      `INSERT INTO stints (metric,epoch_id,start_day,end_day) VALUES
+       ('steps',1,'2024-12-01','2025-10-14'),
+       ('steps',2,'2025-10-15',NULL)`,
+    ).run();
+    const asOfDate = new Date("2026-02-28T00:00:00Z");
+    for (let week = 59; week >= 0; week -= 1) {
+      const day = new Date(asOfDate);
+      day.setUTCDate(day.getUTCDate() - week * 7);
+      const unitDay = day.toISOString().slice(0, 10);
+      insertValue.run("steps", 1, unitDay, 10 + week);
+      insertValue.run("steps", 2, unitDay, 200 + week);
+    }
+    for (const [day, oldValue, newValue] of [
+      ["2025-10-14", 12, 212],
+      ["2025-10-15", 13, 213],
+    ] as const) {
+      insertValue.run("steps", 1, day, oldValue);
+      insertValue.run("steps", 2, day, newValue);
+    }
+    db.prepare(
+      `INSERT INTO metric_values (metric,epoch_id,unit_day,unit_kind,value,n,usable)
+       VALUES ('sleep_h',2,'2026-02-28','night',7,1,1)`,
+    ).run();
+
+    const response = await api.request("/api/metrics");
+    const payload = (await response.json()) as {
+      metrics: Array<{
+        metric: string;
+        weeklySeries: Array<{ weekStart: string; median: number | null; epochId: number }>;
+      }>;
+    };
+    const weekly = payload.metrics.find((metric) => metric.metric === "steps")?.weeklySeries ?? [];
+    const weekStarts = new Set(weekly.map((point) => point.weekStart));
+    expect(weekStarts.size).toBeLessThanOrEqual(52);
+    expect(weekStarts.size).toBeGreaterThan(5);
+    expect(new Set(weekly.map((point) => point.epochId))).toEqual(new Set([1, 2]));
+    expect(
+      weekly.every(
+        (point) =>
+          point.median !== null && (point.epochId === 1 ? point.median < 100 : point.median >= 200),
+      ),
+    ).toBe(true);
+    const seamWeek = weekly.filter((point) => point.weekStart === "2025-10-13");
+    expect(seamWeek.map((point) => point.epochId)).toEqual([1, 2]);
+  });
+
+  test("M5 / metric band includes only baseline ranks 8–35 of the current stint", async () => {
+    const { api, insertEpoch, insertValue, db } = setup();
+    addEpoch(insertEpoch, 1, "Old watch", "Watch5,1", "watch", "2025-12-12");
+    addEpoch(insertEpoch, 2, "Current watch", "Watch7,5", "watch", "2025-12-12");
+    db.prepare(
+      `INSERT INTO stints (id,metric,epoch_id,start_day,end_day)
+       VALUES (7,'steps',2,'2025-12-12',NULL)`,
+    ).run();
+    const dates = Array.from({ length: 40 }, (_, rank) => {
+      const date = new Date("2026-01-20T00:00:00Z");
+      date.setUTCDate(date.getUTCDate() - rank);
+      return date.toISOString().slice(0, 10);
+    });
+    for (const [rank, day] of dates.entries()) {
+      insertValue.run("steps", 1, day, 100 + rank);
+      insertValue.run("steps", 2, day, 200 + rank);
+    }
+    db.prepare(
+      `INSERT INTO metric_values (metric,epoch_id,unit_day,unit_kind,value,n,usable)
+       VALUES ('sleep_h',2,'2026-01-20','night',7,1,1)`,
+    ).run();
+    db.prepare(
+      `INSERT INTO findings (metric,state,z,severity,confidence,recent,baseline,asof_day,stint_id)
+       VALUES ('steps','computed',0,'within','high',200,200,'2026-01-20',7)`,
+    ).run();
+
+    const response = await api.request("/api/metrics/steps?range=1y");
+    const series = (await response.json()) as { band: Array<{ day: string }> };
+    const expectedBaselineDays = dates.slice(7, 35).sort();
+    expect(series.band.map((point) => point.day)).toEqual(expectedBaselineDays);
+  });
   test("B-D5 / API seam identifies the stint ending before seam day", async () => {
     const { api, insertEpoch, insertValue, db } = setup();
     addEpoch(insertEpoch, 10, "Old watch", "Watch5,1", "watch", "2026-01-01");

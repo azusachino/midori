@@ -59,6 +59,23 @@ describe("read API", () => {
     }
   });
 
+  test("B-I9 synthetic import smoke completes within the two-minute budget", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "midori-import-b-i9-"));
+    const dbPath = join(dir, "fixture.db");
+    const zipPath = join(dir, "fixture.zip");
+    writeFileSync(
+      zipPath,
+      buildStoredZip([{ name: "apple_health_export/export.xml", data: spike.xml }]),
+    );
+    try {
+      const summary = await runImport(dbPath, zipPath);
+      expect(summary.status).toBe("done");
+      expect(summary.durationMs).toBeLessThan(120_000);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("B-R1/B-R3 fixture with post-night ExportDate populates v1 read routes", async () => {
     const dir = mkdtempSync(join(tmpdir(), "midori-api-"));
     const dbPath = join(dir, "fixture.db"),
@@ -83,6 +100,7 @@ describe("read API", () => {
       db.close();
       const summary = await runImport(dbPath, zipPath);
       expect(summary.inserted).toBeGreaterThan(0);
+      expect(summary.asOfDay).toBe("2026-02-07");
       db = openDb(dbPath);
       expect(
         (db.query("SELECT COUNT(*) n FROM metric_values").get() as { n: number }).n,
@@ -100,6 +118,10 @@ describe("read API", () => {
       };
       expect(changes.hasImports).toBe(true);
       expect(changes.asOfDay).toBe("2026-02-07");
+      expect((await (await api.request("/api/imports")).json())[0]).toMatchObject({
+        exportDate: "2026-02-21 08:00:00 +0000",
+        asOfDay: changes.asOfDay,
+      });
       expect(changes.freshness.asOfDay).toBe(changes.asOfDay);
       expect(changes.freshness.lastImportAt).not.toBeNull();
       expect(changes.warmingNotice).toMatchObject({ metric: "sleep_h", current: 7, target: 14 });

@@ -36,6 +36,8 @@ export interface ImportDTO {
   progressTotal?: number | null;
   error: string | null;
   exportDate?: string | null;
+  /** Newest usable sleep night in the atomically derived snapshot. */
+  asOfDay?: string | null;
   retryable?: boolean;
   olderThanStored?: boolean;
   exportVersion: string | null;
@@ -151,7 +153,7 @@ export interface ChangesDTO {
 export interface WeeklySeriesPointDTO {
   weekStart: string;
   median: number | null;
-  epochId: number | null;
+  epochId: number;
   hasPartial: boolean;
 }
 export interface MetricIndexEntryDTO {
@@ -201,6 +203,7 @@ export interface MetricSeriesDTO {
   finding: FindingRowDTO | null;
   epochs: EpochRefDTO[];
   units: MetricUnitPointDTO[];
+  /** Points are limited to baseline ranks 8–35 of the current stint (B-F1). */
   band: Array<{ day: string; low: number; high: number; median: number }>;
   stints: Array<{ epochId: number; startDay: string; endDay: string }>;
   seams: Array<{

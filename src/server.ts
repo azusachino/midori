@@ -5,7 +5,7 @@ import type { Hono } from "hono";
 import { DEFAULT_ARCHIVE_DIR, DEFAULT_BACKUP_DIR } from "./backup/backup";
 import { openDb } from "./db/db";
 import { MAX_UPLOAD_BYTES } from "./domain/api";
-import { DEFAULT_SPOOL_DIR } from "./http/import";
+import { DEFAULT_SPOOL_DIR, type ImportRunner } from "./http/import";
 import { createApp } from "./http/routes";
 import { MCP_HTTP_PATH, mountMcp } from "./mcp/http";
 
@@ -28,6 +28,9 @@ export interface ServerOptions {
   spoolDir?: string;
   archiveDir?: string;
   backupDir?: string;
+  /** Import runner and derive-stage latch used by integration tests. */
+  importRunner?: ImportRunner;
+  onDeriveStage?: () => Promise<void>;
 }
 
 /** Returns the built file for `pathname` under `webRoot`, or null when absent or unsafe. */
@@ -101,6 +104,8 @@ export function startServer(opts: ServerOptions): Bun.Server<undefined> {
       archiveDir: opts.archiveDir ?? DEFAULT_ARCHIVE_DIR,
       spoolDir,
       backupDir: opts.backupDir ?? DEFAULT_BACKUP_DIR,
+      ...(opts.importRunner ? { runImport: opts.importRunner } : {}),
+      ...(opts.onDeriveStage ? { onDeriveStage: opts.onDeriveStage } : {}),
     },
   });
   mountMcp(app, { db: opts.db });

@@ -6,7 +6,8 @@ import type { Hono } from "hono";
 import { archiveZip, backupDatabase, DEFAULT_BACKUP_DIR, pruneBackups } from "../backup/backup";
 import type { ErrorResponse, ImportDTO, UploadAcceptedDTO } from "../domain/api";
 import { MAX_UPLOAD_BYTES } from "../domain/api";
-import { type ImportSummary, type RunImportOptions, runImport } from "../ingest/import";
+import type { ImportSummary, RunImportOptions } from "../ingest/import";
+import { runImportInWorker } from "../ingest/worker";
 import { checkHealthExportZip } from "../ingest/zip";
 
 /**
@@ -48,6 +49,7 @@ export interface ImportRouteOptions {
   spoolDir?: string;
   backupDir?: string;
   runImport?: ImportRunner;
+  onDeriveStage?: () => Promise<void>;
   timeoutMs?: number;
   maxBytes?: number;
 }
@@ -79,6 +81,37 @@ function parseEpochLabels(value: string | null): string[] {
 function sanitizeName(raw: string | undefined): string {
   const name = basename((raw ?? "").trim());
   return name.length > 0 && name.length <= 255 ? name : "upload.zip";
+}
+
+async function retrySqliteBusy<T>(operation: () => T): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return operation();
+    } catch (error) {
+      const code =
+        typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+      if ((code !== "SQLITE_BUSY" && code !== "SQLITE_LOCKED") || attempt >= 19) throw error;
+      await Bun.sleep(25);
+    }
+  }
+}
+
+async function createImportRow(db: Database, zipName: string, bytes: number): Promise<number> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      db.run(
+        `INSERT INTO imports (created_at, zip_name, zip_size, status, stage, progress)
+         VALUES (?, ?, ?, 'queued', 'queued', 0)`,
+        [new Date().toISOString(), zipName, bytes],
+      );
+      return Number((db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
+    } catch (error) {
+      const code =
+        typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+      if ((code !== "SQLITE_BUSY" && code !== "SQLITE_LOCKED") || attempt >= 19) throw error;
+      await Bun.sleep(25);
+    }
+  }
 }
 
 async function spool(body: ReadableStream<Uint8Array>, path: string, maxBytes: number) {
@@ -122,7 +155,8 @@ function spoolIsFresh(path: string, now = Date.now()): boolean {
 export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
   const spoolDir = opts.spoolDir ?? DEFAULT_SPOOL_DIR;
   const backupDir = opts.backupDir ?? DEFAULT_BACKUP_DIR;
-  const runner = opts.runImport ?? runImport;
+  const runner = opts.runImport ?? runImportInWorker;
+  const onDeriveStage = opts.onDeriveStage;
   const timeoutMs = opts.timeoutMs ?? IMPORT_TIMEOUT_MS;
   const maxBytes = opts.maxBytes ?? MAX_UPLOAD_BYTES;
   const { db, dbPath, archiveDir } = opts;
@@ -134,7 +168,8 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       .query(
         `SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
                 new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
-                records_seen, records_inserted, records_deduped, duration_ms
+                records_seen, records_inserted, records_deduped, duration_ms,
+                (SELECT MAX(unit_day) FROM metric_values WHERE metric = 'sleep_h' AND usable = 1) AS as_of_day
          FROM imports WHERE id = ?`,
       )
       .get(id) as {
@@ -156,6 +191,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       records_inserted: number | null;
       records_deduped: number | null;
       duration_ms: number | null;
+      as_of_day: string | null;
     } | null;
     if (!row) return undefined;
     const path = join(spoolDir, `${id}.zip`);
@@ -172,6 +208,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       error: row.error,
       exportVersion: row.export_version,
       exportDate: row.export_date,
+      asOfDay: row.as_of_day,
       olderThanStored: row.older_than_stored === 1,
       recordsSeen: row.records_seen,
       recordsInserted: row.records_inserted,
@@ -189,20 +226,30 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       timeoutMs,
     );
     try {
-      await runner(dbPath, zipPath, { importId, signal: controller.signal });
+      await runner(dbPath, zipPath, {
+        importId,
+        signal: controller.signal,
+        ...(onDeriveStage === undefined ? {} : { onDeriveStage }),
+      });
       try {
-        backupDatabase(dbPath, { backupDir });
-        pruneBackups(backupDir, { now: new Date() });
         archiveZip(zipPath, { archiveDir });
       } catch (err) {
-        console.error(`import ${importId}: post-import maintenance failed: ${String(err)}`);
+        console.error(`import ${importId}: archive failed: ${String(err)}`);
+      }
+      try {
+        await backupDatabase(dbPath, { backupDir });
+        pruneBackups(backupDir, { now: new Date() });
+      } catch (err) {
+        console.error(`import ${importId}: backup failed: ${String(err)}`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      db.run(
-        `UPDATE imports SET status = 'failed', error = ?
-         WHERE id = ? AND status NOT IN ('done', 'failed')`,
-        [message, importId],
+      await retrySqliteBusy(() =>
+        db.run(
+          `UPDATE imports SET status = 'failed', error = ?
+           WHERE id = ? AND status NOT IN ('done', 'failed')`,
+          [message, importId],
+        ),
       );
       // Retain a failed job's spool for the documented 24-hour retry window.
     } finally {
@@ -272,14 +319,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       }
 
       const zipName = sanitizeName(c.req.header("x-zip-name"));
-      db.run(
-        `INSERT INTO imports (created_at, zip_name, zip_size, status, stage, progress)
-         VALUES (?, ?, ?, 'queued', 'queued', 0)`,
-        [new Date().toISOString(), zipName, bytes],
-      );
-      const importId = Number(
-        (db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
-      );
+      const importId = await createImportRow(db, zipName, bytes);
       const zipPath = join(spoolDir, `${importId}.zip`);
       renameSync(tmpPath, zipPath);
       start(importId, zipPath);
