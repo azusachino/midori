@@ -1,13 +1,20 @@
-import { PageSection } from "../components/PageSection";
-import { copy } from "../copy";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { copy } from "@/copy";
 
 export function NotFoundPage() {
   return (
-    <PageSection title={copy.pages.notFound.title}>
-      <p>{copy.pages.notFound.body}</p>
-      <p>
-        <a href="/briefing">{copy.pages.notFound.back}</a>
-      </p>
-    </PageSection>
+    <Card>
+      <CardHeader>
+        <CardTitle>{copy.pages.notFound.title}</CardTitle>
+        <CardDescription>{copy.pages.notFound.body}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button asChild>
+          <Link to="/">{copy.pages.notFound.back}</Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

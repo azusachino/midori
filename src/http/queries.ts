@@ -13,6 +13,7 @@ import { METRICS } from "../domain/metrics";
 import { readFindings } from "../stats/findings";
 import { type MetricUnit, minorEpochs } from "../stats/stints";
 
+// Retained for src/mcp/server.ts until Slice 10 drops v0 MCP source tools.
 export interface SourceDTO {
   name: string;
   firstSeenAt: string;

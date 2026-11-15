@@ -64,10 +64,10 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     server = startServer({ db: openDb(dbPath, { readonly: true }), dbPath, port: 0, webDist });
     baseUrl = `http://127.0.0.1:${server.port}`;
 
-    const briefing = await fetch(`${baseUrl}/api/briefing`);
-    expect(briefing.status).toBe(501);
-    const body = (await briefing.json()) as { error: string };
-    expect(body.error).toContain("v1 routes arrive in slice 9");
+    const changes = await fetch(`${baseUrl}/api/changes`);
+    expect(changes.status).toBe(200);
+    const body = (await changes.json()) as { asOfDay: string | null; hasImports: boolean };
+    expect(body).toMatchObject({ asOfDay: null, hasImports: true });
 
     const shell = await fetch(`${baseUrl}/some/client/route`);
     expect(shell.status).toBe(200);
