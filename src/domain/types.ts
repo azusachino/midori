@@ -49,6 +49,9 @@ export interface RecordRow {
   endOffsetMin: number;
   value: number | null; // quantity
   valueStr: string | null; // category
+  deviceHw: string | null;
+  deviceSw: string | null;
+  metaJson: string | null;
 }
 
 export interface SourceSpan {

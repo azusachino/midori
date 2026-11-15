@@ -14,6 +14,8 @@ export interface XmlRecordRow {
   value: string | null;
   startDate: string;
   endDate: string;
+  device: string | null;
+  metadata: Record<string, string>;
 }
 
 export interface ParserHandlers {
@@ -40,6 +42,15 @@ function attribute(attrs: Record<string, unknown> | undefined, name: string): st
   return typeof v === "string" ? v : String(v);
 }
 
+function devicePart(device: string | null, part: "hardware" | "software"): string | null {
+  if (device === null) return null;
+  const pattern =
+    part === "hardware"
+      ? /(?:^|[,\s])hardware:\s*([^>]*?)(?=,\s*(?:software|model|name):|>)/i
+      : /(?:^|[,\s])software:\s*([^,>]+)/i;
+  return pattern.exec(device)?.[1]?.trim() || null;
+}
+
 /**
  * Parses HealthKit export XML from a chunk stream (strings or bytes; multibyte
  * splits are handled by a streaming TextDecoder). Resolves with stats once the
@@ -59,6 +70,8 @@ export async function parseExportXml(
 
   let ended = false;
   let failure: Error | null = null;
+  let currentRecord: XmlRecordRow | null = null;
+  const pending: Promise<void>[] = [];
   const end = new Promise<void>((resolve, reject) => {
     parser.on("error", (err: Error) => {
       if (!failure) failure = err;
@@ -77,24 +90,32 @@ export async function parseExportXml(
       stats.exportDate ??= attribute(node.attributes, "value");
       return;
     }
-    if (node.name !== "Record") return;
-
-    const row: XmlRecordRow = {
-      type: attribute(node.attributes, "type") ?? "",
-      sourceName: attribute(node.attributes, "sourceName") ?? "",
-      unit: attribute(node.attributes, "unit"),
-      value: attribute(node.attributes, "value"),
-      startDate: attribute(node.attributes, "startDate") ?? "",
-      endDate: attribute(node.attributes, "endDate") ?? "",
-    };
-    stats.recordCount += 1;
-    const r = handlers.onRecord(row);
-    if (r instanceof Promise) {
-      // Queue the promise; the XML stream is consumed synchronously, so the
-      // pending writes settle before `end` resolves in practice. Keep simple:
-      // track it so callers that need backpressure can await via flushes.
-      pending.push(r);
+    if (node.name === "Record") {
+      currentRecord = {
+        type: attribute(node.attributes, "type") ?? "",
+        sourceName: attribute(node.attributes, "sourceName") ?? "",
+        unit: attribute(node.attributes, "unit"),
+        value: attribute(node.attributes, "value"),
+        startDate: attribute(node.attributes, "startDate") ?? "",
+        endDate: attribute(node.attributes, "endDate") ?? "",
+        device: attribute(node.attributes, "device"),
+        metadata: {},
+      };
+      return;
     }
+    if (node.name === "MetadataEntry" && currentRecord !== null) {
+      const key = attribute(node.attributes, "key");
+      const value = attribute(node.attributes, "value");
+      if (key !== null && value !== null) currentRecord.metadata[key] = value;
+    }
+  });
+
+  parser.on("closetag", (node: { name: string }) => {
+    if (node.name !== "Record" || currentRecord === null) return;
+    stats.recordCount += 1;
+    const result = handlers.onRecord(currentRecord);
+    if (result instanceof Promise) pending.push(result);
+    currentRecord = null;
   });
 
   parser.on("comment", (text: string) => {
@@ -102,7 +123,6 @@ export async function parseExportXml(
     if (m?.[1]) stats.exportVersion = m[1];
   });
 
-  const pending: Promise<void>[] = [];
   const decoder = new TextDecoder("utf-8");
   try {
     for await (const chunk of chunks) {
@@ -120,3 +140,5 @@ export async function parseExportXml(
   if (!ended) throw new Error("parser ended without end event");
   return stats;
 }
+
+export { devicePart };

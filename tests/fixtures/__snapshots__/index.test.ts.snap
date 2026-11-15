@@ -4,56 +4,80 @@ exports[`general corpus snapshot locks XML shape and expectations 1`] = `
 "<?xml version="1.0" encoding="UTF-8"?>
 <HealthData locale="en_US">
   <ExportDate value="2026-01-07 08:00:00 +0900"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-05 22:50:00 +0900" endDate="2026-01-05 23:00:00 +0900" value="HKCategoryValueSleepAnalysisInBed"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-05 23:00:00 +0900" endDate="2026-01-05 23:20:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-05 23:20:00 +0900" endDate="2026-01-06 00:30:00 +0900" value="HKCategoryValueSleepAnalysisAsleepDeep"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 00:30:00 +0900" endDate="2026-01-06 01:30:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 01:30:00 +0900" endDate="2026-01-06 02:30:00 +0900" value="HKCategoryValueSleepAnalysisAsleepREM"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 02:30:00 +0900" endDate="2026-01-06 02:45:00 +0900" value="HKCategoryValueSleepAnalysisAwake"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 02:45:00 +0900" endDate="2026-01-06 06:30:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Sleep App" unit="min" startDate="2026-01-06 23:10:00 +0900" endDate="2026-01-06 23:40:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Sleep App" unit="min" startDate="2026-01-06 23:40:00 +0900" endDate="2026-01-07 00:20:00 +0900" value="HKCategoryValueSleepAnalysisAsleepDeep"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Sleep App" unit="min" startDate="2026-01-07 00:20:00 +0900" endDate="2026-01-07 01:00:00 +0900" value="HKCategoryValueSleepAnalysisAsleepREM"/>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 13:00:00 +0900" endDate="2026-01-06 13:40:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 01:00:00 +0900" endDate="2026-01-06 01:00:00 +0900" value="54"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 02:00:00 +0900" endDate="2026-01-06 02:00:00 +0900" value="52"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 03:00:00 +0900" endDate="2026-01-06 03:00:00 +0900" value="51"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 04:00:00 +0900" endDate="2026-01-06 04:00:00 +0900" value="53"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 05:00:00 +0900" endDate="2026-01-06 05:00:00 +0900" value="55"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 06:00:00 +0900" endDate="2026-01-06 06:00:00 +0900" value="58"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 09:00:00 +0900" endDate="2026-01-06 09:00:00 +0900" value="70"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 10:00:00 +0900" endDate="2026-01-06 10:00:00 +0900" value="66"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 11:00:00 +0900" endDate="2026-01-06 11:00:00 +0900" value="67"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 12:00:00 +0900" endDate="2026-01-06 12:00:00 +0900" value="68"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 13:00:00 +0900" endDate="2026-01-06 13:00:00 +0900" value="69"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 14:00:00 +0900" endDate="2026-01-06 14:00:00 +0900" value="70"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 15:00:00 +0900" endDate="2026-01-06 15:00:00 +0900" value="66"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 16:00:00 +0900" endDate="2026-01-06 16:00:00 +0900" value="67"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 17:00:00 +0900" endDate="2026-01-06 17:00:00 +0900" value="68"/>
-  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-05 16:15:00 -0500" endDate="2026-01-05 16:15:00 -0500" value="61"/>
-  <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic iPhone" unit="count" startDate="2026-01-06 10:30:00 +0100" endDate="2026-01-06 10:30:00 +0100" value="412"/>
-  <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Synthetic Watch" unit="ms" startDate="2026-01-05 21:30:00 +0900" endDate="2026-01-05 21:30:00 +0900" value="48.2">
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-05 22:50:00 +0900" endDate="2026-01-05 23:00:00 +0900" value="HKCategoryValueSleepAnalysisInBed">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-05 23:00:00 +0900" endDate="2026-01-05 23:20:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-05 23:20:00 +0900" endDate="2026-01-06 00:30:00 +0900" value="HKCategoryValueSleepAnalysisAsleepDeep">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 00:30:00 +0900" endDate="2026-01-06 01:30:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 01:30:00 +0900" endDate="2026-01-06 02:30:00 +0900" value="HKCategoryValueSleepAnalysisAsleepREM">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 02:30:00 +0900" endDate="2026-01-06 02:45:00 +0900" value="HKCategoryValueSleepAnalysisAwake">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 02:45:00 +0900" endDate="2026-01-06 06:30:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Sleep App" unit="min" startDate="2026-01-06 23:10:00 +0900" endDate="2026-01-06 23:40:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Sleep App" unit="min" startDate="2026-01-06 23:40:00 +0900" endDate="2026-01-07 00:20:00 +0900" value="HKCategoryValueSleepAnalysisAsleepDeep">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Sleep App" unit="min" startDate="2026-01-07 00:20:00 +0900" endDate="2026-01-07 01:00:00 +0900" value="HKCategoryValueSleepAnalysisAsleepREM">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 13:00:00 +0900" endDate="2026-01-06 13:40:00 +0900" value="HKCategoryValueSleepAnalysisAsleepCore">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 01:00:00 +0900" endDate="2026-01-06 01:00:00 +0900" value="54" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 02:00:00 +0900" endDate="2026-01-06 02:00:00 +0900" value="52" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 03:00:00 +0900" endDate="2026-01-06 03:00:00 +0900" value="51" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 04:00:00 +0900" endDate="2026-01-06 04:00:00 +0900" value="53" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 05:00:00 +0900" endDate="2026-01-06 05:00:00 +0900" value="55" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 06:00:00 +0900" endDate="2026-01-06 06:00:00 +0900" value="58" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 09:00:00 +0900" endDate="2026-01-06 09:00:00 +0900" value="70" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 10:00:00 +0900" endDate="2026-01-06 10:00:00 +0900" value="66" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 11:00:00 +0900" endDate="2026-01-06 11:00:00 +0900" value="67" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 12:00:00 +0900" endDate="2026-01-06 12:00:00 +0900" value="68" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 13:00:00 +0900" endDate="2026-01-06 13:00:00 +0900" value="69" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 14:00:00 +0900" endDate="2026-01-06 14:00:00 +0900" value="70" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 15:00:00 +0900" endDate="2026-01-06 15:00:00 +0900" value="66" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 16:00:00 +0900" endDate="2026-01-06 16:00:00 +0900" value="67" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 17:00:00 +0900" endDate="2026-01-06 17:00:00 +0900" value="68" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-05 16:15:00 -0500" endDate="2026-01-05 16:15:00 -0500" value="61" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic iPhone" unit="count" startDate="2026-01-06 10:30:00 +0100" endDate="2026-01-06 10:30:00 +0100" value="412" device="&lt;&lt;HKDevice: 0x2&gt;, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Synthetic Watch" unit="ms" startDate="2026-01-05 21:30:00 +0900" endDate="2026-01-05 21:30:00 +0900" value="48.2" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;">
     <MetadataEntry key="HKMetadataKeyWasUserEntered" value="0"/>
   </Record>
-  <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Synthetic Watch" unit="ms" startDate="2026-01-06 06:45:00 +0900" endDate="2026-01-06 06:45:00 +0900" value="52.7"/>
-  <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Synthetic Watch" unit="ms" startDate="2026-01-06 14:00:00 +0900" endDate="2026-01-06 14:00:00 +0900" value="39.1"/>
+  <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Synthetic Watch" unit="ms" startDate="2026-01-06 06:45:00 +0900" endDate="2026-01-06 06:45:00 +0900" value="52.7" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Synthetic Watch" unit="ms" startDate="2026-01-06 14:00:00 +0900" endDate="2026-01-06 14:00:00 +0900" value="39.1" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
   <Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 07:00:00 +0900" endDate="2026-01-06 07:00:00 +0900" value="57"/>
-  <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic iPhone" unit="count" startDate="2026-01-06 08:15:00 +0900" endDate="2026-01-06 08:15:00 +0900" value="1240"/>
-  <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic iPhone" unit="count" startDate="2026-01-06 12:45:00 +0900" endDate="2026-01-06 12:45:00 +0900" value="3302"/>
-  <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic Watch" unit="count" startDate="2026-01-06 18:20:00 +0900" endDate="2026-01-06 18:20:00 +0900" value="2877"/>
-  <Record type="HKQuantityTypeIdentifierActiveEnergyBurned" sourceName="Synthetic Watch" unit="kcal" startDate="2026-01-06 18:20:00 +0900" endDate="2026-01-06 18:20:00 +0900" value="143.5"/>
-  <Record type="HKQuantityTypeIdentifierActiveEnergyBurned" sourceName="Synthetic iPhone" unit="kcal" startDate="2026-01-06 12:45:00 +0900" endDate="2026-01-06 12:45:00 +0900" value="88"/>
-  <Record type="HKQuantityTypeIdentifierOxygenSaturation" sourceName="Synthetic Watch" unit="%" startDate="2026-01-06 03:20:00 +0900" endDate="2026-01-06 03:20:00 +0900" value="0.97"/>
-  <Record type="HKQuantityTypeIdentifierOxygenSaturation" sourceName="Synthetic Watch" unit="%" startDate="2026-01-06 04:20:00 +0900" endDate="2026-01-06 04:20:00 +0900" value="0.96"/>
-  <Record type="HKQuantityTypeIdentifierRespiratoryRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 03:25:00 +0900" endDate="2026-01-06 03:25:00 +0900" value="14.5"/>
-  <Record type="HKQuantityTypeIdentifierRespiratoryRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 04:25:00 +0900" endDate="2026-01-06 04:25:00 +0900" value="15"/>
-  <Record type="HKQuantityTypeIdentifierAppleSleepingWristTemperature" sourceName="Synthetic Watch" unit="degC" startDate="2026-01-06 03:30:00 +0900" endDate="2026-01-06 03:30:00 +0900" value="35.42"/>
-  <Record type="HKQuantityTypeIdentifierFixtureUnrecognized" sourceName="Synthetic Watch" unit="count" startDate="2026-01-06 09:30:00 +0900" endDate="2026-01-06 09:30:00 +0900" value="1"/>
+  <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic iPhone" unit="count" startDate="2026-01-06 08:15:00 +0900" endDate="2026-01-06 08:15:00 +0900" value="1240" device="&lt;&lt;HKDevice: 0x2&gt;, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone&gt;"/>
+  <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic iPhone" unit="count" startDate="2026-01-06 12:45:00 +0900" endDate="2026-01-06 12:45:00 +0900" value="3302" device="&lt;&lt;HKDevice: 0x2&gt;, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone&gt;"/>
+  <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic Watch" unit="count" startDate="2026-01-06 18:20:00 +0900" endDate="2026-01-06 18:20:00 +0900" value="2877" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierActiveEnergyBurned" sourceName="Synthetic Watch" unit="kcal" startDate="2026-01-06 18:20:00 +0900" endDate="2026-01-06 18:20:00 +0900" value="143.5" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierActiveEnergyBurned" sourceName="Synthetic iPhone" unit="kcal" startDate="2026-01-06 12:45:00 +0900" endDate="2026-01-06 12:45:00 +0900" value="88" device="&lt;&lt;HKDevice: 0x2&gt;, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone&gt;"/>
+  <Record type="HKQuantityTypeIdentifierOxygenSaturation" sourceName="Synthetic Watch" unit="%" startDate="2026-01-06 03:20:00 +0900" endDate="2026-01-06 03:20:00 +0900" value="0.97" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierOxygenSaturation" sourceName="Synthetic Watch" unit="%" startDate="2026-01-06 04:20:00 +0900" endDate="2026-01-06 04:20:00 +0900" value="0.96" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierRespiratoryRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 03:25:00 +0900" endDate="2026-01-06 03:25:00 +0900" value="14.5" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierRespiratoryRate" sourceName="Synthetic Watch" unit="count/min" startDate="2026-01-06 04:25:00 +0900" endDate="2026-01-06 04:25:00 +0900" value="15" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierAppleSleepingWristTemperature" sourceName="Synthetic Watch" unit="degC" startDate="2026-01-06 03:30:00 +0900" endDate="2026-01-06 03:30:00 +0900" value="35.42" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
+  <Record type="HKQuantityTypeIdentifierFixtureUnrecognized" sourceName="Synthetic Watch" unit="count" startDate="2026-01-06 09:30:00 +0900" endDate="2026-01-06 09:30:00 +0900" value="1" device="&lt;&lt;HKDevice: 0x1&gt;, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch&gt;"/>
   <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Synthetic iPhone" unit="count" startDate="2026-02-30 10:00:00 +0900" endDate="2026-02-30 10:00:00 +0900" value="7"/>
   <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Watch" startDate="2026-01-06 22:30:00 +0900" endDate="2026-01-06 22:35:00 +0900">
     <MetadataEntry key="HKMetadataKeySyncIdentifier" value="synthetic-sync-001"/>
   </Record>
-  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Sleep App" startDate="2026-01-06 15:10:00 -0500" endDate="2026-01-06 15:40:00 -0500" value="HKCategoryValueSleepAnalysisAsleepCore"/>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Synthetic Sleep App" startDate="2026-01-06 15:10:00 -0500" endDate="2026-01-06 15:40:00 -0500" value="HKCategoryValueSleepAnalysisAsleepCore">
+    <MetadataEntry key="HKTimeZone" value="Asia/Tokyo"/>
+  </Record>
   <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="32" durationUnit="min" sourceName="Synthetic Watch" startDate="2026-01-06 07:00:00 +0900" endDate="2026-01-06 07:32:00 +0900">
     <MetadataEntry key="HKIndoorWorkout" value="0"/>
     <WorkoutRoute sourceName="Synthetic Watch" startDate="2026-01-06 07:00:00 +0900" endDate="2026-01-06 07:32:00 +0900">
@@ -79,6 +103,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
   "records": [
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-05 23:00:00 +0900",
       "endUtc": "2026-01-05T14:00:00.000Z",
       "exactDuplicateOf": null,
@@ -87,7 +112,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-05",
       "localMinute": 1370,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-05",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -103,6 +130,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-05 23:20:00 +0900",
       "endUtc": "2026-01-05T14:20:00.000Z",
       "exactDuplicateOf": null,
@@ -111,7 +139,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-05",
       "localMinute": 1380,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-05",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -127,6 +157,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 00:30:00 +0900",
       "endUtc": "2026-01-05T15:30:00.000Z",
       "exactDuplicateOf": null,
@@ -135,7 +166,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-05",
       "localMinute": 1400,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-05",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -151,6 +184,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 01:30:00 +0900",
       "endUtc": "2026-01-05T16:30:00.000Z",
       "exactDuplicateOf": null,
@@ -159,7 +193,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-06",
       "localMinute": 30,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-05",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -175,6 +211,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 02:30:00 +0900",
       "endUtc": "2026-01-05T17:30:00.000Z",
       "exactDuplicateOf": null,
@@ -183,7 +220,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-06",
       "localMinute": 90,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-05",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -199,6 +238,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 02:45:00 +0900",
       "endUtc": "2026-01-05T17:45:00.000Z",
       "exactDuplicateOf": null,
@@ -207,7 +247,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-06",
       "localMinute": 150,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-05",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -223,6 +265,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 06:30:00 +0900",
       "endUtc": "2026-01-05T21:30:00.000Z",
       "exactDuplicateOf": null,
@@ -231,7 +274,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-06",
       "localMinute": 165,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-05",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -247,6 +292,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 23:40:00 +0900",
       "endUtc": "2026-01-06T14:40:00.000Z",
       "exactDuplicateOf": null,
@@ -255,7 +301,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-06",
       "localMinute": 1390,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-06",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -271,6 +319,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-07 00:20:00 +0900",
       "endUtc": "2026-01-06T15:20:00.000Z",
       "exactDuplicateOf": null,
@@ -279,7 +328,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-06",
       "localMinute": 1420,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-06",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -295,6 +346,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-07 01:00:00 +0900",
       "endUtc": "2026-01-06T16:00:00.000Z",
       "exactDuplicateOf": null,
@@ -303,7 +355,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-07",
       "localMinute": 20,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-06",
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -319,6 +373,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 13:40:00 +0900",
       "endUtc": "2026-01-06T04:40:00.000Z",
       "exactDuplicateOf": null,
@@ -327,7 +382,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-06",
       "localMinute": 780,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": null,
       "numericDuplicateOf": null,
       "offsetMinutes": 540,
@@ -343,6 +400,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 01:00:00 +0900",
       "endUtc": "2026-01-05T16:00:00.000Z",
       "exactDuplicateOf": null,
@@ -367,6 +425,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 02:00:00 +0900",
       "endUtc": "2026-01-05T17:00:00.000Z",
       "exactDuplicateOf": null,
@@ -391,6 +450,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 03:00:00 +0900",
       "endUtc": "2026-01-05T18:00:00.000Z",
       "exactDuplicateOf": null,
@@ -415,6 +475,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 04:00:00 +0900",
       "endUtc": "2026-01-05T19:00:00.000Z",
       "exactDuplicateOf": null,
@@ -439,6 +500,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 05:00:00 +0900",
       "endUtc": "2026-01-05T20:00:00.000Z",
       "exactDuplicateOf": null,
@@ -463,6 +525,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 06:00:00 +0900",
       "endUtc": "2026-01-05T21:00:00.000Z",
       "exactDuplicateOf": null,
@@ -487,6 +550,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 09:00:00 +0900",
       "endUtc": "2026-01-06T00:00:00.000Z",
       "exactDuplicateOf": null,
@@ -511,6 +575,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 10:00:00 +0900",
       "endUtc": "2026-01-06T01:00:00.000Z",
       "exactDuplicateOf": null,
@@ -535,6 +600,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 11:00:00 +0900",
       "endUtc": "2026-01-06T02:00:00.000Z",
       "exactDuplicateOf": null,
@@ -559,6 +625,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 12:00:00 +0900",
       "endUtc": "2026-01-06T03:00:00.000Z",
       "exactDuplicateOf": null,
@@ -583,6 +650,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 13:00:00 +0900",
       "endUtc": "2026-01-06T04:00:00.000Z",
       "exactDuplicateOf": null,
@@ -607,6 +675,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 14:00:00 +0900",
       "endUtc": "2026-01-06T05:00:00.000Z",
       "exactDuplicateOf": null,
@@ -631,6 +700,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 15:00:00 +0900",
       "endUtc": "2026-01-06T06:00:00.000Z",
       "exactDuplicateOf": null,
@@ -655,6 +725,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 16:00:00 +0900",
       "endUtc": "2026-01-06T07:00:00.000Z",
       "exactDuplicateOf": null,
@@ -679,6 +750,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 17:00:00 +0900",
       "endUtc": "2026-01-06T08:00:00.000Z",
       "exactDuplicateOf": null,
@@ -703,6 +775,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-05 16:15:00 -0500",
       "endUtc": "2026-01-05T21:15:00.000Z",
       "exactDuplicateOf": null,
@@ -727,6 +800,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x2>, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone>",
       "endDate": "2026-01-06 10:30:00 +0100",
       "endUtc": "2026-01-06T09:30:00.000Z",
       "exactDuplicateOf": null,
@@ -751,6 +825,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-05 21:30:00 +0900",
       "endUtc": "2026-01-05T12:30:00.000Z",
       "exactDuplicateOf": null,
@@ -777,6 +852,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 06:45:00 +0900",
       "endUtc": "2026-01-05T21:45:00.000Z",
       "exactDuplicateOf": null,
@@ -801,6 +877,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 14:00:00 +0900",
       "endUtc": "2026-01-06T05:00:00.000Z",
       "exactDuplicateOf": null,
@@ -825,6 +902,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-06 07:00:00 +0900",
       "endUtc": "2026-01-05T22:00:00.000Z",
       "exactDuplicateOf": null,
@@ -849,6 +927,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x2>, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone>",
       "endDate": "2026-01-06 08:15:00 +0900",
       "endUtc": "2026-01-05T23:15:00.000Z",
       "exactDuplicateOf": null,
@@ -873,6 +952,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x2>, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone>",
       "endDate": "2026-01-06 12:45:00 +0900",
       "endUtc": "2026-01-06T03:45:00.000Z",
       "exactDuplicateOf": null,
@@ -897,6 +977,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 18:20:00 +0900",
       "endUtc": "2026-01-06T09:20:00.000Z",
       "exactDuplicateOf": null,
@@ -921,6 +1002,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 18:20:00 +0900",
       "endUtc": "2026-01-06T09:20:00.000Z",
       "exactDuplicateOf": null,
@@ -945,6 +1027,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x2>, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone>",
       "endDate": "2026-01-06 12:45:00 +0900",
       "endUtc": "2026-01-06T03:45:00.000Z",
       "exactDuplicateOf": null,
@@ -969,6 +1052,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 03:20:00 +0900",
       "endUtc": "2026-01-05T18:20:00.000Z",
       "exactDuplicateOf": null,
@@ -993,6 +1077,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 04:20:00 +0900",
       "endUtc": "2026-01-05T19:20:00.000Z",
       "exactDuplicateOf": null,
@@ -1017,6 +1102,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 03:25:00 +0900",
       "endUtc": "2026-01-05T18:25:00.000Z",
       "exactDuplicateOf": null,
@@ -1041,6 +1127,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 04:25:00 +0900",
       "endUtc": "2026-01-05T19:25:00.000Z",
       "exactDuplicateOf": null,
@@ -1065,6 +1152,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 03:30:00 +0900",
       "endUtc": "2026-01-05T18:30:00.000Z",
       "exactDuplicateOf": null,
@@ -1089,6 +1177,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>",
       "endDate": "2026-01-06 09:30:00 +0900",
       "endUtc": "2026-01-06T00:30:00.000Z",
       "exactDuplicateOf": null,
@@ -1113,6 +1202,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-02-30 10:00:00 +0900",
       "endUtc": null,
       "exactDuplicateOf": null,
@@ -1137,6 +1227,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 22:35:00 +0900",
       "endUtc": "2026-01-06T13:35:00.000Z",
       "exactDuplicateOf": null,
@@ -1163,6 +1254,7 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-06 15:40:00 -0500",
       "endUtc": "2026-01-06T20:40:00.000Z",
       "exactDuplicateOf": null,
@@ -1171,7 +1263,9 @@ exports[`general corpus snapshot locks XML shape and expectations 2`] = `
       "localDay": "2026-01-06",
       "localMinute": 910,
       "malformed": null,
-      "metadata": {},
+      "metadata": {
+        "HKTimeZone": "Asia/Tokyo",
+      },
       "night": "2026-01-06",
       "numericDuplicateOf": null,
       "offsetMinutes": -300,
@@ -1247,6 +1341,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
   "records": [
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-10 15:20:00 +0900",
       "endUtc": "2026-01-10T06:20:00.000Z",
       "exactDuplicateOf": null,
@@ -1271,6 +1366,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-10 15:20:00 +0900",
       "endUtc": "2026-01-10T06:20:00.000Z",
       "exactDuplicateOf": null,
@@ -1295,6 +1391,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-11 09:10:00 +0900",
       "endUtc": "2026-01-11T00:10:00.000Z",
       "exactDuplicateOf": null,
@@ -1319,6 +1416,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-11 09:10:00 +0900",
       "endUtc": "2026-01-11T00:10:00.000Z",
       "exactDuplicateOf": null,
@@ -1343,6 +1441,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-13 00:05:00 +0900",
       "endUtc": "2026-01-12T15:05:00.000Z",
       "exactDuplicateOf": null,
@@ -1367,6 +1466,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-13 00:50:00 +0900",
       "endUtc": "2026-01-12T15:50:00.000Z",
       "exactDuplicateOf": null,
@@ -1391,6 +1491,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-14 15:10:00 +0100",
       "endUtc": "2026-01-14T14:10:00.000Z",
       "exactDuplicateOf": null,
@@ -1415,6 +1516,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-14 15:10:00 -0500",
       "endUtc": "2026-01-14T20:10:00.000Z",
       "exactDuplicateOf": null,
@@ -1439,6 +1541,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-12 20:59:00 +0900",
       "endUtc": "2026-01-12T11:59:00.000Z",
       "exactDuplicateOf": null,
@@ -1463,6 +1566,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-12 21:00:00 +0900",
       "endUtc": "2026-01-12T12:00:00.000Z",
       "exactDuplicateOf": null,
@@ -1487,6 +1591,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-13 08:59:00 +0900",
       "endUtc": "2026-01-12T23:59:00.000Z",
       "exactDuplicateOf": null,
@@ -1511,6 +1616,7 @@ exports[`boundary corpus snapshot locks boundary shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-13 09:00:00 +0900",
       "endUtc": "2026-01-13T00:00:00.000Z",
       "exactDuplicateOf": null,
@@ -1673,6 +1779,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
   "records": [
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 10:00:00 +0900",
       "endUtc": "2026-01-14T01:00:00.000Z",
       "exactDuplicateOf": null,
@@ -1697,6 +1804,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 10:00:00 +0900",
       "endUtc": "2026-01-14T01:00:00.000Z",
       "exactDuplicateOf": 0,
@@ -1721,6 +1829,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 10:00:00 +0900",
       "endUtc": "2026-01-14T01:00:00.000Z",
       "exactDuplicateOf": null,
@@ -1745,6 +1854,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 10:00:00 +0900",
       "endUtc": "2026-01-14T01:00:00.000Z",
       "exactDuplicateOf": null,
@@ -1769,6 +1879,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 07:00:00 +0900",
       "endUtc": "2026-01-13T22:00:00.000Z",
       "exactDuplicateOf": null,
@@ -1793,6 +1904,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 07:00:00 +0900",
       "endUtc": "2026-01-13T22:00:00.000Z",
       "exactDuplicateOf": null,
@@ -1817,6 +1929,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 08:00:00 +0900",
       "endUtc": "2026-01-13T23:00:00.000Z",
       "exactDuplicateOf": null,
@@ -1841,6 +1954,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 08:00:00 +0900",
       "endUtc": "2026-01-13T23:00:00.000Z",
       "exactDuplicateOf": 6,
@@ -1865,6 +1979,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-14 23:30:00 +0900",
       "endUtc": "2026-01-14T14:30:00.000Z",
       "exactDuplicateOf": null,
@@ -1889,6 +2004,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-14 23:30:00 +0900",
       "endUtc": "2026-01-14T14:30:00.000Z",
       "exactDuplicateOf": 8,
@@ -1913,6 +2029,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-14 23:30:00 +0900",
       "endUtc": "2026-01-14T14:30:00.000Z",
       "exactDuplicateOf": null,
@@ -1937,6 +2054,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": true,
+      "device": null,
       "endDate": "2026-01-14 23:45:00 +0900",
       "endUtc": "2026-01-14T14:45:00.000Z",
       "exactDuplicateOf": null,
@@ -1961,6 +2079,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 10:01:00 +0900",
       "endUtc": "2026-01-14T01:01:00.000Z",
       "exactDuplicateOf": null,
@@ -1985,6 +2104,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 10:02:00 +0900",
       "endUtc": "2026-01-14T01:02:00.000Z",
       "exactDuplicateOf": null,
@@ -2009,6 +2129,7 @@ exports[`dedup corpus snapshot locks dedup shape 2`] = `
     },
     {
       "category": false,
+      "device": null,
       "endDate": "2026-01-14 10:02:00 +0900",
       "endUtc": "2026-01-14T01:02:00.000Z",
       "exactDuplicateOf": null,

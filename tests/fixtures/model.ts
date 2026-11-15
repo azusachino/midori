@@ -47,6 +47,8 @@ export type RecordSpec = {
   endDate: string;
   /** Raw value attribute. Omitted entirely when undefined. */
   value?: string;
+  /** Raw HealthKit device attribute. Omitted when the record has no device. */
+  device?: string;
   metadata?: Readonly<Record<string, string>>;
 };
 
@@ -98,6 +100,7 @@ export type ExpectedRecord = {
   /** HRV only: true when the start falls in the 21:00-09:00 window. Null for other types. */
   hrvNightWindow: boolean | null;
   metadata: Readonly<Record<string, string>>;
+  device: string | null;
   /** Reason the record's dates are malformed, or null. */
   malformed: string | null;
   /** Ordinal of the first earlier record that is byte-identical to this one, else null. */
@@ -266,6 +269,7 @@ function renderRecord(r: RecordSpec): string[] {
     ["startDate", r.startDate],
     ["endDate", r.endDate],
     ["value", r.value],
+    ["device", r.device],
   ])}`;
   const children = metadataLines(r.metadata, "    ");
   if (children.length === 0) return [`${open}/>`];
@@ -365,6 +369,7 @@ function expectRecord(r: RecordSpec, ordinal: number): ExpectedRecord {
     night,
     hrvNightWindow,
     metadata: { ...(r.metadata ?? {}) },
+    device: r.device ?? null,
     malformed,
     exactDuplicateOf: null,
     numericDuplicateOf: null,
@@ -374,7 +379,16 @@ function expectRecord(r: RecordSpec, ordinal: number): ExpectedRecord {
 /** Computes duplicate relations generically from the spec, so corpora need no hand annotation. */
 function markDuplicates(records: ExpectedRecord[], specs: readonly RecordSpec[]): void {
   const rawKey = (r: RecordSpec) =>
-    JSON.stringify([r.type, r.sourceName, r.unit, r.startDate, r.endDate, r.value, r.metadata]);
+    JSON.stringify([
+      r.type,
+      r.sourceName,
+      r.unit,
+      r.startDate,
+      r.endDate,
+      r.value,
+      r.device,
+      r.metadata,
+    ]);
   const spanKey = (e: ExpectedRecord) => `${e.type}|${e.sourceName}|${e.startUtc}|${e.endUtc}`;
   for (const [i, rec] of records.entries()) {
     const spec = specs[i];

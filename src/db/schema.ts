@@ -1,7 +1,7 @@
 import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
- * Typed mirror of migrations/0001_init.sql for drizzle-orm queries.
+ * Typed mirror of the SQL migrations for drizzle-orm queries.
  * The SQL migrations are the source of truth; src/db/db.test.ts asserts the two
  * cannot drift (column sets must match).
  */
@@ -18,6 +18,7 @@ export const imports = sqliteTable("imports", {
   recordsInserted: integer("records_inserted"),
   recordsDeduped: integer("records_deduped"),
   durationMs: integer("duration_ms"),
+  exportDate: text("export_date"),
 });
 
 export const sources = sqliteTable("sources", {
@@ -40,6 +41,9 @@ export const records = sqliteTable("records", {
   value: real("value"),
   valueStr: text("value_str"),
   importId: integer("import_id").notNull(),
+  deviceHw: text("device_hw"),
+  deviceSw: text("device_sw"),
+  metaJson: text("meta_json"),
 });
 
 export const dailyMetrics = sqliteTable(
