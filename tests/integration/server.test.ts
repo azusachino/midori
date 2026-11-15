@@ -84,12 +84,23 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     const initial = await runImport(dbPath, zipPath);
     expect(initial.asOfDay).toBe("2026-02-07");
 
+    let signalDeriving!: () => void;
+    let releaseDeriving!: () => void;
+    const derivingReached = new Promise<void>((resolve) => {
+      signalDeriving = resolve;
+    });
+    const deriveLatch = new Promise<void>((resolve) => {
+      releaseDeriving = resolve;
+    });
     server = startServer({
       db: openDb(dbPath),
       dbPath,
       port: 0,
       spoolDir: join(workdir, "spool"),
-      deriveSpinMs: 800,
+      onDeriveStage: async () => {
+        signalDeriving();
+        await deriveLatch;
+      },
     });
     const origin = `http://127.0.0.1:${server.port}`;
     const upload = await fetch(`${origin}/api/imports`, {
@@ -102,21 +113,27 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     });
     expect(upload.status).toBe(202);
     const { importId } = (await upload.json()) as { importId: number };
-    const deadline = Date.now() + 10_000;
-    let stage = "";
-    while (stage !== "deriving" && Date.now() < deadline) {
-      const detail = await fetch(`${origin}/api/imports/${importId}`);
-      stage = ((await detail.json()) as { stage: string }).stage;
-      if (stage !== "deriving") await Bun.sleep(5);
-    }
-    expect(stage).toBe("deriving");
+    try {
+      await Promise.race([
+        derivingReached,
+        Bun.sleep(10_000).then(() => {
+          throw new Error("worker did not reach the derive latch");
+        }),
+      ]);
 
-    const started = performance.now();
-    const changes = await fetch(`${origin}/api/changes`);
-    const elapsedMs = performance.now() - started;
-    expect(changes.status).toBe(200);
-    expect(elapsedMs).toBeLessThan(500);
-    expect(((await changes.json()) as { asOfDay: string | null }).asOfDay).toBe(initial.asOfDay);
+      const changes = await Promise.race([
+        fetch(`${origin}/api/changes`),
+        Bun.sleep(500).then(() => {
+          throw new Error("/api/changes stayed blocked while the worker was held at derive");
+        }),
+      ]);
+      expect(changes.status).toBe(200);
+      expect(((await changes.json()) as { asOfDay: string | null }).asOfDay).toBe(initial.asOfDay);
+    } finally {
+      releaseDeriving();
+    }
+
+    const deadline = Date.now() + 10_000;
     let status = "running";
     while (status !== "done" && status !== "failed" && Date.now() < deadline) {
       const detail = await fetch(`${origin}/api/imports/${importId}`);

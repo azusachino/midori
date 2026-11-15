@@ -8,6 +8,9 @@ interface WorkerFailure {
   type: "error";
   error: string;
 }
+interface DeriveStage {
+  type: "derive-stage";
+}
 
 /** Runs all CPU-heavy import phases off the HTTP event loop on a WAL connection. */
 export function runImportInWorker(
@@ -33,9 +36,14 @@ export function runImportInWorker(
         reason: String(options.signal?.reason ?? "aborted"),
       });
     };
-    worker.onmessage = (event: MessageEvent<WorkerResponse | WorkerFailure>) => {
+    worker.onmessage = (event: MessageEvent<WorkerResponse | WorkerFailure | DeriveStage>) => {
       const message = event.data;
-      if (message.type === "done") finish(undefined, message.summary);
+      if (message.type === "derive-stage") {
+        void Promise.resolve(options.onDeriveStage?.()).then(
+          () => worker.postMessage({ type: "continue-derive" }),
+          (error: unknown) => finish(error instanceof Error ? error : new Error(String(error))),
+        );
+      } else if (message.type === "done") finish(undefined, message.summary);
       else finish(new Error(message.error));
     };
     worker.onerror = (event) => finish(new Error(event.message));
@@ -46,7 +54,7 @@ export function runImportInWorker(
       dbPath,
       zipPath,
       importId: options.importId,
-      deriveSpinMs: options.deriveSpinMs,
+      holdDerive: options.onDeriveStage !== undefined,
     });
   });
 }

@@ -28,9 +28,9 @@ export interface ServerOptions {
   spoolDir?: string;
   archiveDir?: string;
   backupDir?: string;
-  /** Optional import runner and derive delay used by integration tests. */
+  /** Import runner and derive-stage latch used by integration tests. */
   importRunner?: ImportRunner;
-  deriveSpinMs?: number;
+  onDeriveStage?: () => Promise<void>;
 }
 
 /** Returns the built file for `pathname` under `webRoot`, or null when absent or unsafe. */
@@ -105,7 +105,7 @@ export function startServer(opts: ServerOptions): Bun.Server<undefined> {
       spoolDir,
       backupDir: opts.backupDir ?? DEFAULT_BACKUP_DIR,
       ...(opts.importRunner ? { runImport: opts.importRunner } : {}),
-      ...(opts.deriveSpinMs === undefined ? {} : { deriveSpinMs: opts.deriveSpinMs }),
+      ...(opts.onDeriveStage ? { onDeriveStage: opts.onDeriveStage } : {}),
     },
   });
   mountMcp(app, { db: opts.db });

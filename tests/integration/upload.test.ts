@@ -112,7 +112,7 @@ async function waitForTerminal(h: Harness, id: number, timeoutMs = 15_000): Prom
     const res = await h.app.request("/api/imports");
     const rows = (await res.json()) as Array<Record<string, unknown>>;
     const row = rows.find((r) => r.id === id);
-    if (row && (row.status === "done" || row.status === "failed")) {
+    if (row && (row.status === "done" || row.status === "failed") && !isImportLocked(h.dbPath)) {
       return {
         id,
         status: String(row.status),

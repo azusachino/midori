@@ -49,7 +49,7 @@ export interface ImportRouteOptions {
   spoolDir?: string;
   backupDir?: string;
   runImport?: ImportRunner;
-  deriveSpinMs?: number;
+  onDeriveStage?: () => Promise<void>;
   timeoutMs?: number;
   maxBytes?: number;
 }
@@ -81,6 +81,19 @@ function parseEpochLabels(value: string | null): string[] {
 function sanitizeName(raw: string | undefined): string {
   const name = basename((raw ?? "").trim());
   return name.length > 0 && name.length <= 255 ? name : "upload.zip";
+}
+
+async function retrySqliteBusy<T>(operation: () => T): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return operation();
+    } catch (error) {
+      const code =
+        typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+      if ((code !== "SQLITE_BUSY" && code !== "SQLITE_LOCKED") || attempt >= 19) throw error;
+      await Bun.sleep(25);
+    }
+  }
 }
 
 async function createImportRow(db: Database, zipName: string, bytes: number): Promise<number> {
@@ -143,7 +156,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
   const spoolDir = opts.spoolDir ?? DEFAULT_SPOOL_DIR;
   const backupDir = opts.backupDir ?? DEFAULT_BACKUP_DIR;
   const runner = opts.runImport ?? runImportInWorker;
-  const deriveSpinMs = opts.deriveSpinMs;
+  const onDeriveStage = opts.onDeriveStage;
   const timeoutMs = opts.timeoutMs ?? IMPORT_TIMEOUT_MS;
   const maxBytes = opts.maxBytes ?? MAX_UPLOAD_BYTES;
   const { db, dbPath, archiveDir } = opts;
@@ -216,7 +229,7 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
       await runner(dbPath, zipPath, {
         importId,
         signal: controller.signal,
-        ...(deriveSpinMs === undefined ? {} : { deriveSpinMs }),
+        ...(onDeriveStage === undefined ? {} : { onDeriveStage }),
       });
       try {
         archiveZip(zipPath, { archiveDir });
@@ -224,17 +237,19 @@ export function mountImportRoutes(app: Hono, opts: ImportRouteOptions): void {
         console.error(`import ${importId}: archive failed: ${String(err)}`);
       }
       try {
-        backupDatabase(dbPath, { backupDir });
+        await backupDatabase(dbPath, { backupDir });
         pruneBackups(backupDir, { now: new Date() });
       } catch (err) {
         console.error(`import ${importId}: backup failed: ${String(err)}`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      db.run(
-        `UPDATE imports SET status = 'failed', error = ?
-         WHERE id = ? AND status NOT IN ('done', 'failed')`,
-        [message, importId],
+      await retrySqliteBusy(() =>
+        db.run(
+          `UPDATE imports SET status = 'failed', error = ?
+           WHERE id = ? AND status NOT IN ('done', 'failed')`,
+          [message, importId],
+        ),
       );
       // Retain a failed job's spool for the documented 24-hour retry window.
     } finally {

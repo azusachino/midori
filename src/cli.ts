@@ -92,7 +92,7 @@ if (command === "changes") {
       usage();
     }
   }
-  const { snapshotPath, bytes } = backupDatabase(dbPath, { backupDir });
+  const { snapshotPath, bytes } = await backupDatabase(dbPath, { backupDir });
   const pruned = pruneBackups(backupDir, { now: new Date(), retentionDays });
   console.log(JSON.stringify({ ok: true, snapshotPath, bytes, pruned: pruned.length }, null, 2));
 } else {
@@ -132,7 +132,7 @@ async function runImportCommand(args: string[]): Promise<void> {
   let backupPath: string | null = null;
   let archivedPath: string | null = null;
   if (summary.status === "done") {
-    backupPath = backupDatabase(dbPath, { backupDir }).snapshotPath;
+    backupPath = (await backupDatabase(dbPath, { backupDir })).snapshotPath;
     pruneBackups(backupDir, { now: new Date() });
     if (!keepZip) archivedPath = archiveZip(zipPath, { archiveDir });
   }

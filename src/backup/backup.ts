@@ -91,10 +91,10 @@ export interface BackupDatabaseResult {
  * Checkpoint the WAL, snapshot the database with `VACUUM INTO`, and verify the
  * snapshot. Leaves the source database open only for the duration of the copy.
  */
-export function backupDatabase(
+export async function backupDatabase(
   dbPath: string,
   options: BackupDatabaseOptions,
-): BackupDatabaseResult {
+): Promise<BackupDatabaseResult> {
   if (!existsSync(dbPath)) throw new Error(`backupDatabase: no database at ${dbPath}`);
   const now = options.now ?? new Date();
   mkdirSync(options.backupDir, { recursive: true });
@@ -104,14 +104,28 @@ export function backupDatabase(
 
   const db = openDb(dbPath);
   try {
-    const checkpoint = db.query("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
-      busy?: number;
-    } | null;
-    if (checkpoint?.busy) {
-      throw new Error(
-        `backupDatabase: WAL checkpoint is busy for ${dbPath} (another connection is reading); ` +
-          "snapshot would miss the write-ahead log",
-      );
+    db.exec("PRAGMA busy_timeout = 100");
+    const deadline = performance.now() + 10_000;
+    let backoffMs = 25;
+    for (;;) {
+      try {
+        const checkpoint = db.query("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
+          busy?: number;
+        } | null;
+        if (!checkpoint?.busy) break;
+      } catch (error) {
+        const code =
+          typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+        if (code !== "SQLITE_BUSY" && code !== "SQLITE_LOCKED") throw error;
+      }
+      const remainingMs = deadline - performance.now();
+      if (remainingMs <= 0) {
+        throw new Error(
+          `backupDatabase: WAL TRUNCATE checkpoint stayed busy for 10 seconds: ${dbPath}`,
+        );
+      }
+      await Bun.sleep(Math.min(backoffMs, remainingMs));
+      backoffMs = Math.min(backoffMs * 2, 500);
     }
     db.exec(`VACUUM INTO ${sqlString(snapshotPath)}`);
   } catch (err) {

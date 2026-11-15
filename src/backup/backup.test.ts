@@ -83,13 +83,13 @@ describe("snapshotName", () => {
 });
 
 describe("backupDatabase", () => {
-  test("writes a checkpointed snapshot whose integrity_check is ok", () => {
+  test("writes a checkpointed snapshot whose integrity_check is ok", async () => {
     const dir = caseDir("backup");
     const live = seedDb(join(dir, "live.db"), 3);
     const backupDir = join(dir, "backups");
     const now = new Date("2026-11-14T12:00:00.000Z");
 
-    const result = backupDatabase(live, { backupDir, now });
+    const result = await backupDatabase(live, { backupDir, now });
 
     expect(basename(result.snapshotPath)).toBe("midori-20261114-120000.db");
     expect(result.bytes).toBeGreaterThan(0);
@@ -103,15 +103,54 @@ describe("backupDatabase", () => {
     expect(existsSync(liveWal) ? statSync(liveWal).size : 0).toBe(0);
   });
 
-  test("same-second re-backup allocates a suffixed snapshot instead of overwriting", () => {
+  test("retries a TRUNCATE checkpoint until a held reader releases, preserving WAL data", async () => {
+    const dir = caseDir("backup-reader");
+    const live = seedDb(join(dir, "live.db"), 3);
+    const backupDir = join(dir, "backups");
+    const reader = openDb(live);
+    reader.exec("BEGIN");
+    expect((reader.query("SELECT COUNT(*) AS n FROM records").get() as { n: number }).n).toBe(3);
+    const writer = openDb(live);
+    writer.run("UPDATE imports SET zip_name = 'after-reader' WHERE id = 1");
+    writer.close();
+
+    let completed = false;
+    let backupError: unknown;
+    const backupPromise = backupDatabase(live, { backupDir }).then(
+      (result) => {
+        completed = true;
+        return result;
+      },
+      (error: unknown) => {
+        backupError = error;
+        return null;
+      },
+    );
+    await Bun.sleep(150);
+    expect(completed).toBe(false);
+    expect(backupError).toBeUndefined();
+    reader.exec("COMMIT");
+    reader.close();
+
+    const result = await backupPromise;
+    if (!result) throw backupError ?? new Error("backup did not complete");
+    const snapshot = openDb(result.snapshotPath, { readonly: true });
+    expect(snapshot.query("SELECT zip_name FROM imports WHERE id = 1").get()).toEqual({
+      zip_name: "after-reader",
+    });
+    snapshot.close();
+    expect(() => checkIntegrity(result.snapshotPath)).not.toThrow();
+  });
+
+  test("same-second re-backup allocates a suffixed snapshot instead of overwriting", async () => {
     const dir = caseDir("backup-collision");
     const live = seedDb(join(dir, "live.db"), 1);
     const backupDir = join(dir, "backups");
     const now = new Date("2026-11-14T12:00:00.000Z");
 
-    const first = backupDatabase(live, { backupDir, now });
+    const first = await backupDatabase(live, { backupDir, now });
     expect(first.snapshotPath.endsWith("midori-20261114-120000.db")).toBe(true);
-    const second = backupDatabase(live, { backupDir, now });
+    const second = await backupDatabase(live, { backupDir, now });
     expect(second.snapshotPath.endsWith("midori-20261114-120000-1.db")).toBe(true);
     // Both survive: the second backup never clobbered the first.
     expect(existsSync(first.snapshotPath)).toBe(true);
@@ -119,19 +158,19 @@ describe("backupDatabase", () => {
     checkIntegrity(second.snapshotPath);
   });
 
-  test("throws for a missing database", () => {
+  test("throws for a missing database", async () => {
     const dir = caseDir("backup-missing");
-    expect(() =>
+    await expect(
       backupDatabase(join(dir, "absent.db"), { backupDir: join(dir, "backups") }),
-    ).toThrow(/no database at/);
+    ).rejects.toThrow(/no database at/);
   });
 });
 
 describe("restoreSnapshot", () => {
-  test("backup → restore yields a readable database", () => {
+  test("backup → restore yields a readable database", async () => {
     const dir = caseDir("roundtrip");
     const live = seedDb(join(dir, "live.db"), 3);
-    const { snapshotPath } = backupDatabase(live, {
+    const { snapshotPath } = await backupDatabase(live, {
       backupDir: join(dir, "backups"),
       now: new Date("2026-11-14T12:00:00.000Z"),
     });
@@ -145,10 +184,10 @@ describe("restoreSnapshot", () => {
     expect(existsSync(`${targetPath}.restore-tmp`)).toBe(false);
   });
 
-  test("removes stale -wal/-shm sidecars and replaces contents", () => {
+  test("removes stale -wal/-shm sidecars and replaces contents", async () => {
     const dir = caseDir("sidecars");
     const live = seedDb(join(dir, "live.db"), 3);
-    const { snapshotPath } = backupDatabase(live, {
+    const { snapshotPath } = await backupDatabase(live, {
       backupDir: join(dir, "backups"),
       now: new Date("2026-11-14T12:00:00.000Z"),
     });
@@ -168,7 +207,7 @@ describe("restoreSnapshot", () => {
   test("corrupted snapshot fails integrity_check and leaves the target untouched", async () => {
     const dir = caseDir("corrupt");
     const live = seedDb(join(dir, "live.db"), 3);
-    const { snapshotPath } = backupDatabase(live, {
+    const { snapshotPath } = await backupDatabase(live, {
       backupDir: join(dir, "backups"),
       now: new Date("2026-11-14T12:00:00.000Z"),
     });
@@ -186,23 +225,23 @@ describe("restoreSnapshot", () => {
 });
 
 describe("pruneBackups", () => {
-  test("keeps the cutoff boundary, deletes one second older, keeps newer", () => {
+  test("keeps the cutoff boundary, deletes one second older, keeps newer", async () => {
     const dir = caseDir("retention");
     const live = seedDb(join(dir, "live.db"), 1);
     const backupDir = join(dir, "backups");
     const now = new Date("2026-11-14T12:00:00.000Z");
     const cutoffMs = now.getTime() - 30 * DAY_MS;
 
-    const atBoundary = backupDatabase(live, { backupDir, now: new Date(cutoffMs) });
-    const oneSecondOlder = backupDatabase(live, {
+    const atBoundary = await backupDatabase(live, { backupDir, now: new Date(cutoffMs) });
+    const oneSecondOlder = await backupDatabase(live, {
       backupDir,
       now: new Date(cutoffMs - 1000),
     });
-    const sameSecondOlder = backupDatabase(live, {
+    const sameSecondOlder = await backupDatabase(live, {
       backupDir,
       now: new Date(cutoffMs - 1000),
     });
-    const newer = backupDatabase(live, { backupDir, now: new Date(now.getTime() - 1000) });
+    const newer = await backupDatabase(live, { backupDir, now: new Date(now.getTime() - 1000) });
 
     utimesSync(atBoundary.snapshotPath, new Date(cutoffMs), new Date(cutoffMs));
     utimesSync(oneSecondOlder.snapshotPath, new Date(cutoffMs - 1000), new Date(cutoffMs - 1000));

@@ -5,7 +5,10 @@ interface RunMessage {
   dbPath: string;
   zipPath: string;
   importId: number;
-  deriveSpinMs?: number;
+  holdDerive?: boolean;
+}
+interface ContinueMessage {
+  type: "continue-derive";
 }
 interface AbortMessage {
   type: "abort";
@@ -14,20 +17,38 @@ interface AbortMessage {
 
 const controller = new AbortController();
 const workerScope = self as unknown as {
-  onmessage: ((event: MessageEvent<RunMessage | AbortMessage>) => void) | null;
+  onmessage: ((event: MessageEvent<RunMessage | ContinueMessage | AbortMessage>) => void) | null;
   postMessage: (message: unknown) => void;
 };
-workerScope.onmessage = async (event: MessageEvent<RunMessage | AbortMessage>) => {
+let continueDerive: (() => void) | undefined;
+workerScope.onmessage = async (
+  event: MessageEvent<RunMessage | ContinueMessage | AbortMessage>,
+) => {
   const message = event.data;
+  if (message.type === "continue-derive") {
+    continueDerive?.();
+    continueDerive = undefined;
+    return;
+  }
   if (message.type === "abort") {
     controller.abort(new Error(message.reason));
+    continueDerive?.();
+    continueDerive = undefined;
     return;
   }
   try {
     const summary = await runImport(message.dbPath, message.zipPath, {
       importId: message.importId,
       signal: controller.signal,
-      ...(message.deriveSpinMs === undefined ? {} : { deriveSpinMs: message.deriveSpinMs }),
+      ...(message.holdDerive
+        ? {
+            beforeDerive: () =>
+              new Promise<void>((resolve) => {
+                continueDerive = resolve;
+                workerScope.postMessage({ type: "derive-stage" });
+              }),
+          }
+        : {}),
     });
     workerScope.postMessage({ type: "done", summary });
   } catch (error) {

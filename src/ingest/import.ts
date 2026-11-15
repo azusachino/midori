@@ -35,8 +35,10 @@ export interface RunImportOptions {
   importId?: number;
   /** Checked at each record boundary; an aborted run ends `failed` with the reason. */
   signal?: AbortSignal;
-  /** Test seam: simulate expensive synchronous derive work inside the import worker. */
-  deriveSpinMs?: number;
+  /** Test seam: hold the worker at the derive boundary until a latch releases it. */
+  beforeDerive?: () => Promise<void>;
+  /** Parent-side latch notified by the worker when it reaches the derive boundary. */
+  onDeriveStage?: () => Promise<void>;
 }
 
 export async function runImport(
@@ -143,12 +145,8 @@ export async function runImport(
       ).map((epoch) => JSON.stringify([epoch.source_name, epoch.device_hw])),
     );
     setStatus("deriving");
-    if (options.deriveSpinMs) {
-      const until = performance.now() + options.deriveSpinMs;
-      while (performance.now() < until) {
-        checkAborted();
-      }
-    }
+    await options.beforeDerive?.();
+    checkAborted();
     derive(db);
     const nextUsableNights = Number(
       (
