@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { DeviationDTO, SuppressionReason } from "../domain/api";
+import type { DeviationDTO } from "../domain/api";
 import { addDays } from "../domain/dates";
 import { METRICS } from "../domain/metrics";
 import {
@@ -9,7 +9,6 @@ import {
   robustZ,
   severityOf,
 } from "../domain/stats";
-import type { Severity, TrustLabel } from "../domain/types";
 
 /**
  * Baselines + robust z + trust (T11). One analysis row per (metric, source)

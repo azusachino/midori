@@ -16,5 +16,5 @@
       "@midori/domain/*": ["./src/domain/*"]
     }
   },
-  "include": ["src", "tests", "scripts"]
+  "include": ["src", "tests", "scripts", "e2e", "playwright.config.ts"]
 }

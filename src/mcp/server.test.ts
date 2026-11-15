@@ -88,7 +88,7 @@ async function call<T>(tool: string, args: Record<string, unknown> = {}): Promis
   const content = res.content;
   if (!Array.isArray(content) || content.length === 0) throw new Error(`no content from ${tool}`);
   const first = content[0];
-  if (!first || first.type !== "text") throw new Error(`non-text content from ${tool}`);
+  if (first?.type !== "text") throw new Error(`non-text content from ${tool}`);
   return JSON.parse(first.text) as T;
 }
 

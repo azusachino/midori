@@ -28,3 +28,10 @@ apple_health_export/
 
 # web build output
 web/dist/
+.tmp-e2e/
+test-results/
+playwright-report/
+
+# scratch from daily/findings stats tests
+.tmp-daily-test/
+.tmp-findings-test/

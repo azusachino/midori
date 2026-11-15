@@ -66,7 +66,7 @@ describe("MCP over streamable HTTP", () => {
       const content = res.content;
       if (!Array.isArray(content) || content.length === 0) throw new Error("no content");
       const first = content[0];
-      if (!first || first.type !== "text") throw new Error("non-text content");
+      if (first?.type !== "text") throw new Error("non-text content");
       const b = JSON.parse(first.text) as {
         anchorDay: string;
         asOf: Record<string, { sourceName: string; day: string }>;

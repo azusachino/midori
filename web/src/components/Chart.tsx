@@ -58,7 +58,7 @@ export function Chart({
           stroke: AXIS,
           grid: { stroke: GRID },
           size: 64,
-          values: (u, vals) => vals.map((v) => formatValue(v) + (unit ? ` ${unit}` : "")),
+          values: (_u, vals) => vals.map((v) => formatValue(v) + (unit ? ` ${unit}` : "")),
         },
       ],
       legend: { show: true },

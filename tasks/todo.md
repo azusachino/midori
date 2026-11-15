@@ -302,7 +302,16 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
 
 - AC: drop zone → job progress (status transitions visible), run history table,
   new-since-last-run counts.
-- Verify: manual pass on fixture zip + synthetic failure.
+- Verify: manual pass on fixture zip + synthetic failure. DONE 2026-11-15 (worker t84,
+  claude-haiku-5-5, reviewed+committed by lead): web/src/pages/Import.tsx — drop zone (button
+  + hidden input, drag highlight, .zip check), upload → poll with aria-live status and
+  queued→unpacking→parsing→storing→done step list (aria-current), 409→retry hint,
+  failed→role=alert; "This run" summary (inserted/deduped/duration); history table with
+  refresh after run; unmount aborts via AbortController. Known limitation accepted: no
+  job resume across remount (server finishes; appears in history). client.ts += upload()
+  with x-zip-name + shared send() error mapping (12 client tests). Lead review: hoisted 5
+  inline handlers to useCallback, backup/archive dirs on the upload route already verified in
+  T14 tests.
 - Deps: T14, T16. Files: web/src/pages/Import.tsx. Scope: M
 
 ### Task 18 — Briefing page [delegable]
@@ -325,11 +334,30 @@ artifact; RHR/HRV/sleep/SpO2/resp within range). Owner session.
 
 - AC: metric picker; baseline-band chart; deviation table with evidence navigation; device
   events; RMSSD/SDNN seam = both series + boundary marker, no blending; as-of + trust labels.
-- Verify: manual pass reproducing spike readout visually.
+- Verify: manual pass reproducing spike readout visually. DONE by lead 2026-11-15:
+  web/src/pages/Investigate.tsx — metric picker (13 metrics, ?metric= kept via replaceState,
+  default sleep_h; fixture corpus is wrist-temp-only so e2e probes pass ?metric=wrist_temp),
+  per-source series chart with baseline band attached to freshest series + dashed boundary
+  days from findings, baseline-check table (baseline/recent valueFmt'd, suppression reason
+  prose), device-events table (took over / coverage boundary after); HRV family draws BOTH
+  metrics as separate labeled series, never blended. copy.ts += copy.investigate block.
+  Verified live on real db: wrist_temp 3 sources + band + 2024-02-18 boundary; hrv_sdnn view
+  shows SDNN ×3 sources + Ultra RMSSD. DEVIATION: no component render test (same as T18).
 - Deps: T16. Files: web/src/pages/Investigate.tsx. Scope: M
 
 **Checkpoint 3** — integration test green in CI; manual real-data browse: briefing cadence/
-status/evidence links, as-of everywhere, investigate reproduces the spike story.
+status/evidence links, as-of everywhere, investigate reproduces the spike story. PASSED
+2026-11-15 (evidence tasks/checkpoint-3-ui-browse.md): e2e harness added per the
+playwright-verify skill (playwright.config.ts + e2e/ + scripts/e2e/run.ts + Makefile,
+@playwright/test 1.64.1 devDep = cached chromium-1248, no new download); hermetic fixture
+db (spike corpus) + real server + 6 browser checks green (928ms). Real-data browse via
+playwright probe against the live db (ARIA snapshots + screenshots): briefing = as-of
+2026-11-07 + 6 last-night cards w/ trust + all-Ultra deviations suppressed cross_source +
+recalibration/coverage findings + import line; investigate wrist_temp = 3 sources, band,
+boundaries; hrv_sdnn = SDNN ×3 + RMSSD unblended; import = dropzone + 3 real runs.
+Value formatting fixed (valueFmt everywhere; "Sleep 1.2113888888888888 h" → "1.21 h").
+bun test scoped to src/tests/scripts (e2e specs are playwright-only). e2e stays local/gated
+(make e2e), not in CI (fast CI; Chromium download per-run not worth it yet).
 
 ## Phase 4 — MCP
 

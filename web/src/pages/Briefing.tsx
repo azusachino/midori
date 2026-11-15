@@ -1,6 +1,7 @@
 import type { BriefingDTO, DeviationDTO, FindingDTO, MetricDailyDTO } from "@midori/domain/api";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, createApiClient } from "../api/client";
+import { valueFmt } from "../components/chartData";
 import { PageSection } from "../components/PageSection";
 import { copy } from "../copy";
 import "../styles/briefing.css";
@@ -140,7 +141,8 @@ export function BriefingPage() {
                   <span className="muted">{copy.briefing.noData}</span>
                 ) : (
                   <>
-                    <span className="num">{c.value}</span> <span className="unit">{c.unit}</span>
+                    <span className="num">{valueFmt(c.value)}</span>{" "}
+                    <span className="unit">{c.unit}</span>
                   </>
                 )}
               </span>
@@ -216,13 +218,15 @@ function DeviationRow({ row }: { row: DeviationDTO }) {
         <p className="deviation__detail muted">
           {row.suppressed !== null ? copy.briefing.suppressed[row.suppressed] : ""}
           {row.baseline !== null && row.recent !== null
-            ? ` — recent ${row.recent} vs baseline ${row.baseline}`
+            ? ` — recent ${valueFmt(row.recent)} vs baseline ${valueFmt(row.baseline)}`
             : ""}
         </p>
       ) : (
         <p className="deviation__detail">
-          recent <span className="num">{row.recent}</span> vs baseline{" "}
-          <span className="num">{row.baseline}</span> {row.unit ?? ""} —{" "}
+          recent <span className="num">{row.recent === null ? "—" : valueFmt(row.recent)}</span> vs
+          baseline{" "}
+          <span className="num">{row.baseline === null ? "—" : valueFmt(row.baseline)}</span>{" "}
+          {row.unit ?? ""} —{" "}
           <span className="num">{row.z === null ? "" : `${row.z.toFixed(1)}σ`}</span>
         </p>
       )}

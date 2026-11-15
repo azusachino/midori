@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useId, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useId, useState } from "react";
 import { copy } from "./copy";
 import { BriefingPage } from "./pages/Briefing";
 import { ImportPage } from "./pages/Import";
@@ -36,12 +36,13 @@ export function App() {
 
   const route = resolveRoute(path);
 
-  const navigate = (event: MouseEvent<HTMLAnchorElement>, to: string) => {
+  const navigate = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
     event.preventDefault();
+    const to = event.currentTarget.getAttribute("href") ?? window.location.pathname;
     if (window.location.pathname !== to) window.history.pushState(null, "", to);
     setPath(to);
-  };
+  }, []);
 
   return (
     <>
@@ -60,7 +61,7 @@ export function App() {
                 <a
                   href={r.path}
                   aria-current={route?.path === r.path ? "page" : undefined}
-                  onClick={(e) => navigate(e, r.path)}
+                  onClick={navigate}
                 >
                   {r.label}
                 </a>
