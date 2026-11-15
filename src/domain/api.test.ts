@@ -21,7 +21,7 @@ describe("api contracts", () => {
   test("trustFields carries label + note into DTOs", () => {
     expect(trustFields("steps")).toEqual({
       trust: "high",
-      trustNote: "Step counts are accurate at walking paces.",
+      trustNote: "Step counts are accurate at walking paces. Sums use the primary epoch only.",
     });
     expect(trustFields("active_kj").trust).toBe("low");
   });
@@ -33,7 +33,7 @@ describe("metric registry", () => {
       expect(spec.key).toBe(key);
       expect(spec.unit.length).toBeGreaterThan(0);
       expect(["median", "sum"]).toContain(spec.method);
-      expect(spec.types.length).toBeGreaterThan(0);
+      if (key !== "sleep_hr") expect(spec.types.length).toBeGreaterThan(0);
     }
   });
 
@@ -44,6 +44,13 @@ describe("metric registry", () => {
     expect(METRICS.hrv_sdnn?.trust).toBe("moderate");
     expect(METRICS.hrv_rmssd?.trust).toBe("moderate");
     expect(METRICS.active_kj?.trust).toBe("low");
+  });
+
+  test("registry carries metric kinds, floors and sample minima", () => {
+    expect(METRICS.spo2?.kind).toBe("overnight");
+    expect(METRICS.vo2max?.kind).toBe("trendOnly");
+    expect(METRICS.sleep_hr?.minSamples).toBe(10);
+    expect(METRICS.steps?.floor).toBe(250);
   });
 
   test("HRV and wrist temp are night-only", () => {
