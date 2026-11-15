@@ -54,13 +54,36 @@ describe("Long view calendar helpers", () => {
     expect(table.rows.some((r) => String(r.seam).includes("offset"))).toBe(true);
   });
 
-  test("divergingCellColor avoids bright green-as-good and separates negative/neutral/positive", () => {
-    const low = divergingCellColor(-1);
-    const mid = divergingCellColor(0);
-    const high = divergingCellColor(1);
-    expect(low).not.toBe(mid);
-    expect(high).not.toBe(mid);
-    expect(low).not.toBe(high);
+  test("divergingCellColor maps below/at/above median on single blue-muted-rose scale", () => {
+    const parseRgb = (css: string) => {
+      const m = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(css);
+      if (!m) throw new Error(`unexpected rgb format: ${css}`);
+      return [Number(m[1]), Number(m[2]), Number(m[3])] as const;
+    };
+
+    const lowFull = parseRgb(divergingCellColor(-1));
+    const lowHalf = parseRgb(divergingCellColor(-0.5));
+    const atMedian = parseRgb(divergingCellColor(0));
+    const highHalf = parseRgb(divergingCellColor(0.5));
+    const highFull = parseRgb(divergingCellColor(1));
+
+    // At median -> exact neutral surface-muted (#27272a)
+    expect(atMedian).toEqual([39, 39, 42]);
+
+    // Below median -> cool blue (#38bdf8 at -1; blue channel leads red)
+    expect(lowFull).toEqual([56, 189, 248]);
+    expect(lowHalf[2]).toBeGreaterThan(lowHalf[0]);
+    expect(lowHalf[2]).toBeGreaterThan(atMedian[2]);
+
+    // Above median -> warm rose (#fb7185 at +1; red channel leads blue and green — no brown/orange)
+    expect(highFull).toEqual([251, 113, 133]);
+    expect(highHalf[0]).toBeGreaterThan(highHalf[1]);
+    expect(highHalf[0]).toBeGreaterThan(highHalf[2]);
+    expect(highHalf[2]).toBeGreaterThanOrEqual(highHalf[1]);
+
+    // Symmetric extremes clamp cleanly
+    expect(divergingCellColor(-5)).toBe("rgb(56, 189, 248)");
+    expect(divergingCellColor(5)).toBe("rgb(251, 113, 133)");
   });
 });
 

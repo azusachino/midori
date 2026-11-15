@@ -296,7 +296,7 @@ export function LongViewCalendar({ series, onSelectDay }: LongViewCalendarProps)
               aria-hidden="true"
               className="inline-block h-2.5 w-16 rounded-xs"
               style={{
-                background: "linear-gradient(90deg, #38bdf8 0%, #3f3f46 50%, #fb7185 100%)",
+                background: "linear-gradient(90deg, #38bdf8 0%, #27272a 50%, #fb7185 100%)",
               }}
             />
             <span>{lv.legendHigher}</span>

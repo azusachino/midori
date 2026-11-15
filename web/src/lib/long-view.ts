@@ -54,10 +54,12 @@ function robustScaleOf(values: number[], median: number): number {
     return Math.max(Math.abs(median) * 0.1, 1);
   }
   const absDevs = values.map((v) => Math.abs(v - median)).sort((a, b) => a - b);
-  const mad = medianOf(absDevs) * 1.4826;
-  if (mad > 1e-6) return mad * 2.2;
-  const range = (Math.max(...values) - Math.min(...values)) / 2;
-  return Math.max(range, Math.abs(median) * 0.05, 0.25);
+  const madSigma = medianOf(absDevs) * 1.4826;
+  // Clamp symmetrically around stint median at +/-3 sigma (B-F9 / ui-design §5).
+  if (madSigma > 1e-6) return madSigma * 3;
+  const q95Idx = Math.min(absDevs.length - 1, Math.floor((absDevs.length - 1) * 0.95));
+  const q95 = absDevs[q95Idx] ?? 0;
+  return Math.max(q95, Math.abs(median) * 0.05, 0.25);
 }
 
 interface StintStats {
@@ -211,46 +213,29 @@ function rgb(c: readonly [number, number, number]): string {
   return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 }
 
-const COOL_EXTREME: readonly [number, number, number] = [56, 189, 248]; // #38bdf8
-const COOL_MID: readonly [number, number, number] = [66, 108, 174];
-const NEUTRAL_MEDIAN: readonly [number, number, number] = [63, 63, 70]; // #3f3f46
-const WARM_MID: readonly [number, number, number] = [217, 146, 48];
-const WARM_EXTREME: readonly [number, number, number] = [251, 113, 133]; // #fb7185
+const COOL_EXTREME: readonly [number, number, number] = [56, 189, 248]; // #38bdf8 (--color-learning)
+const NEUTRAL_MEDIAN: readonly [number, number, number] = [39, 39, 42]; // #27272a (--color-muted)
+const WARM_EXTREME: readonly [number, number, number] = [251, 113, 133]; // #fb7185 (--color-alert)
 
 /**
- * Diverging color scale centered on stint median (`0`), avoiding green-as-good bias (B-F9).
+ * Single diverging color scale centered on stint median (`0` -> neutral surface-muted),
+ * interpolating directly from cool sky (-1) through neutral muted (0) to warm rose (+1).
  */
 export function divergingCellColor(normalizedDev: number): string {
   const clamped = Math.max(-1, Math.min(1, normalizedDev));
-  if (clamped < -0.5) {
-    const t = (clamped + 1) / 0.5;
+  if (clamped <= 0) {
+    const t = clamped + 1; // -1 -> 0, 0 -> 1
     return rgb([
-      lerp(COOL_EXTREME[0], COOL_MID[0], t),
-      lerp(COOL_EXTREME[1], COOL_MID[1], t),
-      lerp(COOL_EXTREME[2], COOL_MID[2], t),
+      lerp(COOL_EXTREME[0], NEUTRAL_MEDIAN[0], t),
+      lerp(COOL_EXTREME[1], NEUTRAL_MEDIAN[1], t),
+      lerp(COOL_EXTREME[2], NEUTRAL_MEDIAN[2], t),
     ]);
   }
-  if (clamped < 0) {
-    const t = (clamped + 0.5) / 0.5;
-    return rgb([
-      lerp(COOL_MID[0], NEUTRAL_MEDIAN[0], t),
-      lerp(COOL_MID[1], NEUTRAL_MEDIAN[1], t),
-      lerp(COOL_MID[2], NEUTRAL_MEDIAN[2], t),
-    ]);
-  }
-  if (clamped <= 0.5) {
-    const t = clamped / 0.5;
-    return rgb([
-      lerp(NEUTRAL_MEDIAN[0], WARM_MID[0], t),
-      lerp(NEUTRAL_MEDIAN[1], WARM_MID[1], t),
-      lerp(NEUTRAL_MEDIAN[2], WARM_MID[2], t),
-    ]);
-  }
-  const t = (clamped - 0.5) / 0.5;
+  const t = clamped; // 0 -> 0, +1 -> 1
   return rgb([
-    lerp(WARM_MID[0], WARM_EXTREME[0], t),
-    lerp(WARM_MID[1], WARM_EXTREME[1], t),
-    lerp(WARM_MID[2], WARM_EXTREME[2], t),
+    lerp(NEUTRAL_MEDIAN[0], WARM_EXTREME[0], t),
+    lerp(NEUTRAL_MEDIAN[1], WARM_EXTREME[1], t),
+    lerp(NEUTRAL_MEDIAN[2], WARM_EXTREME[2], t),
   ]);
 }
 
