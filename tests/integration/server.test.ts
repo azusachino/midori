@@ -29,6 +29,25 @@ afterEach(() => {
 });
 
 describe("server entry: REST + web shell + MCP on one port", () => {
+  test("B-I10 startup marks interrupted imports failed and exposes them over HTTP", async () => {
+    const dbPath = join(workdir, "restart.db");
+    const db = openDb(dbPath);
+    db.run(
+      `INSERT INTO imports (created_at, zip_name, zip_size, status, stage)
+       VALUES ('2026-01-01T00:00:00.000Z', 'interrupted.zip', 10, 'parsing', 'parsing')`,
+    );
+    db.close();
+
+    server = startServer({ db: openDb(dbPath), dbPath, port: 0, spoolDir: join(workdir, "spool") });
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/imports/1`);
+    expect(res.status).toBe(200);
+    const item = (await res.json()) as Record<string, unknown>;
+    expect(item.status).toBe("failed");
+    expect(item.stage).toBe("failed");
+    expect(item.error).toBe("interrupted by restart");
+    expect(item.retryable).toBe(false);
+  });
+
   test("briefing, web shell and MCP initialize answer on the same origin", async () => {
     const dbPath = join(workdir, "midori.db");
     writeFileSync(

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, utimesSync } from "node:fs";
 import { resolve } from "node:path";
 import { openDb } from "../../src/db/db";
 import type { ErrorResponse, UploadAcceptedDTO } from "../../src/domain/api";
@@ -40,6 +40,8 @@ function removeDb(path: string) {
 const validZip = () =>
   buildStoredZip([{ name: "apple_health_export/export.xml", data: general.xml }]);
 const corruptZip = () => Buffer.from("PK\x03\x04 this is not a zip archive at all");
+const wrongExportZip = () =>
+  buildStoredZip([{ name: "apple_health_export/export_cda.xml", data: "<CDA/>" }]);
 
 interface Harness {
   db: Database;
@@ -131,7 +133,7 @@ afterAll(() => {
 });
 
 describe("POST /api/imports", () => {
-  test("202 with an import id; job completes through the shared pipeline", async () => {
+  test("B-I7/B-I8 upload continues in background and exposes parsing progress through HTTP", async () => {
     const h = harness();
     try {
       const res = await upload(h.app, validZip(), { "x-zip-name": "export.zip" });
@@ -149,6 +151,12 @@ describe("POST /api/imports", () => {
 
       const count = h.db.query("SELECT COUNT(*) AS n FROM records").get() as { n: number };
       expect(count.n).toBe(row.records_inserted ?? -1);
+      const detail = await h.app.request(`/api/imports/${accepted.importId}`);
+      const dto = (await detail.json()) as Record<string, unknown>;
+      expect(dto.stage).toBe("done");
+      expect(dto.progress).toBeGreaterThan(0);
+      expect(dto.exportDate).toBe("2026-01-07 08:00:00 +0900");
+      expect(dto.retryable).toBe(false);
     } finally {
       h.close();
     }
@@ -168,28 +176,18 @@ describe("POST /api/imports", () => {
     }
   });
 
-  test("corrupt zip -> failed with a persisted error, spool cleaned, lock released", async () => {
+  test("B-I1 non-Health and corrupt zips return 400 before a job row exists", async () => {
     const h = harness();
     try {
-      const res = await upload(h.app, corruptZip());
-      expect(res.status).toBe(202);
-      const { importId } = (await res.json()) as UploadAcceptedDTO;
-
-      const row = await waitForTerminal(h, importId);
-      expect(row.status).toBe("failed");
-      expect(row.error).toBeTruthy();
+      for (const zip of [wrongExportZip(), corruptZip()]) {
+        const res = await upload(h.app, zip);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as ErrorResponse).error).toContain("Health export");
+      }
+      const rows = (await (await h.app.request("/api/imports")).json()) as unknown[];
+      expect(rows).toHaveLength(0);
       expect(spoolFiles(h)).toEqual([]);
       expect(isImportLocked(h.dbPath)).toBe(false);
-
-      // the failure is visible through the read route with the typed row shape
-      const listed = (await (await h.app.request("/api/imports")).json()) as Array<{
-        id: number;
-        status: string;
-        error: string | null;
-      }>;
-      const found = listed.find((r) => r.id === importId);
-      expect(found?.status).toBe("failed");
-      expect(found?.error).toBe(row.error);
     } finally {
       h.close();
     }
@@ -219,24 +217,60 @@ describe("POST /api/imports", () => {
     }
   });
 
-  test("retry with the same zip after a failure succeeds through the same pipeline", async () => {
-    const h = harness();
+  test("B-I5 retry reuses the failed job spool and completes through HTTP", async () => {
+    let shouldFail = true;
+    const h = harness({
+      runImport: async (dbPath, zipPath, options) => {
+        if (shouldFail) {
+          shouldFail = false;
+          throw new Error("injected first attempt failure");
+        }
+        return runImport(dbPath, zipPath, options);
+      },
+    });
     try {
-      const bad = await upload(h.app, corruptZip());
-      const badId = ((await bad.json()) as UploadAcceptedDTO).importId;
-      expect((await waitForTerminal(h, badId)).status).toBe("failed");
+      const first = await upload(h.app, validZip());
+      const { importId } = (await first.json()) as UploadAcceptedDTO;
+      expect((await waitForTerminal(h, importId)).status).toBe("failed");
+      expect(spoolFiles(h)).toEqual([`${importId}.zip`]);
+      const get = await h.app.request(`/api/imports/${importId}`);
+      expect(get.status).toBe(200);
+      const item = (await get.json()) as Record<string, unknown>;
+      expect(item.retryable).toBe(true);
+      expect(item.stage).toBe("failed");
+      expect(item.error).toContain("injected first attempt failure");
 
-      const good = await upload(h.app, validZip());
-      const goodId = ((await good.json()) as UploadAcceptedDTO).importId;
-      const row = await waitForTerminal(h, goodId);
-      expect(row.status).toBe("done");
-      expect(row.records_inserted).toBeGreaterThan(0);
+      const retry = await h.app.request(`/api/imports/${importId}/retry`, { method: "POST" });
+      expect(retry.status).toBe(202);
+      expect(((await retry.json()) as UploadAcceptedDTO).importId).toBe(importId);
+      expect((await waitForTerminal(h, importId)).status).toBe("done");
     } finally {
       h.close();
     }
   });
 
-  test("re-uploading the same zip is idempotent: everything dedups", async () => {
+  test("B-I4 an older export is accepted and reports olderThanStored", async () => {
+    const h = harness();
+    try {
+      const first = await upload(h.app, validZip());
+      await waitForTerminal(h, ((await first.json()) as UploadAcceptedDTO).importId);
+      const olderXml = general.xml.replace(
+        "2026-01-07 08:00:00 +0900",
+        "2025-12-01 08:00:00 +0900",
+      );
+      const olderZip = buildStoredZip([{ name: "apple_health_export/export.xml", data: olderXml }]);
+      const second = await upload(h.app, olderZip);
+      expect(second.status).toBe(202);
+      const { importId } = (await second.json()) as UploadAcceptedDTO;
+      expect((await waitForTerminal(h, importId)).status).toBe("done");
+      const detail = await h.app.request(`/api/imports/${importId}`);
+      expect(((await detail.json()) as Record<string, unknown>).olderThanStored).toBe(true);
+    } finally {
+      h.close();
+    }
+  });
+
+  test("B-I3 re-uploading the same zip is idempotent: everything dedups", async () => {
     const h = harness();
     try {
       const first = await waitForTerminal(
@@ -256,7 +290,28 @@ describe("POST /api/imports", () => {
     }
   });
 
-  test("lock contention: a POST while a job is running gets a typed 409", async () => {
+  test("B-I5 expired retry spool returns 410 over HTTP", async () => {
+    const h = harness({
+      runImport: async () => {
+        throw new Error("injected failure");
+      },
+    });
+    try {
+      const res = await upload(h.app, validZip());
+      const { importId } = (await res.json()) as UploadAcceptedDTO;
+      await waitForTerminal(h, importId);
+      const path = `${h.spoolDir}/${importId}.zip`;
+      const expired = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      utimesSync(path, expired, expired);
+      const retry = await h.app.request(`/api/imports/${importId}/retry`, { method: "POST" });
+      expect(retry.status).toBe(410);
+      expect(((await retry.json()) as ErrorResponse).retryable).toBe(false);
+    } finally {
+      h.close();
+    }
+  });
+
+  test("B-I2 lock contention: a POST while a job is running gets a typed 409", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => {
       release = r;

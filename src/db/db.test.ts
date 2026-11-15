@@ -22,7 +22,12 @@ describe("migrations", () => {
   test("applies all migrations and is idempotent on re-run", () => {
     const db = new Database(":memory:");
     const first = applyMigrations(db);
-    expect(first).toEqual(["0001_init.sql", "0002_capture.sql", "0003_derived.sql"]);
+    expect(first).toEqual([
+      "0001_init.sql",
+      "0002_capture.sql",
+      "0003_derived.sql",
+      "0004_imports.sql",
+    ]);
     const second = applyMigrations(db);
     expect(second).toEqual([]);
     db.close();

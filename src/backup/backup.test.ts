@@ -221,6 +221,29 @@ describe("pruneBackups", () => {
     expect(existsSync(newer.snapshotPath)).toBe(true);
   });
 
+  test("B-I12 caps retention at ten newest snapshots", () => {
+    const dir = caseDir("retention-cap");
+    const now = new Date("2026-11-14T12:00:00.000Z");
+    const paths: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      const path = join(
+        dir,
+        `midori-202611${String(14 - Math.floor(i / 24)).padStart(2, "0")}-${String(i).padStart(6, "0")}.db`,
+      );
+      writeFileSync(path, "synthetic snapshot marker");
+      const mtime = new Date(now.getTime() - i * 1000);
+      utimesSync(path, mtime, mtime);
+      paths.push(path);
+    }
+
+    const deleted = pruneBackups(dir, { now });
+
+    expect(deleted).toHaveLength(2);
+    expect(readdirSync(dir)).toHaveLength(10);
+    expect(existsSync(paths[0] ?? "missing-newest.db")).toBe(true);
+    expect(existsSync(paths[11] ?? "missing-oldest.db")).toBe(false);
+  });
+
   test("leaves files that are not snapshots alone", () => {
     const dir = caseDir("retention-foreign");
     const now = new Date("2026-11-14T12:00:00.000Z");

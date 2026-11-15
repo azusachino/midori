@@ -9,6 +9,7 @@ describe("api contracts", () => {
       "unpacking",
       "parsing",
       "storing",
+      "deriving",
       "done",
       "failed",
     ]);

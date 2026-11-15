@@ -64,6 +64,7 @@ export const copy = {
     unpacking: "Unpacking",
     parsing: "Parsing",
     storing: "Storing",
+    deriving: "Deriving",
     done: "Done",
     failed: "Failed",
   },

@@ -29,6 +29,7 @@ import { openDb } from "../db/db";
 export const DEFAULT_BACKUP_DIR = "data/backups";
 export const DEFAULT_ARCHIVE_DIR = "data/archive";
 export const DEFAULT_RETENTION_DAYS = 30;
+export const MAX_BACKUP_SNAPSHOTS = 10;
 
 const SNAPSHOT_PREFIX = "midori-";
 const SNAPSHOT_NAME = /^midori-\d{8}-\d{6}(?:-\d+)?\.db$/;
@@ -140,9 +141,8 @@ export interface PruneBackupsOptions {
 }
 
 /**
- * Delete snapshots strictly older than `now - retentionDays`. A snapshot whose
- * mtime is exactly the cutoff is kept (the boundary belongs to the newer side).
- * Only files matching the snapshot name are considered.
+ * Keep snapshots within the age window and cap the set at ten newest snapshots.
+ * A snapshot whose mtime is exactly the cutoff is kept. Only matching files count.
  */
 export function pruneBackups(backupDir: string, options: PruneBackupsOptions): string[] {
   const retentionDays = options.retentionDays ?? DEFAULT_RETENTION_DAYS;
@@ -171,6 +171,22 @@ export function pruneBackups(backupDir: string, options: PruneBackupsOptions): s
       unlinkSync(path);
       deleted.push(entry.name);
     }
+  }
+  const retained = readdirSync(backupDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && SNAPSHOT_NAME.test(entry.name))
+    .map((entry) => {
+      const path = join(backupDir, entry.name);
+      try {
+        return { name: entry.name, mtimeMs: statSync(path).mtimeMs };
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry): entry is { name: string; mtimeMs: number } => entry !== null)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name));
+  for (const entry of retained.slice(MAX_BACKUP_SNAPSHOTS)) {
+    unlinkSync(join(backupDir, entry.name));
+    deleted.push(entry.name);
   }
   return deleted.sort();
 }

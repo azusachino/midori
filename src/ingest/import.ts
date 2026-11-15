@@ -64,7 +64,12 @@ export async function runImport(
     }
     const id: number = importId;
     const setStatus = (status: string, error: string | null = null) =>
-      db.run(`UPDATE imports SET status = ?, error = ? WHERE id = ?`, [status, error, id]);
+      db.run(`UPDATE imports SET status = ?, stage = ?, error = ? WHERE id = ?`, [
+        status,
+        status,
+        error,
+        id,
+      ]);
 
     checkAborted();
     setStatus("unpacking");
@@ -74,7 +79,16 @@ export async function runImport(
     setStatus("parsing");
     const writer = new RecordWriter(db, id);
     let malformedDates = 0;
-    const stats = await parseExportXml(handle.chunks, {
+    let parsedBytes = 0;
+    async function* trackedChunks() {
+      for await (const chunk of handle.chunks) {
+        parsedBytes += chunk.byteLength;
+        db.run(`UPDATE imports SET progress = ? WHERE id = ?`, [parsedBytes, id]);
+        yield chunk;
+      }
+    }
+    db.run(`UPDATE imports SET progress = 0 WHERE id = ?`, [id]);
+    const stats = await parseExportXml(trackedChunks(), {
       onRecord: (row) => {
         checkAborted();
         const mapped = mapRecord(row);
@@ -84,20 +98,35 @@ export async function runImport(
     });
     await handle.closed;
 
+    const priorMax = db.query("SELECT MAX(end_at) AS latest FROM records").get() as {
+      latest: string | null;
+    };
+    const exportTime = stats.exportDate === null ? Number.NaN : Date.parse(stats.exportDate);
+    const olderThanStored =
+      Number.isFinite(exportTime) && priorMax.latest !== null
+        ? exportTime < Date.parse(priorMax.latest)
+        : false;
+    db.run(`UPDATE imports SET export_date = ?, older_than_stored = ? WHERE id = ?`, [
+      stats.exportDate,
+      Number(olderThanStored),
+      id,
+    ]);
     checkAborted();
     setStatus("storing");
     const counters = writer.finish();
     refreshSources(db, id);
 
-    // Epochs are the first v1 derived stage. Later slices add downstream tables.
+    // The complete post-store derive is a distinct, persisted job stage.
+    setStatus("deriving");
     rebuildEpochs(db);
 
     const durationMs = Math.round(performance.now() - t0);
     setStatus("done");
     db.run(
-      `UPDATE imports SET records_seen = ?, records_inserted = ?, records_deduped = ?,
+      `UPDATE imports SET progress = ?, records_seen = ?, records_inserted = ?, records_deduped = ?,
          duration_ms = ?, export_version = ?, export_date = ? WHERE id = ?`,
       [
+        parsedBytes,
         stats.recordCount,
         counters.inserted,
         counters.deduped,
