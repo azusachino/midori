@@ -1,11 +1,13 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+} from "@tanstack/react-router";
 import type { MetricRange, MetricTab } from "@/api/types";
 import { RootLayout } from "@/components/RootLayout";
+import { RouteFallback } from "@/components/RouteFallback";
 import { ChangesPage } from "@/pages/Changes";
-import { DevicesPage } from "@/pages/Devices";
-import { ImportPage } from "@/pages/Import";
-import { MetricDetailPage } from "@/pages/MetricDetail";
-import { MetricsPage } from "@/pages/Metrics";
 import { NotFoundPage } from "@/pages/NotFound";
 
 export interface MetricDetailSearch {
@@ -51,26 +53,30 @@ const changesRoute = createRoute({
 const metricsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/metrics",
-  component: MetricsPage,
+  component: lazyRouteComponent(() => import("@/pages/Metrics"), "MetricsPage"),
+  pendingComponent: RouteFallback,
 });
 
 const metricDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/metrics/$key",
   validateSearch: validateMetricSearch,
-  component: MetricDetailPage,
+  component: lazyRouteComponent(() => import("@/pages/MetricDetail"), "MetricDetailPage"),
+  pendingComponent: RouteFallback,
 });
 
 const devicesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/devices",
-  component: DevicesPage,
+  component: lazyRouteComponent(() => import("@/pages/Devices"), "DevicesPage"),
+  pendingComponent: RouteFallback,
 });
 
 const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import",
-  component: ImportPage,
+  component: lazyRouteComponent(() => import("@/pages/Import"), "ImportPage"),
+  pendingComponent: RouteFallback,
 });
 
 const routeTree = rootRoute.addChildren([

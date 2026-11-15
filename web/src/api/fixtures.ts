@@ -1,11 +1,11 @@
 import { METRICS } from "@midori/domain/metrics";
+import { DAYTIME_ORDER, metricKindFor, OVERNIGHT_ORDER, TREND_ONLY_ORDER } from "../lib/metrics";
 import type {
   ChangesDTO,
   EpochsDTO,
   FindingRowDTO,
   ImportDTO,
   MetricIndexEntryDTO,
-  MetricKind,
   MetricRange,
   MetricSeriesDTO,
   MetricsIndexDTO,
@@ -14,8 +14,8 @@ import type {
 } from "./types";
 
 /**
- * Deterministic synthetic fixture stubs used only when v1 endpoints return 404
- * (before Slice 9 lands). Never reads or represents real user data.
+ * Deterministic synthetic fixture stubs used ONLY in dev/e2e when v1 endpoints
+ * return 404 (before Slice 9 lands). Never bundled or activated in production.
  */
 
 const SYNTHETIC_DAYS = [
@@ -40,28 +40,6 @@ const SYNTHETIC_WRIST_TEMP_VALUES = [
   36.4, 36.45, 36.38, 36.42, 36.41, 36.39, 36.43, 36.91, 36.94, 36.89, 36.95, 36.92, 36.96, 36.93,
   36.97,
 ] as const;
-
-export const OVERNIGHT_ORDER = [
-  "sleep_h",
-  "deep_h",
-  "rem_h",
-  "sleep_hr",
-  "hrv_sdnn",
-  "hrv_rmssd",
-  "rhr",
-  "resp_rate",
-  "wrist_temp",
-  "spo2",
-] as const;
-
-export const DAYTIME_ORDER = ["steps", "active_kj", "heart_rate"] as const;
-export const TREND_ONLY_ORDER = ["vo2max"] as const;
-
-export function metricKindFor(key: string): MetricKind {
-  if ((OVERNIGHT_ORDER as readonly string[]).includes(key)) return "overnight";
-  if ((DAYTIME_ORDER as readonly string[]).includes(key)) return "daytime";
-  return "trendOnly";
-}
 
 function daysSince(iso: string | null): number | null {
   if (!iso) return null;

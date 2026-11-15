@@ -1,15 +1,5 @@
-import { METRICS } from "@midori/domain/metrics";
 import { copy } from "../copy";
-import {
-  changesStub,
-  emptyChangesStub,
-  epochsStub,
-  metricSeriesStub,
-  metricsIndexStub,
-  nightsStub,
-  OVERNIGHT_ORDER,
-  unitEvidenceStub,
-} from "./fixtures";
+import { isKnownMetric } from "../lib/metrics";
 import type {
   ChangesDTO,
   EpochsDTO,
@@ -25,8 +15,8 @@ import type {
 
 /**
  * Typed REST client over the v1 contract (docs/design.md "Interfaces").
- * Until Slice 9 lands the v1 REST routes, 404 responses on v1 read endpoints
- * fall back to deterministic synthetic fixture stubs.
+ * Synthetic 404 fallbacks are strictly gated to dev mode (import.meta.env.DEV)
+ * so production builds never invent health data and instead surface errors.
  */
 
 export type ApiErrorKind = "http" | "network" | "parse" | "aborted";
@@ -77,7 +67,10 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export interface ApiClientOptions {
   baseUrl?: string;
   fetch?: FetchLike;
-  /** Disable 404 stub fallback (for strict API testing against Slice 9+). */
+  /**
+   * Override 404 synthetic stub fallback for unit tests.
+   * Defaults to `Boolean(import.meta.env?.DEV)` — strictly false in production builds.
+   */
   fallbackOn404?: boolean;
 }
 
@@ -107,10 +100,7 @@ export interface ApiClient {
 }
 
 const DEFAULT_POLL_MS = 1500;
-
-function isKnownMetric(metric: string): boolean {
-  return metric in METRICS || (OVERNIGHT_ORDER as readonly string[]).includes(metric);
-}
+const IS_DEV = Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
 
 function isErrorBody(value: unknown): value is ErrorResponse {
   return (
@@ -132,7 +122,7 @@ function is404(err: unknown): boolean {
 export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const baseUrl = options.baseUrl ?? "";
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
-  const fallbackOn404 = options.fallbackOn404 ?? true;
+  const fallbackOn404 = options.fallbackOn404 ?? IS_DEV;
 
   async function send<T>(path: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
     let res: Response;
@@ -191,9 +181,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         return await getJson<ChangesDTO>("/api/changes", signal);
       } catch (err) {
         if (!fallbackOn404 || !is404(err)) throw err;
+        const fixtures = await import("./fixtures");
         const rows = await safeImportsForStub(signal);
-        if (rows !== null && rows.length === 0) return emptyChangesStub();
-        return changesStub(rows ?? []);
+        if (rows !== null && rows.length === 0) return fixtures.emptyChangesStub();
+        return fixtures.changesStub(rows ?? []);
       }
     },
 
@@ -202,8 +193,9 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         return await getJson<MetricsIndexDTO>("/api/metrics", signal);
       } catch (err) {
         if (!fallbackOn404 || !is404(err)) throw err;
+        const fixtures = await import("./fixtures");
         const rows = await safeImportsForStub(signal);
-        return metricsIndexStub(rows === null ? true : rows.length > 0);
+        return fixtures.metricsIndexStub(rows === null ? true : rows.length > 0);
       }
     },
 
@@ -215,7 +207,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         );
       } catch (err) {
         if (!fallbackOn404 || !is404(err) || !isKnownMetric(metric)) throw err;
-        return metricSeriesStub(metric, range);
+        const fixtures = await import("./fixtures");
+        return fixtures.metricSeriesStub(metric, range);
       }
     },
 
@@ -227,7 +220,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         );
       } catch (err) {
         if (!fallbackOn404 || !is404(err) || !isKnownMetric(metric)) throw err;
-        return unitEvidenceStub(metric, day);
+        const fixtures = await import("./fixtures");
+        return fixtures.unitEvidenceStub(metric, day);
       }
     },
 
@@ -236,8 +230,9 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         return await getJson<EpochsDTO>("/api/epochs", signal);
       } catch (err) {
         if (!fallbackOn404 || !is404(err)) throw err;
+        const fixtures = await import("./fixtures");
         const rows = await safeImportsForStub(signal);
-        return epochsStub(rows === null ? true : rows.length > 0);
+        return fixtures.epochsStub(rows === null ? true : rows.length > 0);
       }
     },
 
@@ -246,7 +241,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         return await getJson<NightsDTO>(`/api/nights${query({ from, to })}`, signal);
       } catch (err) {
         if (!fallbackOn404 || !is404(err)) throw err;
-        return nightsStub(from, to);
+        const fixtures = await import("./fixtures");
+        return fixtures.nightsStub(from, to);
       }
     },
 
@@ -256,7 +252,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       try {
         return await getJson<ImportDTO>(`/api/imports/${id}`, signal);
       } catch (err) {
-        if (!fallbackOn404 || !is404(err)) throw err;
+        if (!is404(err)) throw err;
+        // Real-data fallback while v0 server exposes only GET /api/imports.
         const rows = await client.imports(signal);
         const found = rows.find((r) => r.id === id);
         if (!found) throw err;
@@ -290,9 +287,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       const signal = opts.signal;
       for (;;) {
         if (signal?.aborted) throw abortError();
-        const rows = await client.imports(signal);
-        const row = rows.find((r) => r.id === id);
-        if (!row) throw new ImportNotFoundError(id);
+        const row = await client.importDetail(id, signal);
         opts.onUpdate?.(row);
         if (row.status === "done") return row;
         if (row.status === "failed") throw new ImportFailedError(id, row.error);

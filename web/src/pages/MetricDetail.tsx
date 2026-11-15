@@ -4,7 +4,6 @@ import type { EChartsCoreOption } from "echarts/core";
 import { ArrowLeft } from "lucide-react";
 import { type MouseEvent, useCallback } from "react";
 import { apiClient } from "@/api/client";
-import { OVERNIGHT_ORDER } from "@/api/fixtures";
 import type { MetricRange, MetricSeriesDTO, MetricTab } from "@/api/types";
 import { EChart } from "@/components/EChart";
 import { LoadingState } from "@/components/LoadingState";
@@ -14,21 +13,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { copy } from "@/copy";
+import { isKnownMetric, OVERNIGHT_ORDER } from "@/lib/metrics";
 import { type ChartTheme, epochColor } from "@/lib/theme";
 import { useAsyncQuery } from "@/lib/useAsyncQuery";
 
 const RANGES: readonly MetricRange[] = ["90d", "180d", "1y", "all"];
-
-function isKnownMetricKey(key: string): boolean {
-  return key in METRICS || (OVERNIGHT_ORDER as readonly string[]).includes(key);
-}
 
 export function MetricDetailPage() {
   const { key } = useParams({ from: "/metrics/$key" });
   const search = useSearch({ from: "/metrics/$key" });
   const navigate = useNavigate({ from: "/metrics/$key" });
 
-  const known = isKnownMetricKey(key);
+  const known = isKnownMetric(key);
 
   const query = useAsyncQuery<MetricSeriesDTO>((signal) => {
     if (!known) return Promise.reject(new Error(copy.pages.metricDetail.unknownBody(key)));

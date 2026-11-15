@@ -1,8 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { ApiError, apiClient } from "@/api/client";
+import { apiClient } from "@/api/client";
 import type { ChangesDTO } from "@/api/types";
-import { copy } from "@/copy";
-import { ShellContext, type ShellState } from "@/lib/shell-context";
+import { loadShellChanges, ShellContext, type ShellState } from "@/lib/shell-context";
 
 export function ShellProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ShellState["status"]>("loading");
@@ -20,20 +19,17 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     setStatus("loading");
     setErrorMessage(null);
 
-    apiClient
-      .changes(ac.signal)
-      .then((data) => {
-        if (ac.signal.aborted) return;
-        setChanges(data);
+    void loadShellChanges(apiClient, ac.signal).then((result) => {
+      if (result.status === "aborted") return;
+      if (result.status === "ready") {
+        setChanges(result.changes);
         setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        if (ac.signal.aborted) return;
-        if (err instanceof ApiError && err.kind === "aborted") return;
-        const msg = err instanceof Error ? err.message : copy.api.unknownError;
-        setErrorMessage(msg);
+      } else {
+        setChanges(null);
+        setErrorMessage(result.errorMessage);
         setStatus("error");
-      });
+      }
+    });
 
     return () => ac.abort();
   }, [nonce]);

@@ -1,29 +1,17 @@
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { emptyChangesStub } from "../web/src/api/fixtures";
+import {
+  changesStub,
+  emptyChangesStub,
+  epochsStub,
+  metricSeriesStub,
+  metricsIndexStub,
+} from "../web/src/api/fixtures";
 import { copy } from "../web/src/copy";
-
-const shotsDir = process.env.MIDORI_SHOTS_DIR;
-
-async function maybeShot(page: Page, name: string) {
-  if (!shotsDir) return;
-  mkdirSync(shotsDir, { recursive: true });
-  await page.screenshot({ path: join(shotsDir, name), fullPage: true });
-}
-
-const V1_PENDING_API_RE = /\/api\/(changes|metrics|epochs|nights)(\/|\?|$)/;
 
 function trackErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() !== "error") return;
-    const locUrl = msg.location().url;
-    // Slice 9 v1 REST endpoints are not implemented yet; client falls back on 404.
-    if (msg.text().includes("404 (Not Found)") && V1_PENDING_API_RE.test(locUrl)) {
-      return;
-    }
-    errors.push(msg.text());
+    if (msg.type() === "error") errors.push(msg.text());
   });
   page.on("pageerror", (err) => errors.push(err.message));
   return errors;
@@ -36,11 +24,60 @@ async function assertNoHorizontalOverflow(page: Page) {
   expect(overflow).toBe(false);
 }
 
-test("desktop 1440px: v1 shell, routes, EChart smoke render, and seeded import", async ({
+/**
+ * Playwright route stubs for Slice 9 v1 read endpoints (not yet implemented on the v0 server).
+ * Production builds never stub 404s on their own; e2e provides these explicitly.
+ */
+async function stubV1ReadRoutes(page: Page) {
+  await page.route("**/api/changes", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(changesStub()),
+    }),
+  );
+  await page.route("**/api/metrics", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(metricsIndexStub(true)),
+    }),
+  );
+  await page.route("**/api/metrics/*", (route) => {
+    const url = new URL(route.request().url());
+    const key = url.pathname.split("/").pop() ?? "wrist_temp";
+    const range = (url.searchParams.get("range") ?? "180d") as "90d" | "180d" | "1y" | "all";
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(metricSeriesStub(key, range)),
+    });
+  });
+  await page.route("**/api/epochs", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(epochsStub(true)),
+    }),
+  );
+}
+
+test("production build surfaces ReadError on unmocked 404 rather than synthetic data", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("read-error")).toBeVisible();
+  await expect(page.getByTestId("read-error")).toContainText(copy.error.changesTitle);
+  await expect(page.getByText("Synthetic Watch B")).toHaveCount(0);
+});
+
+test("desktop 1440px: v1 shell, lazy routes, EChart render, and seeded import", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page);
+  await stubV1ReadRoutes(page);
 
   await page.goto("/");
 
@@ -51,32 +88,28 @@ test("desktop 1440px: v1 shell, routes, EChart smoke render, and seeded import",
   await expect(page.getByTestId("sidebar-watch")).toContainText("Synthetic Watch B");
   await expect(page.getByTestId("sidebar-watch")).toContainText("learning 9/14");
 
-  const smokeCanvas = page.getByTestId("echart-smoke").locator("canvas");
-  await expect(smokeCanvas).toBeVisible();
-  const box = await smokeCanvas.boundingBox();
-  expect(box).not.toBeNull();
-  expect((box?.width ?? 0) > 100 && (box?.height ?? 0) > 100).toBe(true);
-
   await assertNoHorizontalOverflow(page);
-  await maybeShot(page, "shell-1440.png");
 
-  // Navigate to Metrics index
+  // Navigate to lazy-loaded Metrics index
   await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.metrics }).click();
   await expect(page).toHaveURL(/\/metrics$/);
   await expect(page.getByRole("heading", { name: copy.pages.metrics.title })).toBeVisible();
 
-  // Navigate to Metric detail and verify URL search param sync + EChart
+  // Navigate to lazy-loaded Metric detail and verify URL search param sync + EChart
   await page.goto("/metrics/wrist_temp");
-  await expect(page.getByTestId("metric-echart").locator("canvas")).toBeVisible();
+  const metricCanvas = page.getByTestId("metric-echart").locator("canvas");
+  await expect(metricCanvas).toBeVisible();
+  const box = await metricCanvas.boundingBox();
+  expect((box?.width ?? 0) > 100 && (box?.height ?? 0) > 100).toBe(true);
   await page.getByRole("button", { name: "90d" }).click();
   await expect(page).toHaveURL(/range=90d/);
 
-  // Navigate to Devices
+  // Navigate to lazy-loaded Devices
   await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.devices }).click();
   await expect(page).toHaveURL(/\/devices$/);
   await expect(page.getByText("Synthetic Watch B").first()).toBeVisible();
 
-  // Navigate to Import and verify seeded fixture import
+  // Navigate to lazy-loaded Import (real v0 GET /api/imports)
   await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.import }).click();
   await expect(page).toHaveURL(/\/import$/);
   await expect(page.getByText("fixture.zip")).toBeVisible();
@@ -100,6 +133,7 @@ test("phone 390px: top tabs replace sidebar and freshness moves to its own line"
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = trackErrors(page);
+  await stubV1ReadRoutes(page);
 
   await page.goto("/");
 
@@ -113,10 +147,7 @@ test("phone 390px: top tabs replace sidebar and freshness moves to its own line"
   expect(freshnessBox).not.toBeNull();
   expect((freshnessBox?.y ?? 0) >= (brandBox?.y ?? 0) + (brandBox?.height ?? 0) - 2).toBe(true);
 
-  await expect(page.getByTestId("echart-smoke").locator("canvas")).toBeVisible();
   await assertNoHorizontalOverflow(page);
-  await maybeShot(page, "shell-390.png");
-
   expect(errors).toEqual([]);
 });
 
@@ -130,22 +161,18 @@ test("B-R4 empty state renders at 1440px and 390px when no imports exist", async
     }),
   );
 
-  // Desktop 1440px
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.getByTestId("empty-state")).toBeVisible();
   await expect(page.getByTestId("topbar-freshness")).toHaveText(copy.topbar.noImports);
   await expect(page.getByRole("link", { name: copy.empty.cta })).toHaveAttribute("href", "/import");
   await assertNoHorizontalOverflow(page);
-  await maybeShot(page, "empty-1440.png");
 
-  // Phone 390px
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.getByTestId("empty-state")).toBeVisible();
   await expect(page.getByTestId("mobile-nav")).toBeVisible();
   await assertNoHorizontalOverflow(page);
-  await maybeShot(page, "empty-390.png");
 
   expect(errors).toEqual([]);
 });
