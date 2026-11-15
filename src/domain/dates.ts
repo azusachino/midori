@@ -62,6 +62,8 @@ export interface ZonedDateTime {
   localMinute: number;
 }
 
+const ZONE_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+
 /** Gets the wall-clock day and minute for an instant in an IANA timezone. */
 export function instantInZone(utcIso: string, timeZone: string): ZonedDateTime {
   const fixedOffset = /^UTC([+-])(\d{2}):(\d{2})$/.exec(timeZone);
@@ -70,15 +72,20 @@ export function instantInZone(utcIso: string, timeZone: string): ZonedDateTime {
       (fixedOffset[1] === "-" ? -1 : 1) * (Number(fixedOffset[2]) * 60 + Number(fixedOffset[3]));
     return utcToLocal(utcIso, offset);
   }
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(utcIso));
+  let formatter = ZONE_FORMATTERS.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    ZONE_FORMATTERS.set(timeZone, formatter);
+  }
+  const parts = formatter.formatToParts(new Date(utcIso));
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return {
     localDay: `${values.year}-${values.month}-${values.day}`,

@@ -5,14 +5,13 @@ import { generalSpec, SLEEP_APP, WATCH } from "../../tests/fixtures/general";
 import { SLEEP_VALUE } from "../../tests/fixtures/model";
 import { applyMigrations } from "../db/db";
 import { instantInZone, parseHealthKitDate, zoneLocalToUtc } from "../domain/dates";
-import { rebuildEpochs } from "./epochs";
 import {
   assembleNights,
   continuesNight,
   exportCutReason,
   inHrvNightWindow,
   nightKeyForSleepRecord,
-  rebuildNights,
+  rebuildNightPipeline,
   type SleepRecordInput,
   type SleepStage,
 } from "./nights";
@@ -163,7 +162,7 @@ describe("B-N1–B-N9 persisted derivation", () => {
     const db = new Database(":memory:");
     applyMigrations(db);
     db.prepare(`INSERT INTO imports (created_at, zip_name, zip_size, status, export_date)
-      VALUES ('2026-01-14T00:00:00Z', 'synthetic.zip', 1, 'done', '2026-01-13 20:00:00 +0900')`).run();
+      VALUES ('2026-01-14T00:00:00Z', 'synthetic.zip', 1, 'done', '2026-01-18 20:00:00 +0900')`).run();
     const add = db.prepare(`INSERT INTO records
       (type, source_name, start_at, end_at, start_offset_min, end_offset_min, value, value_str,
        import_id, device_hw, meta_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`);
@@ -280,6 +279,20 @@ describe("B-N1–B-N9 persisted derivation", () => {
       "Watch7,5",
       60,
     );
+    for (let i = 0; i < 8; i++) {
+      const sampleAt = new Date(
+        Date.parse("2026-01-11T06:40:00.000Z") + i * 10 * 60_000,
+      ).toISOString();
+      insert("HKQuantityTypeIdentifierHeartRate", "Watch", sampleAt, sampleAt, "Watch7,5", 52 + i);
+    }
+    insert(
+      "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      "Watch",
+      "2026-01-11T06:00:00.000Z",
+      "2026-01-11T06:00:00.000Z",
+      "Watch7,5",
+      44,
+    );
     insert(
       "HKQuantityTypeIdentifierHeartRate",
       "Watch",
@@ -299,23 +312,59 @@ describe("B-N1–B-N9 persisted derivation", () => {
     insert(
       "HKQuantityTypeIdentifierStepCount",
       "Watch",
-      "2026-01-13T01:00:00.000Z",
-      "2026-01-13T01:00:00.000Z",
+      "2026-01-18T01:00:00.000Z",
+      "2026-01-18T01:00:00.000Z",
       "Watch7,5",
       100,
     );
-    const epochs = rebuildEpochs(db);
-    const watchId = Number(
-      (db.query("SELECT id FROM epochs WHERE device_hw = 'Watch7,5'").get() as { id: number }).id,
-    );
-    const insertStint = db.prepare(
-      "INSERT INTO stints (metric, epoch_id, start_day, end_day) VALUES (?, ?, '2026-01-01', NULL)",
-    );
-    for (const metric of ["sleep_h", "sleep_hr", "hrv_sdnn", "steps"])
-      insertStint.run(metric, watchId);
-    expect(epochs.epochs).toHaveLength(2);
+    for (const day of ["2026-01-13", "2026-01-14", "2026-01-15", "2026-01-16", "2026-01-17"]) {
+      const sampleAt = `${day}T01:00:00.000Z`;
+      insert("HKQuantityTypeIdentifierStepCount", "Watch", sampleAt, sampleAt, "Watch7,5", 80);
+    }
+    const laterNights = [
+      ["2026-01-12", "2026-01-13T06:00:00.000Z"],
+      ["2026-01-13", "2026-01-14T06:00:00.000Z"],
+      ["2026-01-14", "2026-01-15T06:00:00.000Z"],
+      ["2026-01-15", "2026-01-16T06:00:00.000Z"],
+      ["2026-01-16", "2026-01-17T06:00:00.000Z"],
+    ] as const;
+    for (const [, start] of laterNights) {
+      const startMs = Date.parse(start);
+      insert(
+        "HKCategoryTypeIdentifierSleepAnalysis",
+        "Watch",
+        start,
+        new Date(startMs + 60 * 60_000).toISOString(),
+        "Watch7,5",
+        null,
+        SLEEP_VALUE.core,
+        "America/Los_Angeles",
+      );
+      for (let i = 0; i < 10; i++) {
+        const sampleAt = new Date(startMs + (i + 1) * 3 * 60_000).toISOString();
+        insert(
+          "HKQuantityTypeIdentifierHeartRate",
+          "Watch",
+          sampleAt,
+          sampleAt,
+          "Watch7,5",
+          50 + i,
+        );
+      }
+      for (let i = 0; i < 3; i++) {
+        const sampleAt = new Date(startMs + (i + 1) * 10 * 60_000).toISOString();
+        insert(
+          "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+          "Watch",
+          sampleAt,
+          sampleAt,
+          "Watch7,5",
+          40 + i,
+        );
+      }
+    }
 
-    const nights = rebuildNights(db);
+    const nights = rebuildNightPipeline(db);
     expect(
       nights.map(({ date, zone, tzChange, partialReason, asleepS }) => ({
         date,
@@ -333,22 +382,45 @@ describe("B-N1–B-N9 persisted derivation", () => {
         asleepS: 3600 * 11 + 900,
       },
       { date: "2026-01-11", zone: "Asia/Tokyo", tzChange: 1, partialReason: null, asleepS: 1200 },
+      ...["2026-01-12", "2026-01-13", "2026-01-14", "2026-01-15", "2026-01-16"].map((date) => ({
+        date,
+        zone: "America/Los_Angeles",
+        tzChange: date === "2026-01-12" ? 1 : 0,
+        partialReason: null,
+        asleepS: 3600,
+      })),
     ]);
     expect(
       db
         .query(
-          "SELECT metric, unit_day AS day, value, n, usable FROM metric_values WHERE metric IN ('sleep_hr','hrv_sdnn','deep_h') ORDER BY metric, day",
+          "SELECT metric, unit_day AS day, value, n, usable FROM metric_values WHERE metric IN ('sleep_hr','hrv_sdnn','deep_h') AND unit_day = '2026-01-10' ORDER BY metric, day",
         )
         .all(),
     ).toEqual([
       { metric: "deep_h", day: "2026-01-10", value: 0.25, n: 1, usable: 1 },
-      { metric: "deep_h", day: "2026-01-11", value: 0, n: 1, usable: 1 },
-      { metric: "hrv_sdnn", day: "2026-01-10", value: 41, n: 2, usable: 0 },
-      { metric: "sleep_hr", day: "2026-01-10", value: 55, n: 2, usable: 0 },
+      { metric: "hrv_sdnn", day: "2026-01-10", value: 42, n: 3, usable: 1 },
+      { metric: "sleep_hr", day: "2026-01-10", value: 55.5, n: 10, usable: 1 },
     ]);
     expect(
-      db.query("SELECT unit_day AS day, value, n FROM metric_values WHERE metric = 'steps'").all(),
+      db
+        .query(
+          "SELECT unit_day AS day, value, n FROM metric_values WHERE metric = 'steps' AND unit_day = '2026-01-12'",
+        )
+        .all(),
     ).toEqual([{ day: "2026-01-12", value: 75, n: 1 }]);
+    expect(
+      db
+        .query(
+          "SELECT COUNT(*) AS count FROM metric_values WHERE metric = 'steps' AND unit_day = '2026-01-18'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+    expect(
+      db
+        .query(`SELECT e.device_hw AS hardware, COUNT(*) AS count FROM metric_values mv
+        JOIN epochs e ON e.id = mv.epoch_id WHERE mv.metric = 'sleep_h' GROUP BY e.device_hw`)
+        .all(),
+    ).toEqual([{ hardware: "Watch7,5", count: 7 }]);
     db.close();
   });
 });
