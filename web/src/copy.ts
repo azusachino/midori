@@ -335,9 +335,54 @@ export const copy = {
     devices: {
       title: "Devices",
       subtitle: "Device epochs, metric primaries, seams, and OS updates.",
-      placeholderNote:
-        "Foundation shell active. Full epoch timeline and per-epoch cards land in Slice 17.",
-      primaryFor: (count: number) => `primary for ${count} metrics`,
+      timelineTitle: "Timeline (days present)",
+      timelineSummary: (epochCount: number, minorCount: number) =>
+        minorCount > 0
+          ? `Device timeline across ${epochCount} primary or secondary epochs and ${minorCount} occasional sources.`
+          : `Device timeline across ${epochCount} ${epochCount === 1 ? "epoch" : "epochs"}.`,
+      lanes: {
+        watch: "Watch",
+        phone: "Phone",
+        app: "Apps",
+      },
+      primaryFor: (count: number) =>
+        count === 1 ? "primary for 1 metric" : `primary for ${count} metrics`,
+      sincePrefix: (dayLabel: string) => `since ${dayLabel}`,
+      daysCount: (count: number) => (count === 1 ? "1 day" : `${count} days`),
+      osUpdatesLabel: "OS updates",
+      noMetricsNote: "No primary metrics in current derive.",
+      occasionalTitle: (count: number) => `Occasional sources (${count})`,
+      occasionalHint: "Minor sources with fewer than 6 days in any 28-day window; never primary.",
+      legendSparseDot: "Sparse source",
+      legendOsUpdate: "OS update",
+      columns: {
+        metric: "Metric",
+        baseline: "Baseline",
+        seam: "Across device change",
+        seamFrom: (fromLabel: string) => `Across change from ${fromLabel}`,
+      },
+      roles: {
+        primary: "primary",
+        candidate: "candidate",
+        minor: "minor",
+      },
+      baselines: {
+        full: "full",
+        early: "early",
+        learning: (current: number, target: number) => `learning ${current}/${target}`,
+        learningGeneric: "learning",
+        insufficient: "insufficient",
+        trendOnly: "trend only",
+      },
+      seamOffset: (diffText: string, sharedDays: number) =>
+        `offset ${diffText} (n=${sharedDays} shared ${sharedDays === 1 ? "day" : "days"})`,
+      seamStep: (diffText: string) => `step ${diffText} — device or you, can't separate`,
+      kinds: {
+        watch: "Watch",
+        phone: "Phone",
+        app: "App",
+        other: "Device",
+      },
     },
     import: {
       title: "Import",

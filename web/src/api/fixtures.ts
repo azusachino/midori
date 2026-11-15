@@ -935,10 +935,24 @@ export function unitEvidenceStub(metric: string, day: string): UnitEvidenceDTO {
   };
 }
 
+function buildRangeDays(startDay: string, endDay: string, step = 1): string[] {
+  const days: string[] = [];
+  for (let d = startDay; d <= endDay; d = isoDayOffset(d, step)) {
+    days.push(d);
+    if (days.length > 800) break;
+  }
+  return days;
+}
+
 export function epochsStub(hasImports = true): EpochsDTO {
   if (!hasImports) {
     return { hasImports: false, asOfDay: null, epochs: [] };
   }
+  const watchADays = buildRangeDays("2025-08-15", "2026-02-02");
+  const watchBDays = buildRangeDays("2026-01-24", "2026-03-01");
+  const phoneDays = buildRangeDays("2025-08-15", "2026-03-01", 2);
+  const sparseAppDays = ["2025-09-12", "2025-11-03", "2026-01-08", "2026-02-19"];
+
   return {
     hasImports: true,
     asOfDay: "2026-03-01",
@@ -951,12 +965,27 @@ export function epochsStub(hasImports = true): EpochsDTO {
         kind: "watch",
         colorIndex: 1,
         minor: false,
-        firstDay: "2026-02-22",
+        firstDay: "2026-01-24",
         lastDay: "2026-03-01",
-        daysPresent: SYNTHETIC_DAYS.slice(7),
-        daysPresentCount: 8,
-        primaryMetricCount: 1,
+        daysPresent: watchBDays,
+        daysPresentCount: watchBDays.length,
+        primaryMetricCount: 10,
         metrics: [
+          {
+            metric: "hrv_sdnn",
+            role: "primary",
+            baselineState: "full",
+            warmup: null,
+            seamFromPrevious: {
+              seamDay: "2026-01-24",
+              fromEpochId: 1,
+              toEpochId: 2,
+              kind: "offset",
+              value: -4,
+              nOld: 10,
+              nNew: 10,
+            },
+          },
           {
             metric: "wrist_temp",
             role: "primary",
@@ -968,12 +997,63 @@ export function epochsStub(hasImports = true): EpochsDTO {
               toEpochId: 2,
               kind: "step",
               value: 0.52,
-              nOld: 7,
+              nOld: 28,
               nNew: 8,
             },
           },
+          {
+            metric: "steps",
+            role: "primary",
+            baselineState: "full",
+            warmup: null,
+            seamFromPrevious: {
+              seamDay: "2026-01-24",
+              fromEpochId: 1,
+              toEpochId: 2,
+              kind: "offset",
+              value: 410,
+              nOld: 10,
+              nNew: 10,
+            },
+          },
+          {
+            metric: "sleep_h",
+            role: "primary",
+            baselineState: "full",
+            warmup: null,
+            seamFromPrevious: null,
+          },
+          {
+            metric: "sleep_hr",
+            role: "primary",
+            baselineState: "early",
+            warmup: null,
+            seamFromPrevious: {
+              seamDay: "2026-01-24",
+              fromEpochId: 1,
+              toEpochId: 2,
+              kind: "offset",
+              value: 1,
+              nOld: 10,
+              nNew: 10,
+            },
+          },
+          {
+            metric: "spo2",
+            role: "primary",
+            baselineState: "insufficient",
+            warmup: null,
+            seamFromPrevious: null,
+          },
+          {
+            metric: "vo2max",
+            role: "primary",
+            baselineState: "trend_only",
+            warmup: null,
+            seamFromPrevious: null,
+          },
         ],
-        osUpdates: [],
+        osUpdates: [{ epochId: 2, day: "2026-02-26", fromSw: "10.4", toSw: "11.0" }],
       },
       {
         id: 1,
@@ -983,13 +1063,108 @@ export function epochsStub(hasImports = true): EpochsDTO {
         kind: "watch",
         colorIndex: 0,
         minor: false,
-        firstDay: "2026-02-15",
-        lastDay: "2026-02-21",
-        daysPresent: SYNTHETIC_DAYS.slice(0, 7),
-        daysPresentCount: 7,
+        firstDay: "2025-08-15",
+        lastDay: "2026-02-02",
+        daysPresent: watchADays,
+        daysPresentCount: watchADays.length,
+        primaryMetricCount: 0,
+        metrics: [],
+        osUpdates: [{ epochId: 1, day: "2026-01-12", fromSw: "10.2", toSw: "10.4" }],
+      },
+      {
+        id: 3,
+        sourceName: "Synthetic Phone",
+        deviceHw: "iPhone16,1",
+        label: "Synthetic Phone",
+        kind: "phone",
+        colorIndex: 2,
+        minor: false,
+        firstDay: "2025-08-15",
+        lastDay: "2026-03-01",
+        daysPresent: phoneDays,
+        daysPresentCount: phoneDays.length,
+        primaryMetricCount: 1,
+        metrics: [
+          {
+            metric: "active_kj",
+            role: "primary",
+            baselineState: "full",
+            warmup: null,
+            seamFromPrevious: null,
+          },
+          {
+            metric: "steps",
+            role: "candidate",
+            baselineState: "full",
+            warmup: null,
+            seamFromPrevious: null,
+          },
+        ],
+        osUpdates: [{ epochId: 3, day: "2025-11-18", fromSw: null, toSw: "18.2" }],
+      },
+      {
+        id: 4,
+        sourceName: "Synthetic Phone App",
+        deviceHw: "",
+        label: "Synthetic Phone App",
+        kind: "app",
+        colorIndex: null,
+        minor: true,
+        firstDay: "2025-09-12",
+        lastDay: "2026-02-19",
+        daysPresent: sparseAppDays,
+        daysPresentCount: sparseAppDays.length,
         primaryMetricCount: 0,
         metrics: [],
         osUpdates: [],
+      },
+    ],
+  };
+}
+
+export function singleEpochStub(): EpochsDTO {
+  const watchDays = buildRangeDays("2025-11-01", "2026-03-01");
+  return {
+    hasImports: true,
+    asOfDay: "2026-03-01",
+    epochs: [
+      {
+        id: 1,
+        sourceName: "Synthetic Watch A",
+        deviceHw: "Watch6,1",
+        label: "Synthetic Watch A",
+        kind: "watch",
+        colorIndex: 0,
+        minor: false,
+        firstDay: "2025-11-01",
+        lastDay: "2026-03-01",
+        daysPresent: watchDays,
+        daysPresentCount: watchDays.length,
+        primaryMetricCount: 3,
+        metrics: [
+          {
+            metric: "hrv_sdnn",
+            role: "primary",
+            baselineState: "full",
+            warmup: null,
+            seamFromPrevious: null,
+          },
+          {
+            metric: "sleep_h",
+            role: "primary",
+            baselineState: "full",
+            warmup: null,
+            seamFromPrevious: null,
+          },
+          {
+            metric: "steps",
+            role: "primary",
+            baselineState: "early",
+            warmup: null,
+            seamFromPrevious: null,
+          },
+        ],
+        osUpdates: [{ epochId: 1, day: "2026-01-12", fromSw: "10.2", toSw: "10.4" }],
       },
     ],
   };
