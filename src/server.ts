@@ -114,7 +114,10 @@ function envOpt<K extends keyof ServerOptions>(
 
 if (import.meta.main) {
   const dbPath = process.env.MIDORI_DB ?? "data/midori.db";
-  const port = Number(process.env.MIDORI_PORT ?? DEFAULT_PORT);
+  const rawPort = process.env.MIDORI_PORT;
+  // Kubernetes service links inject MIDORI_PORT="tcp://..." if service is named "midori".
+  // Only accept purely numeric port strings.
+  const port = rawPort && /^\d+$/.test(rawPort) ? Number(rawPort) : DEFAULT_PORT;
   const hostname = process.env.MIDORI_HOST ?? "127.0.0.1";
   // exactOptionalPropertyTypes: spread so absent envs omit the keys entirely.
   const server = startServer({
