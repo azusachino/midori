@@ -97,18 +97,29 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - `src/stats/epochs.ts` (+ test)
   - `tests/fixtures/` additions
 - AC:
-  - [ ] Epoch = `(source_name, device_hw)`; kind from the hardware prefix (`Watch*`, `iPhone*`,
+  - [x] Epoch = `(source_name, device_hw)`; kind from the hardware prefix (`Watch*`, `iPhone*`,
     other), `app` for `device_hw` NULL with no inheritance.
-  - [ ] B-D2 inheritance exactly as specified (same/adjacent local day, else nearest ≤30
+  - [x] B-D2 inheritance exactly as specified (same/adjacent local day, else nearest ≤30
     days). Tested with device-less sleep/RHR records.
-  - [ ] Fixture + test `B-D1 same-name replacement watch yields two epochs`, with the
+  - [x] Fixture + test `B-D1 same-name replacement watch yields two epochs`, with the
     device-less sleep records following the right epoch on each side of the change.
-  - [ ] `epoch_events` OS-update rows on `software` change within an epoch (B-D8).
-  - [ ] `days_present` counts distinct local days with any record.
-  - [ ] v0 stats modules that read the dropped tables are removed or stubbed so that `bun run
+  - [x] `epoch_events` OS-update rows on `software` change within an epoch (B-D8).
+  - [x] `days_present` counts distinct local days with any record.
+  - [x] v0 stats modules that read the dropped tables are removed or stubbed so that `bun run
     check` stays green. The v0 read routes may return 501 until slice 9; list them in the
     hand-back.
 - Verify: `bun run check`.
+- **Done 2026-11-15** — `midori-engine` (pi, magpie/codex/gpt-6-luna high), commits `13c78f0` and
+  `b498d9c`.
+  - `bun run check` (lead): exit 0, 173 tests.
+  - Real-data derive over the db copy (lead, counts only):
+    - epochs by kind: watch 4, phone 3, other 1, app 3
+    - no watch source keeps an app epoch, so device-less sleep/RHR records were all inherited
+  - B-D8 was amended after the real data showed version flapping. Per-day detection gave 342
+    events, with one watch at 6 events for 4 versions in 18 days. A newer-version-first-seen
+    rule now gives exactly one event per distinct version (current watch: 2).
+  - Main is temporarily degraded until slice 9: the v0 read routes return 501 and the v0 web
+    pages are empty. Import still works. The deployed cluster image (v0.1.0) is unaffected.
 
 ### Slice 3 — Minor + sticky primary + seams `[midori-engine]`
 
