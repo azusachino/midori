@@ -26,7 +26,6 @@ import {
   organizeEpochs,
   sortEpochMetrics,
 } from "@/lib/devices";
-import { epochDisplayLabel } from "@/lib/finding-format";
 import { EPOCH_PALETTE, epochColor } from "@/lib/theme";
 import { useAsyncQuery } from "@/lib/useAsyncQuery";
 import { cn } from "@/lib/utils";
@@ -37,7 +36,9 @@ function resolveSeamColumnHeading(
 ): { heading: string; sharedFromEpochId: number | null } {
   const fromIds = new Set<number>();
   for (const m of epoch.metrics) {
-    if (m.seamFromPrevious) fromIds.add(m.seamFromPrevious.fromEpochId);
+    if (m.seamFromPrevious?.fromEpochId !== null && m.seamFromPrevious?.fromEpochId !== undefined) {
+      fromIds.add(m.seamFromPrevious.fromEpochId);
+    }
   }
   if (fromIds.size === 1) {
     const onlyId = Array.from(fromIds)[0];
@@ -45,7 +46,7 @@ function resolveSeamColumnHeading(
       const targetEpoch = epochById.get(onlyId);
       if (targetEpoch) {
         return {
-          heading: copy.pages.devices.columns.seamFrom(epochDisplayLabel(targetEpoch)),
+          heading: copy.pages.devices.columns.seamFrom(targetEpoch.label),
           sharedFromEpochId: onlyId,
         };
       }
@@ -93,20 +94,11 @@ export function DevicesPage() {
 
       <div data-testid="epoch-cards-list" className="space-y-4">
         {primaryEpochs.map((epoch, idx) => {
-          const recordedMetrics = epoch.metrics.filter(
-            (m) =>
-              !(m.role === "minor" && m.baselineState === "insufficient" && !m.seamFromPrevious),
-          );
-          const sortedMetrics = sortEpochMetrics(recordedMetrics);
-          const displayLabel = epochDisplayLabel(epoch);
-          const color = epochColor(epoch.colorIndex ?? idx);
-          const isWrapped = idx >= EPOCH_PALETTE.length;
-          const metaPrefix =
-            epoch.deviceHw && epoch.deviceHw !== displayLabel
-              ? epoch.deviceHw
-              : epoch.sourceName && epoch.sourceName !== displayLabel
-                ? epoch.sourceName
-                : copy.pages.devices.kinds[epoch.kind];
+          const sortedMetrics = sortEpochMetrics(epoch.metrics);
+          const colorIndex = epoch.colorIndex ?? idx;
+          const color = epochColor(colorIndex);
+          const isWrapped = colorIndex >= EPOCH_PALETTE.length;
+          const metaPrefix = epoch.deviceHw || copy.pages.devices.kinds[epoch.kind];
           const spanSummary = formatEpochSpan(
             epoch.firstDay,
             epoch.lastDay,
@@ -131,7 +123,7 @@ export function DevicesPage() {
                     style={{ backgroundColor: color }}
                   />
                   <div>
-                    <CardTitle className="text-base">{displayLabel}</CardTitle>
+                    <CardTitle className="text-base">{epoch.label}</CardTitle>
                     <CardDescription className="tabular-nums">
                       {metaPrefix} · {spanSummary}
                     </CardDescription>
@@ -162,11 +154,12 @@ export function DevicesPage() {
                           const metricName = copy.metrics[row.metric] ?? row.metric;
                           const baselineText = formatBaselineLabel(row);
                           const seam = row.seamFromPrevious;
-                          const fromEpoch =
-                            seam && seam.fromEpochId !== sharedFromEpochId
-                              ? epochById.get(seam.fromEpochId)
+                          const fromLabel =
+                            seam &&
+                            seam.fromEpochId !== null &&
+                            seam.fromEpochId !== sharedFromEpochId
+                              ? epochById.get(seam.fromEpochId)?.label
                               : undefined;
-                          const fromLabel = fromEpoch ? epochDisplayLabel(fromEpoch) : undefined;
                           const seamText = seam
                             ? formatSeamDescription(row.metric, seam, fromLabel)
                             : "—";
@@ -280,33 +273,26 @@ export function DevicesPage() {
               data-testid="occasional-sources-list"
               className="divide-y divide-border border-t border-border pt-0"
             >
-              {minorEpochs.map((minor) => {
-                const minorLabel = epochDisplayLabel(minor);
-                const minorMeta =
-                  minor.deviceHw && minor.deviceHw !== minorLabel
-                    ? minor.deviceHw
-                    : copy.pages.devices.kinds[minor.kind];
-                return (
-                  <div
-                    key={minor.id}
-                    className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
-                  >
-                    <div>
-                      <span className="font-medium text-foreground">{minorLabel}</span>
-                      <span className="ml-2 text-xs text-muted-foreground tabular-nums">
-                        {minorMeta} ·{" "}
-                        {formatEpochSpan(
-                          minor.firstDay,
-                          minor.lastDay,
-                          query.data.asOfDay,
-                          minor.daysPresentCount,
-                        )}
-                      </span>
-                    </div>
-                    <Badge variant="secondary">{copy.pages.devices.roles.minor}</Badge>
+              {minorEpochs.map((minor) => (
+                <div
+                  key={minor.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
+                >
+                  <div>
+                    <span className="font-medium text-foreground">{minor.label}</span>
+                    <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                      {minor.deviceHw || copy.pages.devices.kinds[minor.kind]} ·{" "}
+                      {formatEpochSpan(
+                        minor.firstDay,
+                        minor.lastDay,
+                        query.data.asOfDay,
+                        minor.daysPresentCount,
+                      )}
+                    </span>
                   </div>
-                );
-              })}
+                  <Badge variant="secondary">{copy.pages.devices.roles.minor}</Badge>
+                </div>
+              ))}
             </CardContent>
           ) : null}
         </Card>

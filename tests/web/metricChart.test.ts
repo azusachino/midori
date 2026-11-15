@@ -12,7 +12,6 @@ import {
   formatSeamLabel,
   hasEstablishedBaseline,
   nextWiderRange,
-  resolveUnitEpochId,
   resolveZoomWindow,
   shouldIncludeZero,
   toWeekStartMonday,
@@ -233,7 +232,7 @@ describe("metric-chart helpers", () => {
     expect(nextWiderRange("all")).toBeNull();
   });
 
-  test("reconciles server range=all weekly buckets, mixed epochId=0, and same-day multi-epoch steps", () => {
+  test("aligns range=all weekly calendar ticks/bands and deduplicates overlapping non-minor day units", () => {
     expect(toWeekStartMonday("2026-01-24")).toBe("2026-01-19");
 
     const base = metricSeriesStub("hrv_sdnn", "180d");
@@ -254,8 +253,19 @@ describe("metric-chart helpers", () => {
         },
         {
           day: "2026-01-19",
-          epochId: 0,
+          epochId: 1,
           value: 54,
+          n: 0,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: null,
+          isRecent: false,
+        },
+        {
+          day: "2026-01-19",
+          epochId: 2,
+          value: 55,
           n: 0,
           usable: true,
           partialReason: null,
@@ -280,14 +290,11 @@ describe("metric-chart helpers", () => {
     const days = buildCalendarDays(weeklySeries);
     // Adjacent Monday ticks from 2026-01-12 to end of band/units (stepping by 7d, never daily)
     expect(days.slice(0, 4)).toEqual(["2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02"]);
-    const mixedUnit = weeklySeries.units[1];
-    if (!mixedUnit) throw new Error("expected mixed unit");
-    expect(resolveUnitEpochId(mixedUnit, weeklySeries)).toBe(1);
 
     const alignedBand = currentStintBandPoints(weeklySeries);
     expect(alignedBand.every((pt) => toWeekStartMonday(pt.day) === pt.day)).toBe(true);
 
-    // Same-day watch+phone records (when server sets minor:false on all epochs) deduplicate to covering stint
+    // Same-day overlapping non-minor records deduplicate to the covering stint epoch
     const stepsBase = metricSeriesStub("hrv_sdnn", "90d");
     const epoch1 = stepsBase.epochs[0];
     const epoch2 = stepsBase.epochs[1];

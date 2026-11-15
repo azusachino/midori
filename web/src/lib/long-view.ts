@@ -6,13 +6,8 @@ import type {
   StintDTO,
 } from "../api/types";
 import { copy } from "../copy";
-import {
-  displayUnit,
-  epochDisplayLabel,
-  formatMetricNumber,
-  formatShortDay,
-} from "./finding-format";
-import { deduplicateUnitsByDay, resolveUnitEpochId } from "./metric-chart";
+import { displayUnit, formatMetricNumber, formatShortDay } from "./finding-format";
+import { deduplicateUnitsByDay } from "./metric-chart";
 
 export interface ChartAccessibleTable {
   columns: Array<{ key: string; label: string }>;
@@ -149,13 +144,10 @@ export function buildLongViewModel(series: MetricSeriesDTO): LongViewModel {
   const epochById = new Map(series.epochs.map((e) => [e.id, e]));
   const seamByDay = new Map(series.seams.map((s) => [s.seamDay, s]));
 
-  const rawNonMinor = series.units
-    .filter((u) => {
-      const resolvedId = resolveUnitEpochId(u, series);
-      const ep = epochById.get(resolvedId);
-      return !ep?.minor && u.value !== null;
-    })
-    .map((u) => ({ ...u, epochId: resolveUnitEpochId(u, series) }));
+  const rawNonMinor = series.units.filter((u) => {
+    const ep = epochById.get(u.epochId);
+    return !ep?.minor && u.value !== null;
+  });
 
   const nonMinorUnits = deduplicateUnitsByDay(rawNonMinor, series).sort((a, b) =>
     a.day < b.day ? -1 : a.day > b.day ? 1 : 0,
@@ -188,7 +180,7 @@ export function buildLongViewModel(series: MetricSeriesDTO): LongViewModel {
       usable: u.usable,
       partialReason: u.partialReason,
       epochId: u.epochId,
-      epochLabel: ep ? epochDisplayLabel(ep) : `#${u.epochId}`,
+      epochLabel: ep?.label ?? `#${u.epochId}`,
       colorIndex: ep?.colorIndex ?? null,
       stintMedian: median,
       deviation,

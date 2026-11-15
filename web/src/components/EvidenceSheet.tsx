@@ -21,7 +21,6 @@ import {
   formatEvidenceSummaryLine,
   formatEvidenceValue,
 } from "@/lib/evidence";
-import { epochDisplayLabel } from "@/lib/finding-format";
 import { useAsyncQuery } from "@/lib/useAsyncQuery";
 
 export interface EvidenceSheetProps {
@@ -151,14 +150,11 @@ function EvidenceBody({ evidence, unit, copied, onCopyLink }: EvidenceBodyProps)
         {hasSamples
           ? (() => {
               const primaryLabel = evidence.primaryEpoch
-                ? epochDisplayLabel(evidence.primaryEpoch)
+                ? evidence.primaryEpoch.label
                 : evCopy.unknownDevice;
               const metaParts = evidence.primaryEpoch
                 ? [
-                    evidence.primaryEpoch.deviceHw &&
-                    evidence.primaryEpoch.deviceHw !== primaryLabel
-                      ? evidence.primaryEpoch.deviceHw
-                      : null,
+                    evidence.primaryEpoch.deviceHw || null,
                     evidence.deviceSw ? `OS ${evidence.deviceSw}` : null,
                   ].filter((part): part is string => part !== null)
                 : [];
@@ -247,7 +243,7 @@ function EvidenceBody({ evidence, unit, copied, onCopyLink }: EvidenceBodyProps)
         <p data-testid="evidence-also-recorded" className="text-xs text-muted-foreground">
           {evCopy.alsoRecordedBy}{" "}
           <span className="text-foreground">
-            {evidence.alsoRecordedBy.map((e) => epochDisplayLabel(e)).join(", ")}
+            {evidence.alsoRecordedBy.map((e) => e.label).join(", ")}
           </span>
         </p>
       ) : null}

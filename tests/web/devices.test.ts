@@ -101,19 +101,5 @@ describe("Devices page helpers", () => {
     const table = buildDevicesTable(dto.epochs);
     expect(table.rows).toHaveLength(4);
     expect(table.rows.some((r) => r.status === "minor")).toBe(true);
-
-    // Server app epochs arrive with label === "" and deviceHw === ""; timeline falls back to sourceName.
-    const watchEpoch = dto.epochs[0];
-    const appEpoch = dto.epochs[3];
-    if (!watchEpoch || !appEpoch) throw new Error("expected fixture epochs");
-    const serverApp = {
-      ...appEpoch,
-      label: "",
-      deviceHw: "",
-      sourceName: "Sleep Cycle App",
-    };
-    const serverModel = buildDeviceTimelineModel([watchEpoch, serverApp]);
-    const appSeg = serverModel.segments.find((s) => s.epochId === serverApp.id);
-    expect(appSeg?.epochLabel).toBe("Sleep Cycle App");
   });
 });

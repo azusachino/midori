@@ -1,23 +1,10 @@
 import type {
   CheckResultDTO,
   ConfidenceLevel,
-  EpochKind,
-  EpochRefDTO,
   FindingRowDTO,
   SparklinePointDTO,
 } from "../api/types";
-import { copy } from "../copy";
 import { DAYTIME_ORDER, OVERNIGHT_ORDER } from "./metrics";
-
-/** Resolves a readable label when app/device-less server epochs have an empty `label`. */
-export function epochDisplayLabel(
-  epoch: Pick<EpochRefDTO, "label" | "sourceName" | "deviceHw" | "kind">,
-  kindLabels: Record<EpochKind, string> = copy.pages.devices.kinds,
-): string {
-  return (
-    epoch.label.trim() || epoch.sourceName.trim() || epoch.deviceHw.trim() || kindLabels[epoch.kind]
-  );
-}
 
 const MONTHS = [
   "Jan",

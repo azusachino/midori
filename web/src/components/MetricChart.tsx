@@ -4,12 +4,7 @@ import { useCallback, useMemo } from "react";
 import type { MetricSeriesDTO, MetricUnitPointDTO } from "@/api/types";
 import { EChart, type EChartPointClickEvent, type EChartZoomEvent } from "@/components/EChart";
 import { copy } from "@/copy";
-import {
-  displayUnit,
-  epochDisplayLabel,
-  formatDayWithWeekday,
-  formatMetricNumber,
-} from "@/lib/finding-format";
+import { displayUnit, formatDayWithWeekday, formatMetricNumber } from "@/lib/finding-format";
 import {
   buildBandPolygons,
   buildCalendarDays,
@@ -19,7 +14,6 @@ import {
   findRecentWindow,
   formatPartialReason,
   formatSeamLabel,
-  resolveUnitEpochId,
   resolveZoomWindow,
   shouldIncludeZero,
   toWeekStartMonday,
@@ -135,8 +129,7 @@ export function MetricChart({
 
       const unitByEpochDay = new Map<string, MetricUnitPointDTO>();
       for (const u of series.units) {
-        const resolvedId = resolveUnitEpochId(u, series);
-        unitByEpochDay.set(`${resolvedId}:${u.day}`, u);
+        unitByEpochDay.set(`${u.epochId}:${u.day}`, u);
       }
       const bandByDay = new Map(currentBand.map((b) => [b.day, b]));
       const seamsByDay = new Map(series.seams.map((s) => [axisDay(s.seamDay), s]));
@@ -246,11 +239,7 @@ export function MetricChart({
           .filter((u) => u.epochId === epoch.id)
           .flatMap((u) => {
             const coordDay = axisDay(u.day);
-            const val = nearestValueForEpoch(
-              series.units.map((pt) => ({ ...pt, epochId: resolveUnitEpochId(pt, series) })),
-              epoch.id,
-              coordDay,
-            );
+            const val = nearestValueForEpoch(series.units, epoch.id, coordDay);
             if (val === null || !dayIndex.has(coordDay)) return [];
             const swText = u.fromSw ? `${u.fromSw} → ${u.toSw}` : u.toSw;
             return [
@@ -281,13 +270,7 @@ export function MetricChart({
                     align: "right" as const,
                     verticalAlign: "top" as const,
                     distance: 8,
-                    formatter: formatSeamLabel(
-                      seam,
-                      series.epochs,
-                      series.metric,
-                      series.unit,
-                      series.stints,
-                    ),
+                    formatter: formatSeamLabel(seam, series.epochs, series.metric, series.unit),
                     color: theme.foreground,
                     backgroundColor: theme.card,
                     borderColor: theme.borderStrong,
@@ -323,7 +306,7 @@ export function MetricChart({
             : undefined;
 
         echartsSeries.push({
-          name: epochDisplayLabel(epoch),
+          name: epoch.label,
           type: "line",
           z: 4,
           connectNulls: false,
@@ -376,7 +359,7 @@ export function MetricChart({
         });
 
         echartsSeries.push({
-          name: epochDisplayLabel(epoch),
+          name: epoch.label,
           type: "scatter",
           z: 3,
           symbolSize: 6,
@@ -397,7 +380,7 @@ export function MetricChart({
         legend: {
           top: 2,
           left: 0,
-          data: nonMinorEpochs.map((e) => epochDisplayLabel(e)),
+          data: nonMinorEpochs.map((e) => e.label),
           icon: "circle",
           itemWidth: 8,
           itemHeight: 8,
@@ -453,7 +436,7 @@ export function MetricChart({
               const suffix = notes.length > 0 ? ` · ${escapeHtml(notes.join(", "))}` : "";
               const resolvedEpoch = epochById.get(epoch.id) ?? epoch;
               lines.push(
-                `<div><span style="display:inline-block;width:7px;height:7px;border-radius:9999px;background:${dotColor};margin-right:6px;"></span>${escapeHtml(epochDisplayLabel(resolvedEpoch))}: <strong>${escapeHtml(valWithUnit)}</strong><span style="color:${theme.mutedForeground};">${suffix}</span></div>`,
+                `<div><span style="display:inline-block;width:7px;height:7px;border-radius:9999px;background:${dotColor};margin-right:6px;"></span>${escapeHtml(resolvedEpoch.label)}: <strong>${escapeHtml(valWithUnit)}</strong><span style="color:${theme.mutedForeground};">${suffix}</span></div>`,
               );
             }
 
@@ -470,7 +453,7 @@ export function MetricChart({
             const seam = seamsByDay.get(day);
             if (seam) {
               lines.push(
-                `<div style="color:${theme.notable};margin-top:3px;">${escapeHtml(formatSeamLabel(seam, series.epochs, series.metric, series.unit, series.stints))}</div>`,
+                `<div style="color:${theme.notable};margin-top:3px;">${escapeHtml(formatSeamLabel(seam, series.epochs, series.metric, series.unit))}</div>`,
               );
             }
 

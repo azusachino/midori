@@ -20,6 +20,8 @@ function row(overrides: Partial<ImportDTO>): ImportDTO {
     recordsSeen: null,
     recordsInserted: null,
     recordsDeduped: null,
+    newUsableNights: null,
+    newEpochs: [],
     durationMs: null,
     createdAt: "2026-03-01T00:00:00Z",
     ...overrides,

@@ -44,7 +44,7 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render against real server",
   await expect(page.getByTestId("sidebar-nav")).toBeVisible();
   await expect(page.getByTestId("mobile-nav")).toBeHidden();
   await expect(page.getByTestId("topbar-freshness")).toContainText("Data through 2026-11-14");
-  await expect(page.getByTestId("sidebar-watch")).toContainText("Watch7,5");
+  await expect(page.getByTestId("sidebar-watch")).toContainText("Synthetic Watch B");
 
   await assertNoHorizontalOverflow(page);
 

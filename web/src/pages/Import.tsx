@@ -94,6 +94,8 @@ export function ImportPage() {
           recordsSeen: null,
           recordsInserted: null,
           recordsDeduped: null,
+          newUsableNights: null,
+          newEpochs: [],
           durationMs: null,
           createdAt: new Date().toISOString(),
         });
@@ -139,6 +141,8 @@ export function ImportPage() {
                   recordsSeen: null,
                   recordsInserted: null,
                   recordsDeduped: null,
+                  newUsableNights: null,
+                  newEpochs: [],
                   durationMs: null,
                   createdAt: new Date().toISOString(),
                 },
@@ -549,7 +553,7 @@ export function ImportPage() {
                   : [
                       copy.pages.import.summary.newRecords(completedJob.recordsInserted ?? 0),
                       copy.pages.import.summary.alreadyKnown(completedJob.recordsDeduped ?? 0),
-                      completedJob.newUsableNights != null
+                      completedJob.newUsableNights !== null
                         ? copy.pages.import.summary.newUsableNights(completedJob.newUsableNights)
                         : null,
                     ]
@@ -568,14 +572,13 @@ export function ImportPage() {
               </p>
             ) : null}
 
-            {completedJob.exportDate ||
-            (completedJob.newEpochs && completedJob.newEpochs.length > 0) ? (
+            {completedJob.exportDate || completedJob.newEpochs.length > 0 ? (
               <p className="text-xs text-muted-foreground tabular-nums">
                 {[
                   completedJob.exportDate
                     ? copy.pages.import.summary.dataThrough(completedJob.exportDate.slice(0, 10))
                     : null,
-                  completedJob.newEpochs && completedJob.newEpochs.length > 0
+                  completedJob.newEpochs.length > 0
                     ? copy.pages.import.summary.newEpochs(completedJob.newEpochs)
                     : null,
                 ]
@@ -659,7 +662,7 @@ export function ImportPage() {
                         {row.recordsDeduped !== null ? row.recordsDeduped.toLocaleString() : "—"}
                       </TableCell>
                       <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
-                        {row.newUsableNights != null ? row.newUsableNights.toLocaleString() : "—"}
+                        {row.newUsableNights !== null ? row.newUsableNights.toLocaleString() : "—"}
                       </TableCell>
                       <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
                         {formatDurationMs(row.durationMs)}

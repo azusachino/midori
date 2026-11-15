@@ -36,8 +36,8 @@ test("Long view tab against real server renders per-year ECharts calendar (2025 
   await page.goto("/metrics/hrv_sdnn?range=90d&tab=long");
   const panel = page.getByTestId("long-view-panel");
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText("Watch6,1");
-  await expect(panel).toContainText("Watch7,5");
+  await expect(panel).toContainText("Synthetic Watch A");
+  await expect(panel).toContainText("Synthetic Watch B");
   await expect(panel).toContainText("Partial (hatched)");
   await expect(panel).toContainText("Device seam (Oct 16)");
 
@@ -48,7 +48,7 @@ test("Long view tab against real server renders per-year ECharts calendar (2025 
   const srTable = page.getByTestId("long-view-echart").locator("table");
   await expect(srTable).toContainText("2025");
   await expect(srTable).toContainText("2026");
-  await expect(srTable).toContainText("step (Oct 16)");
+  await expect(srTable).toContainText("offset (Oct 16)");
 
   await assertNoHorizontalOverflow(page);
   await snapShot(page, "int-long-view-1440.png");

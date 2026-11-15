@@ -7,12 +7,7 @@ import type {
   SeamStepDTO,
 } from "../api/types";
 import { copy } from "../copy";
-import {
-  displayUnit,
-  epochDisplayLabel,
-  formatMetricNumber,
-  formatShortDay,
-} from "./finding-format";
+import { displayUnit, formatMetricNumber, formatShortDay } from "./finding-format";
 import { DAYTIME_ORDER, OVERNIGHT_ORDER, TREND_ONLY_ORDER } from "./metrics";
 
 export type TimelineLaneKey = "watch" | "phone" | "app";
@@ -313,7 +308,6 @@ export function buildDeviceTimelineModel(epochs: readonly EpochCardDTO[]): Devic
 
   for (const ep of [...epochs].sort(sortChronological)) {
     const rowY = epochRowY.get(ep.id) ?? 0;
-    const epLabel = epochDisplayLabel(ep);
     const runs = buildTimelineRuns(ep);
     runs.forEach((run, runIdx) => {
       trackDay(run.startDay);
@@ -322,7 +316,7 @@ export function buildDeviceTimelineModel(epochs: readonly EpochCardDTO[]): Devic
         segments.push({
           shape: "bar",
           epochId: ep.id,
-          epochLabel: epLabel,
+          epochLabel: ep.label,
           deviceHw: ep.deviceHw,
           kind: ep.kind,
           colorIndex: ep.colorIndex,
@@ -337,7 +331,7 @@ export function buildDeviceTimelineModel(epochs: readonly EpochCardDTO[]): Devic
         segments.push({
           shape: "dots",
           epochId: ep.id,
-          epochLabel: epLabel,
+          epochLabel: ep.label,
           deviceHw: ep.deviceHw,
           kind: ep.kind,
           colorIndex: ep.colorIndex,
@@ -356,7 +350,7 @@ export function buildDeviceTimelineModel(epochs: readonly EpochCardDTO[]): Devic
       trackDay(os.day);
       osMarks.push({
         epochId: ep.id,
-        epochLabel: epLabel,
+        epochLabel: ep.label,
         colorIndex: ep.colorIndex,
         minor: ep.minor,
         day: os.day,
@@ -486,16 +480,13 @@ export function buildDevicesTable(epochs: readonly EpochCardDTO[]): DevicesAcces
       { key: "primaryCount", label: "Primary metrics" },
       { key: "status", label: "Status" },
     ],
-    rows: sorted.map((ep) => {
-      const label = epochDisplayLabel(ep);
-      return {
-        label: ep.deviceHw && ep.deviceHw !== label ? `${label} (${ep.deviceHw})` : label,
-        kind: copy.pages.devices.kinds[ep.kind],
-        span: `${ep.firstDay} – ${ep.lastDay}`,
-        days: ep.daysPresentCount,
-        primaryCount: ep.primaryMetricCount,
-        status: ep.minor ? copy.pages.devices.roles.minor : copy.pages.devices.roles.primary,
-      };
-    }),
+    rows: sorted.map((ep) => ({
+      label: ep.deviceHw ? `${ep.label} (${ep.deviceHw})` : ep.label,
+      kind: copy.pages.devices.kinds[ep.kind],
+      span: `${ep.firstDay} – ${ep.lastDay}`,
+      days: ep.daysPresentCount,
+      primaryCount: ep.primaryMetricCount,
+      status: ep.minor ? copy.pages.devices.roles.minor : copy.pages.devices.roles.primary,
+    })),
   };
 }

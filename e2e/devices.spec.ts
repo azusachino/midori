@@ -45,16 +45,19 @@ test("Devices /devices against real server renders timeline, newest-first epoch 
   expect((box?.width ?? 0) > 200 && (box?.height ?? 0) > 100).toBe(true);
 
   const cards = page.getByTestId("epoch-cards-list");
+  await expect(cards).toContainText("Synthetic Watch B");
   await expect(cards).toContainText("Watch7,5");
   await expect(cards).toContainText("primary for 11 metrics");
   await expect(cards).toContainText("learning 10/14");
   await expect(cards).toContainText("can't separate");
   await expect(cards).toContainText("11.0 → 11.1 on Oct 25");
   await expect(cards).toContainText("11.1 → 11.2 on Nov 9");
+  await expect(cards).toContainText("Synthetic Watch A");
   await expect(cards).toContainText("Watch6,1");
+  await expect(cards).toContainText("Synthetic iPhone");
   await expect(cards).toContainText("iPhone16,1");
 
-  // Minor occasional sources collapsed by default; expand shows app fallback name "Sleep Tracker App"
+  // Minor occasional sources collapsed by default; expand shows source name "Sleep Tracker App"
   const occCard = page.getByTestId("occasional-sources-card");
   await expect(occCard).toBeVisible();
   await expect(occCard).toContainText("Occasional sources (1)");
@@ -71,7 +74,7 @@ test("Devices /devices against real server renders timeline, newest-first epoch 
   // Responsive 390px layout check + mobile screenshot
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(canvas).toBeVisible();
-  await expect(cards).toContainText("Watch7,5");
+  await expect(cards).toContainText("Synthetic Watch B");
   await assertNoHorizontalOverflow(page);
   await snapShot(page, "int-devices-390.png");
 

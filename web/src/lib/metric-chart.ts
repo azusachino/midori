@@ -5,7 +5,6 @@ import type {
   MetricSeriesDTO,
   MetricUnitPointDTO,
   SeamStepDTO,
-  StintDTO,
 } from "../api/types";
 import { copy } from "../copy";
 
@@ -21,7 +20,6 @@ export interface ChartTableData {
 
 import {
   displayUnit,
-  epochDisplayLabel,
   formatDayWithWeekday,
   formatMetricNumber,
   formatRangeSpan,
@@ -80,26 +78,9 @@ export function toWeekStartMonday(day: string): string {
   return formatMsAsIsoDay(ms - dow * MS_PER_DAY);
 }
 
-/** Resolves mixed-epoch weekly buckets (epochId === 0) or missing epoch ids to a display epoch id. */
-export function resolveUnitEpochId(
-  unit: Pick<MetricUnitPointDTO, "day" | "epochId">,
-  series: Pick<MetricSeriesDTO, "epochs" | "stints">,
-): number {
-  if (unit.epochId > 0 && series.epochs.some((e) => e.id === unit.epochId)) {
-    return unit.epochId;
-  }
-  const covering = [...series.stints]
-    .reverse()
-    .find((s) => s.startDay <= unit.day && unit.day <= s.endDay);
-  if (covering) return covering.epochId;
-  const fallbackStint = series.stints[series.stints.length - 1];
-  if (fallbackStint) return fallbackStint.epochId;
-  return series.epochs.find((e) => !e.minor)?.id ?? unit.epochId;
-}
-
 /**
- * Deduplicates multiple epochs reporting on the same calendar day (e.g. watch + phone steps),
- * preferring the active covering stint epoch, then usable non-null values.
+ * Deduplicates multiple epochs reporting on the same calendar day (e.g. overlapping watches or
+ * watch + candidate phone), preferring the active covering stint epoch, then usable values.
  */
 export function deduplicateUnitsByDay(
   units: readonly MetricUnitPointDTO[],
@@ -230,21 +211,17 @@ export function formatSeamLabel(
   epochs: readonly EpochRefDTO[],
   metric: string,
   unit: string,
-  stints?: readonly StintDTO[],
 ): string {
   const deltaText = formatSignedDelta(seam.value, metric, unit);
   if (seam.kind === "step") {
     return copy.chart.seamStep(deltaText);
   }
-  const fromEpochId =
-    seam.fromEpochId ||
-    [...(stints ?? [])]
-      .reverse()
-      .find((s) => s.epochId !== seam.toEpochId && s.endDay < seam.seamDay)?.epochId;
-  const fromEpoch = epochs.find((e) => e.id === fromEpochId);
+  const fromEpoch =
+    seam.fromEpochId !== null ? epochs.find((e) => e.id === seam.fromEpochId) : undefined;
   const toEpoch = epochs.find((e) => e.id === seam.toEpochId);
-  const fromLabel = fromEpoch ? epochDisplayLabel(fromEpoch) : "prior";
-  const toLabel = toEpoch ? epochDisplayLabel(toEpoch) : `#${seam.toEpochId}`;
+  const fromLabel =
+    fromEpoch?.label ?? (seam.fromEpochId !== null ? `#${seam.fromEpochId}` : "prior");
+  const toLabel = toEpoch?.label ?? `#${seam.toEpochId}`;
   return copy.chart.seamOffset(fromLabel, toLabel, deltaText);
 }
 
@@ -418,8 +395,7 @@ export function buildRecentUnitRows(series: MetricSeriesDTO, usableLimit = 7): R
   const unitLabel = displayUnit(series.metric, series.unit);
 
   return selectedUnits.map((u) => {
-    const resolvedEpochId = resolveUnitEpochId(u, series);
-    const epoch = epochById.get(resolvedEpochId);
+    const epoch = epochById.get(u.epochId);
     const valStr =
       u.value === null
         ? "—"
@@ -433,7 +409,7 @@ export function buildRecentUnitRows(series: MetricSeriesDTO, usableLimit = 7): R
       valueText: valStr,
       zText: formatZScore(effectiveZ),
       zTone: zToneFor(effectiveZ),
-      deviceLabel: epoch ? epochDisplayLabel(epoch) : `#${resolvedEpochId}`,
+      deviceLabel: epoch?.label ?? `#${u.epochId}`,
       partialNote: !u.usable
         ? (formatPartialReason(u.partialReason) ?? copy.chart.partialGeneric)
         : null,
@@ -540,8 +516,7 @@ export function buildMetricChartTable(series: MetricSeriesDTO): ChartTableData {
     ],
     rows: series.units.map((u) => {
       const band = bandByDay.get(u.day);
-      const resolvedEpochId = resolveUnitEpochId(u, series);
-      const ep = epochById.get(resolvedEpochId);
+      const ep = epochById.get(u.epochId);
       const valStr =
         u.value === null
           ? "—"
@@ -551,7 +526,7 @@ export function buildMetricChartTable(series: MetricSeriesDTO): ChartTableData {
       return {
         day: u.day,
         value: valStr,
-        device: ep ? epochDisplayLabel(ep) : `#${resolvedEpochId}`,
+        device: ep?.label ?? `#${u.epochId}`,
         usable: u.usable ? "yes" : (u.partialReason ?? "partial"),
         bandLow: band ? formatMetricNumber(band.low, series.metric, series.unit) : "—",
         bandHigh: band ? formatMetricNumber(band.high, series.metric, series.unit) : "—",

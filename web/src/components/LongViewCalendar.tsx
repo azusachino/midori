@@ -5,7 +5,6 @@ import { EChart, type EChartPointClickEvent } from "@/components/EChart";
 import { copy } from "@/copy";
 import {
   displayUnit,
-  epochDisplayLabel,
   formatDayWithWeekday,
   formatMetricNumber,
   formatShortDay,
@@ -241,15 +240,11 @@ export function LongViewCalendar({ series, onSelectDay }: LongViewCalendarProps)
             ];
 
             if (cell.seam) {
-              const fromEpochId =
-                cell.seam.fromEpochId ||
-                [...series.stints]
-                  .reverse()
-                  .find((s) => s.epochId !== cell.seam?.toEpochId && s.endDay < cell.day)?.epochId;
-              const fromEpObj = fromEpochId !== undefined ? epochById.get(fromEpochId) : undefined;
-              const toEpObj = epochById.get(cell.seam.toEpochId);
-              const fromEp = fromEpObj ? epochDisplayLabel(fromEpObj) : null;
-              const toEp = toEpObj ? epochDisplayLabel(toEpObj) : `#${cell.seam.toEpochId}`;
+              const fromEp =
+                cell.seam.fromEpochId !== null
+                  ? (epochById.get(cell.seam.fromEpochId)?.label ?? `#${cell.seam.fromEpochId}`)
+                  : null;
+              const toEp = epochById.get(cell.seam.toEpochId)?.label ?? `#${cell.seam.toEpochId}`;
               const epRange = fromEp ? `${fromEp} → ${toEp}` : toEp;
               lines.push(
                 `<div style="color:${theme.notable};font-size:11px;margin-top:2px">Seam (${cell.seam.kind}): ${escapeHtml(epRange)}</div>`,
@@ -292,7 +287,7 @@ export function LongViewCalendar({ series, onSelectDay }: LongViewCalendarProps)
                   backgroundColor: `var(--color-epoch-${((ep.colorIndex ?? 0) % 6) + 1})`,
                 }}
               />
-              <span className="text-foreground">{epochDisplayLabel(ep)}</span>
+              <span className="text-foreground">{ep.label}</span>
             </span>
           ))}
         </div>

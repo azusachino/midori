@@ -49,9 +49,9 @@ test("Metric detail against real server: hrv_sdnn baseline band, seam, OS update
   await expect(chart.locator("figcaption")).toContainText("1 device seam (Oct 16)");
 
   const srTable = chart.locator("table");
-  await expect(srTable).toContainText("Watch6,1");
-  await expect(srTable).toContainText("Watch7,5");
-  // Baseline band applies only to current Watch7,5 stint (Watch6,1 rows show "—")
+  await expect(srTable).toContainText("Synthetic Watch A");
+  await expect(srTable).toContainText("Synthetic Watch B");
+  // Baseline band applies only to current Synthetic Watch B stint (Synthetic Watch A rows show "—")
   const watchABand = await srTable
     .locator('tbody tr:has-text("2026-09-15") td:nth-child(5)')
     .allTextContents();
