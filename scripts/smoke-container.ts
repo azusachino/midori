@@ -81,7 +81,7 @@ try {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${baseUrl}/api/briefing`);
+      const res = await fetch(`${baseUrl}/api/changes`);
       if (res.status === 200) {
         up = true;
         break;
@@ -135,12 +135,11 @@ try {
   console.log("smoke-container: synthetic import completed inside the container");
 
   // 5. Briefing carries real content from the fixture corpus.
-  const briefing = (await (await fetch(`${baseUrl}/api/briefing`)).json()) as {
-    anchorDay: string | null;
+  const changes = (await (await fetch(`${baseUrl}/api/changes`)).json()) as {
+    asOfDay: string | null;
   };
-  if (briefing.anchorDay !== "2026-03-01")
-    fail(`anchorDay=${briefing.anchorDay}, expected 2026-03-01`);
-  console.log("smoke-container: briefing anchorDay = 2026-03-01 (fixture corpus)");
+  if (changes.asOfDay !== "2026-03-01") fail(`asOfDay=${changes.asOfDay}, expected 2026-03-01`);
+  console.log("smoke-container: changes asOfDay = 2026-03-01 (fixture corpus)");
 
   // 6. MCP over HTTP: initialize + tools/list on the same origin.
   const mcpPost = (payload: unknown) =>

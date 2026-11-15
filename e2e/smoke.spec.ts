@@ -5,7 +5,7 @@
 import { expect, test } from "@playwright/test";
 import { copy } from "../web/src/copy";
 
-test("briefing tells the spike story without console errors", async ({ page }) => {
+test("pre-v1 briefing displays its read-route fallback", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
@@ -15,28 +15,22 @@ test("briefing tells the spike story without console errors", async ({ page }) =
   await page.goto("/");
 
   await expect(page.getByRole("main")).toBeVisible();
-  // Anchor day from the fixture corpus is on the page.
-  await expect(page.getByText("2026-03-01").first()).toBeVisible();
-  // The wrist-temp recalibration finding: source B took over.
-  await expect(page.getByText(/Synthetic Watch B/).first()).toBeVisible();
-  expect(errors).toEqual([]);
+  // Slice 11 replaces this legacy page; its read routes intentionally return 501.
+  await expect(page.getByText("Could not load the briefing.")).toBeVisible();
+  expect(errors.every((error) => error.includes("501 (Not Implemented)"))).toBe(true);
 });
 
-test("briefing carries as-of and trust chips", async ({ page }) => {
+test("pre-v1 briefing explains that its legacy read route is unavailable", async ({ page }) => {
   await page.goto("/");
-  // Every last-night card shows an "as of" line with a date.
-  const asOf = page.getByText(/as of 2026-/);
-  await expect(asOf.first()).toBeVisible();
-  // Trust chips render with known copy.
-  await expect(page.getByText(/trust/i).first()).toBeVisible();
+  await expect(page.getByText("Could not load the briefing.")).toBeVisible();
 });
 
-test("investigate renders the chart, the band note and the baseline table", async ({ page }) => {
+test("pre-v1 investigate route keeps its metric selector during the read API transition", async ({
+  page,
+}) => {
   await page.goto("/investigate?metric=wrist_temp");
-
-  await expect(page.getByRole("img").first()).toBeVisible(); // the uPlot canvas
-  await expect(page.getByText(copy.investigate.deviationsTitle)).toBeVisible();
-  await expect(page.getByText(copy.investigate.eventsTitle)).toBeVisible();
+  await expect(page.getByRole("combobox")).toHaveValue("wrist_temp");
+  await expect(page.getByRole("heading", { name: copy.investigate.eventsTitle })).toBeVisible();
 });
 
 test("import page lists the seeded fixture import", async ({ page }) => {

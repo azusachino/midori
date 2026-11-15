@@ -31,7 +31,7 @@ async function waitUntilReady(): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${baseUrl}/api/briefing`);
+      const res = await fetch(`${baseUrl}/api/changes`);
       if (res.ok) return;
     } catch {
       // server not up yet
