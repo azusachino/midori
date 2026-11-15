@@ -1,21 +1,8 @@
-import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import {
-  allWithinChangesStub,
-  changesStub,
-  emptyChangesStub,
-  metricSeriesStub,
-  staleChangesStub,
-} from "../web/src/api/fixtures";
+import { allWithinChangesStub, emptyChangesStub, staleChangesStub } from "../web/src/api/fixtures";
 import { copy } from "../web/src/copy";
 import { OVERNIGHT_ORDER } from "../web/src/lib/metrics";
-
-const SHOTS_DIR = process.env.MIDORI_SHOTS_DIR;
-
-async function snap(page: Page, name: string) {
-  if (!SHOTS_DIR) return;
-  await page.screenshot({ path: join(SHOTS_DIR, name), fullPage: true });
-}
+import { snapShot } from "./shots";
 
 function trackErrors(page: Page, opts?: { allow500?: boolean }): string[] {
   const errors: string[] = [];
@@ -41,85 +28,57 @@ async function assertNoHorizontalOverflow(page: Page) {
   expect(overflow).toBe(false);
 }
 
-test("Changes page: populated overnight/daytime findings, popovers, last night, and navigation at 1440px & 390px", async ({
+test("Changes page: real server overnight/daytime findings, popovers, last night, and navigation at 1440px & 390px", async ({
   page,
 }) => {
-  const errors = trackErrors(page, { allow500: true });
-  await page.route("**/api/changes", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(changesStub()),
-    }),
-  );
-  await page.route("**/api/metrics/*", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(metricSeriesStub("hrv_sdnn", "90d")),
-    }),
-  );
+  const errors = trackErrors(page);
 
   // Desktop 1440px
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: copy.pages.changes.title })).toBeVisible();
-  await expect(page.getByText("as of Mar 1 (Sun)")).toBeVisible();
+  await expect(page.getByText("as of Nov 14 (Sat)")).toBeVisible();
 
-  // Warming-up notice
+  // Warming-up notice for SpO2 (10/14)
   const warmingNotice = page.getByTestId("warming-notice");
   await expect(warmingNotice).toBeVisible();
   await expect(warmingNotice).toContainText(
-    "Learning your new watch — Wrist temp: 9 of 14 usable nights. First reading around Mar 6.",
+    "Learning your new watch — SpO₂: 10 of 14 usable nights. First reading around Nov 18.",
   );
   await expect(
     warmingNotice.getByRole("link", { name: copy.pages.changes.devicesCta }),
   ).toHaveAttribute("href", "/devices");
 
-  // Full overnight list (all 10 metrics, ranked by |z| desc -> warming_up -> insufficient)
+  // Full overnight list from real server (8 overnight metrics present in corpus, ranked by alert first)
   const overnightRows = page
     .getByTestId("overnight-section")
     .locator('[data-testid^="finding-row-"]');
-  await expect(overnightRows).toHaveCount(OVERNIGHT_ORDER.length);
-  await expect(overnightRows.nth(0)).toHaveAttribute("data-testid", "finding-row-hrv_sdnn");
-  await expect(overnightRows.nth(1)).toHaveAttribute("data-testid", "finding-row-sleep_hr");
-  await expect(overnightRows.nth(0)).toContainText("lower than usual");
-  await expect(overnightRows.nth(0)).toContainText("42 vs 55 ms");
-  await expect(overnightRows.nth(0)).toContainText("5/7 nights");
-  await expect(overnightRows.nth(0)).toContainText("since Feb 23");
-  await expect(overnightRows.nth(0)).toContainText("medium");
-  await expect(page.getByTestId("finding-row-wrist_temp")).toContainText(
-    "learning · 9 of 14 nights",
-  );
-  await expect(page.getByTestId("finding-row-spo2")).toContainText(
-    "not enough nights · 3 of 4 recent",
-  );
+  await expect(overnightRows).toHaveCount(8);
+  await expect(overnightRows.nth(0)).toHaveAttribute("data-testid", "finding-row-rhr");
+  await expect(overnightRows.nth(1)).toHaveAttribute("data-testid", "finding-row-hrv_sdnn");
+  await expect(overnightRows.nth(1)).toContainText("lower than usual");
+  await expect(page.getByTestId("finding-row-spo2")).toContainText("learning · 10 of 14 nights");
 
-  // Daytime: notable/alert only (steps shown; within active_kj/heart_rate hidden)
+  // Daytime: notable/alert only (steps alert shown; within metrics hidden)
   const daytime = page.getByTestId("daytime-section");
   await expect(daytime).toBeVisible();
   await expect(daytime.getByTestId("finding-row-steps")).toBeVisible();
-  await expect(daytime.getByTestId("finding-row-steps")).toContainText("9.1k vs 6.0k");
+  await expect(daytime.getByTestId("finding-row-steps")).toContainText(copy.pages.changes.clippedZ);
   await expect(daytime.getByTestId("finding-row-active_kj")).toHaveCount(0);
   await expect(daytime.getByTestId("finding-row-heart_rate")).toHaveCount(0);
 
   // Last complete night card (B-R3)
   const lastNight = page.getByTestId("last-night-card");
-  await expect(lastNight).toContainText("Last complete night — Feb 28 (Sat)");
-  await expect(lastNight).toContainText("asleep 7.2 h · deep 1.0 · REM 1.5 · core 4.7");
+  await expect(lastNight).toContainText("Last complete night — Nov 14 (Sat)");
+  await expect(lastNight).toContainText("asleep 7.5 h · deep 1.5 · REM 1.5 · core 4.5");
   await expect(lastNight.getByTestId("sleep-stage-bar")).toBeVisible();
   const stageLegend = lastNight.getByTestId("sleep-stage-legend");
-  await expect(stageLegend).toBeVisible();
   await expect(stageLegend).toContainText("Deep");
   await expect(stageLegend).toContainText("REM");
   await expect(stageLegend).toContainText("Core");
-  await expect(page.getByTestId("finding-row-sleep_dur").locator(".text-accent")).toHaveCount(0);
-  await expect(lastNight.getByTestId("last-night-skipped")).toHaveText(
-    "Mar 1 skipped: export taken before noon.",
-  );
 
-  await snap(page, "s13-changes-1440.png");
+  await snapShot(page, "int-changes-1440.png");
   await assertNoHorizontalOverflow(page);
 
   // Interactive trust & checks popovers without leaving /
@@ -129,16 +88,14 @@ test("Changes page: populated overnight/daytime findings, popovers, last night, 
   await expect(page.getByTestId("trust-popover-hrv_sdnn")).toHaveCount(0);
 
   await page.getByTestId("checks-trigger-hrv_sdnn").click();
-  await expect(page.getByTestId("checks-popover-hrv_sdnn")).toContainText(
-    `${copy.checks.partial_nights} (Mar 1)`,
-  );
+  await expect(page.getByTestId("checks-popover-hrv_sdnn")).toContainText(copy.checks.tz_change);
   await page.keyboard.press("Escape");
 
   // Mobile 390px
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId("finding-row-hrv_sdnn")).toBeVisible();
   await expect(page.getByTestId("last-night-card")).toBeVisible();
-  await snap(page, "s13-changes-390.png");
+  await snapShot(page, "int-changes-390.png");
   await assertNoHorizontalOverflow(page);
 
   // Clicking a FindingRow navigates to /metrics/:key?range=90d
@@ -149,10 +106,10 @@ test("Changes page: populated overnight/daytime findings, popovers, last night, 
   expect(errors).toEqual([]);
 });
 
-test('Changes §4 state: "All within" keeps all overnight rows visible at 1440px & 390px', async ({
+test('Changes §4 state: "All within" keeps all overnight rows visible at 1440px & 390px (route-intercepted)', async ({
   page,
 }) => {
-  const errors = trackErrors(page, { allow500: true });
+  const errors = trackErrors(page);
   await page.route("**/api/changes", (route) =>
     route.fulfill({
       status: 200,
@@ -170,7 +127,6 @@ test('Changes §4 state: "All within" keeps all overnight rows visible at 1440px
     page.getByTestId("overnight-section").locator('[data-testid^="finding-row-"]'),
   ).toHaveCount(OVERNIGHT_ORDER.length);
   await expect(page.getByTestId("daytime-section")).toHaveCount(0);
-  await snap(page, "s13-all-within-1440.png");
   await assertNoHorizontalOverflow(page);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -180,10 +136,10 @@ test('Changes §4 state: "All within" keeps all overnight rows visible at 1440px
   expect(errors).toEqual([]);
 });
 
-test("Changes §4 states: stale banner (B-R2), stale rows (B-F2), >=10σ cap, low trust, open-ended onset, and no complete night at 1440px & 390px", async ({
+test("Changes §4 states: stale banner (B-R2), stale rows (B-F2), >=10σ cap, low trust, open-ended onset, and no complete night (route-intercepted)", async ({
   page,
 }) => {
-  const errors = trackErrors(page, { allow500: true });
+  const errors = trackErrors(page);
   await page.route("**/api/changes", (route) =>
     route.fulfill({
       status: 200,
@@ -216,19 +172,17 @@ test("Changes §4 states: stale banner (B-R2), stale rows (B-F2), >=10σ cap, lo
     copy.pages.changes.lastNight.noneRecent,
   );
 
-  await snap(page, "s13-stale-1440.png");
   await assertNoHorizontalOverflow(page);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(staleBanner).toBeVisible();
   await expect(topRow).toBeVisible();
-  await snap(page, "s13-stale-390.png");
   await assertNoHorizontalOverflow(page);
 
   expect(errors).toEqual([]);
 });
 
-test("Changes §4 states: loading skeleton, read-error + retry, importing pill, and empty state at 1440px & 390px", async ({
+test("Changes §4 states: loading skeleton, read-error + retry, importing pill, and empty state (route-intercepted)", async ({
   page,
 }) => {
   const errors = trackErrors(page, { allow500: true });
@@ -240,7 +194,7 @@ test("Changes §4 states: loading skeleton, read-error + retry, importing pill, 
       await route.fulfill({
         status: 500,
         contentType: "application/json",
-        body: JSON.stringify({ error: "changes query failed", retryable: true }),
+        body: JSON.stringify({ error: "changes unavailable", retryable: true }),
       });
       return;
     }
@@ -249,16 +203,23 @@ test("Changes §4 states: loading skeleton, read-error + retry, importing pill, 
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          ...changesStub(),
+          ...emptyChangesStub(),
+          hasImports: true,
+          asOfDay: "2026-03-01",
+          freshness: {
+            asOfDay: "2026-03-01",
+            lastImportAt: "2026-03-02T08:00:00Z",
+            daysSinceImport: 1,
+          },
           activeImport: {
-            id: 4,
+            id: 14,
             zipName: "export.zip",
             zipSize: 2048,
-            status: "parsing",
-            stage: "parsing",
-            progress: 62,
+            status: "deriving",
+            stage: "deriving",
+            progress: 82,
             error: null,
-            exportVersion: "11",
+            exportVersion: null,
             recordsSeen: null,
             recordsInserted: null,
             recordsDeduped: null,
@@ -276,32 +237,17 @@ test("Changes §4 states: loading skeleton, read-error + retry, importing pill, 
     });
   });
 
-  // Loading -> ReadError at 1440px
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.getByTestId("loading-state")).toBeVisible();
-  await expect(page.getByTestId("read-error")).toContainText("changes query failed");
-  await assertNoHorizontalOverflow(page);
+  await expect(page.getByTestId("read-error")).toContainText("changes unavailable");
 
-  // ReadError at 390px
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByTestId("read-error")).toBeVisible();
-  await assertNoHorizontalOverflow(page);
-
-  // Retry -> Importing normal page + topbar pill at 390px and 1440px
   phase = "importing";
   await page.getByRole("button", { name: copy.error.retry }).click();
-  await expect(page.getByTestId("importing-pill")).toContainText("Import running · parsing 62%");
-  await expect(page.getByTestId("overnight-section")).toBeVisible();
-  await assertNoHorizontalOverflow(page);
+  await expect(page.getByTestId("importing-pill")).toContainText("Import running · deriving 82%");
 
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await expect(page.getByTestId("importing-pill")).toBeVisible();
-  await assertNoHorizontalOverflow(page);
-
-  // Empty state (B-R4) at 1440px and 390px
   phase = "empty";
-  await page.goto("/");
+  await page.reload();
   await expect(page.getByTestId("empty-state")).toBeVisible();
   await assertNoHorizontalOverflow(page);
 

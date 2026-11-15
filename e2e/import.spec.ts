@@ -1,43 +1,24 @@
-import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { boundary, general, spike } from "../tests/fixtures";
+import { buildE2eCorpusXml, buildE2eIncrementalUpdateXml } from "../scripts/e2e/corpus";
 import { buildStoredZip } from "../tests/util/mkzip";
-import { changesStub } from "../web/src/api/fixtures";
 import { copy } from "../web/src/copy";
+import { snapShot } from "./shots";
 
-const SHOTS_DIR = process.env.MIDORI_SHOTS_DIR;
+test.describe.configure({ mode: "serial" });
 
-async function snap(page: Page, name: string) {
-  if (!SHOTS_DIR) return;
-  await page.screenshot({ path: join(SHOTS_DIR, name), fullPage: true });
-}
-
-/**
- * Tracks browser runtime errors on real-server tests.
- * On pre-Slice-8 servers, GET /api/imports/:id returns 404 once while client.importDetail
- * falls back to GET /api/imports; allow only Chromium's expected 404 log for that endpoint.
- */
 function trackErrors(
   page: Page,
-  opts?: { allow410?: boolean; allowConnectionReset?: boolean },
+  opts?: { allow400?: boolean; allow410?: boolean; allowConnectionReset?: boolean },
 ): string[] {
   const errors: string[] = [];
-  let expectedDetail404 = 0;
-
-  page.on("response", (res) => {
-    if (res.status() === 404 && /\/api\/imports\/\d+$/.test(res.url())) {
-      expectedDetail404 += 1;
-    }
-  });
 
   page.on("console", (msg) => {
     if (msg.type() !== "error") return;
     const text = msg.text();
     if (
-      expectedDetail404 > 0 &&
-      text.includes("Failed to load resource: the server responded with a status of 404")
+      opts?.allow400 &&
+      text.includes("Failed to load resource: the server responded with a status of 400")
     ) {
-      expectedDetail404 -= 1;
       return;
     }
     if (
@@ -63,20 +44,6 @@ async function assertNoHorizontalOverflow(page: Page) {
   expect(overflow).toBe(false);
 }
 
-/**
- * Keeps /api/changes (Slice 9) from polluting ShellProvider while leaving
- * POST /api/imports and GET /api/imports completely unmocked against the real v0 server.
- */
-async function stubShellChangesOnly(page: Page) {
-  await page.route("**/api/changes", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(changesStub()),
-    }),
-  );
-}
-
 function zipPayload(name: string, files: Array<{ name: string; data: string | Buffer }>) {
   return {
     name,
@@ -88,18 +55,17 @@ function zipPayload(name: string, files: Array<{ name: string; data: string | Bu
 test("real server 1440px: fixture upload -> summary", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page);
-  await stubShellChangesOnly(page);
 
   await page.goto("/import");
   await expect(page.getByTestId("import-dropzone")).toBeVisible();
   const table = page.getByTestId("import-history-table");
   await expect(table).toContainText(copy.status.done);
-  await expect(table).toContainText("76");
+  await expect(table).toContainText(/1[,.]?327/);
   const initialRows = await table.locator("tbody tr").count();
-  await snap(page, "s12-idle-1440.png");
+  await snapShot(page, "int-import-1440.png");
 
-  const payload = zipPayload("general-export.zip", [
-    { name: "apple_health_export/export.xml", data: general.xml },
+  const payload = zipPayload("incremental-export.zip", [
+    { name: "apple_health_export/export.xml", data: buildE2eIncrementalUpdateXml("2026-08-20") },
   ]);
   await page.getByLabel(copy.pages.import.fileInputLabel).setInputFiles(payload);
 
@@ -112,7 +78,6 @@ test("real server 1440px: fixture upload -> summary", async ({ page }) => {
   ).toHaveAttribute("href", "/");
   await expect(table.locator("tbody tr")).toHaveCount(initialRows + 1);
 
-  await snap(page, "s12-summary-1440.png");
   await assertNoHorizontalOverflow(page);
   expect(errors).toEqual([]);
 });
@@ -120,13 +85,12 @@ test("real server 1440px: fixture upload -> summary", async ({ page }) => {
 test('real server 1440px: duplicate export -> "Nothing new"', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page);
-  await stubShellChangesOnly(page);
 
   await page.goto("/import");
   await expect(page.getByTestId("import-dropzone")).toBeVisible();
 
-  const duplicate = zipPayload("spike-duplicate.zip", [
-    { name: "apple_health_export/export.xml", data: spike.xml },
+  const duplicate = zipPayload("e2e-duplicate.zip", [
+    { name: "apple_health_export/export.xml", data: buildE2eCorpusXml() },
   ]);
   await page.getByLabel(copy.pages.import.fileInputLabel).setInputFiles(duplicate);
 
@@ -135,15 +99,13 @@ test('real server 1440px: duplicate export -> "Nothing new"', async ({ page }) =
   await expect(summary).toContainText(copy.pages.import.summary.nothingNew);
   await expect(summary).toContainText("already known");
 
-  await snap(page, "s12-nothing-new-1440.png");
   await assertNoHorizontalOverflow(page);
   expect(errors).toEqual([]);
 });
 
 test("real server 1440px: bad file (missing export.xml) -> B-I1 copy", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  const errors = trackErrors(page);
-  await stubShellChangesOnly(page);
+  const errors = trackErrors(page, { allow400: true });
 
   await page.goto("/import");
   await expect(page.getByTestId("import-dropzone")).toBeVisible();
@@ -156,7 +118,6 @@ test("real server 1440px: bad file (missing export.xml) -> B-I1 copy", async ({ 
   await expect(alert).toContainText(copy.pages.import.errors.notHealthExport);
   await expect(page.getByTestId("dropzone-busy")).toHaveCount(0);
 
-  await snap(page, "s12-bad-file-1440.png");
   await assertNoHorizontalOverflow(page);
   expect(errors).toEqual([]);
 });
@@ -164,15 +125,14 @@ test("real server 1440px: bad file (missing export.xml) -> B-I1 copy", async ({ 
 test("real server 390px: upload through file input", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = trackErrors(page);
-  await stubShellChangesOnly(page);
 
   await page.goto("/import");
   await expect(page.getByTestId("import-dropzone")).toBeVisible();
   await assertNoHorizontalOverflow(page);
-  await snap(page, "s12-idle-390.png");
+  await snapShot(page, "int-import-390.png");
 
-  const payload = zipPayload("boundary-export.zip", [
-    { name: "apple_health_export/export.xml", data: boundary.xml },
+  const payload = zipPayload("mobile-export.zip", [
+    { name: "apple_health_export/export.xml", data: buildE2eIncrementalUpdateXml("2026-08-21") },
   ]);
   await page.getByLabel(copy.pages.import.fileInputLabel).setInputFiles(payload);
 
@@ -194,17 +154,15 @@ test("real server 390px: upload through file input", async ({ page }) => {
   );
   expect((doneBox?.x ?? 0) >= 0 && (doneBox?.x ?? 0) + (doneBox?.width ?? 0) <= 390).toBe(true);
 
-  await snap(page, "s12-summary-390.png");
   await assertNoHorizontalOverflow(page);
   expect(errors).toEqual([]);
 });
 
-test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy lock, and new device summary", async ({
+test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy lock, and new device summary (route-intercepted)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page);
-  await stubShellChangesOnly(page);
 
   let releaseUpload!: () => void;
   const uploadHeld = new Promise<void>((r) => {
@@ -354,8 +312,6 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
   await expect(running).toContainText(copy.pages.import.canCloseTab);
   await expect(page.getByTestId("dropzone-busy")).toContainText(copy.pages.import.dropzoneDisabled);
 
-  await snap(page, "s12-running-1440.png");
-
   releaseDone();
 
   const summary = page.getByTestId("import-summary");
@@ -367,10 +323,11 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
   expect(errors).toEqual([]);
 });
 
-test("§8 states: B-I4 older export warning and B-I11 upload interruption", async ({ page }) => {
+test("§8 states: B-I4 older export warning and B-I11 upload interruption (route-intercepted)", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page, { allowConnectionReset: true });
-  await stubShellChangesOnly(page);
 
   let mode: "abort" | "older" = "abort";
 
@@ -444,12 +401,11 @@ test("§8 states: B-I4 older export warning and B-I11 upload interruption", asyn
   expect(errors).toEqual([]);
 });
 
-test("§8 states: empty history, B-I5/B-I10 failed job card, Retry -> done, and 410 expired retry", async ({
+test("§8 states: empty history, B-I5/B-I10 failed job card, Retry -> done, and 410 expired retry (route-intercepted)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page, { allow410: true });
-  await stubShellChangesOnly(page);
 
   let scenario: "empty" | "retry-ok" | "retry-410" = "empty";
   let retryCompleted = false;
@@ -550,7 +506,6 @@ test("§8 states: empty history, B-I5/B-I10 failed job card, Retry -> done, and 
   await expect(failedCard).toBeVisible();
   await expect(failedCard).toContainText("Parsing");
   await expect(failedCard).toContainText("interrupted by restart");
-  await snap(page, "s12-failed-1440.png");
 
   await failedCard.getByRole("button", { name: copy.pages.import.failed.retry }).click();
   await expect(page.getByTestId("import-summary")).toBeVisible();

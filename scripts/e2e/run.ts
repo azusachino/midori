@@ -8,8 +8,8 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spike } from "../../tests/fixtures";
 import { buildStoredZip } from "../../tests/util/mkzip";
+import { buildE2eCorpusXml } from "./corpus";
 
 const root = join(import.meta.dir, "..", "..");
 const workdir = join(root, ".tmp-e2e");
@@ -41,13 +41,13 @@ async function waitUntilReady(): Promise<void> {
   throw new Error(`server not ready at ${baseUrl} within 15s`);
 }
 
-// 1. Hermetic fixture database from the spike corpus.
+// 1. Hermetic fixture database from the synthetic e2e corpus (with sleep, watches, phone, app).
 rmSync(workdir, { recursive: true, force: true });
 mkdirSync(workdir, { recursive: true });
 const zipPath = join(workdir, "fixture.zip");
 writeFileSync(
   zipPath,
-  buildStoredZip([{ name: "apple_health_export/export.xml", data: spike.xml }]),
+  buildStoredZip([{ name: "apple_health_export/export.xml", data: buildE2eCorpusXml() }]),
 );
 const dbPath = join(workdir, "midori.db");
 const dbExit = run([

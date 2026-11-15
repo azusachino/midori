@@ -1,20 +1,7 @@
-import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import {
-  changesStub,
-  epochsStub,
-  metricSeriesStub,
-  singleEpochStub,
-} from "../web/src/api/fixtures";
-import type { MetricRange } from "../web/src/api/types";
+import { changesStub, epochsStub, singleEpochStub } from "../web/src/api/fixtures";
 import { copy } from "../web/src/copy";
-
-const SHOTS_DIR = process.env.MIDORI_SHOTS_DIR;
-
-async function snap(page: Page, name: string) {
-  if (!SHOTS_DIR) return;
-  await page.screenshot({ path: join(SHOTS_DIR, name), fullPage: true });
-}
+import { snapShot } from "./shots";
 
 function trackErrors(page: Page, opts?: { allow500?: boolean }): string[] {
   const errors: string[] = [];
@@ -40,36 +27,11 @@ async function assertNoHorizontalOverflow(page: Page) {
   expect(overflow).toBe(false);
 }
 
-test("Devices /devices renders timeline, newest-first epoch cards, seam labels, OS updates, collapsible occasional sources, and navigates to metric detail", async ({
+test("Devices /devices against real server renders timeline, newest-first epoch cards, seam labels, OS updates, collapsible occasional sources, and navigates to metric detail", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page);
-
-  await page.route("**/api/changes", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(changesStub()),
-    }),
-  );
-  await page.route("**/api/epochs", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(epochsStub(true)),
-    }),
-  );
-  await page.route("**/api/metrics/**", (route) => {
-    const reqUrl = new URL(route.request().url());
-    const key = reqUrl.pathname.split("/").filter(Boolean)[2] ?? "wrist_temp";
-    const range = (reqUrl.searchParams.get("range") ?? "180d") as MetricRange;
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(metricSeriesStub(key, range)),
-    });
-  });
 
   await page.goto("/devices");
 
@@ -83,36 +45,35 @@ test("Devices /devices renders timeline, newest-first epoch cards, seam labels, 
   expect((box?.width ?? 0) > 200 && (box?.height ?? 0) > 100).toBe(true);
 
   const cards = page.getByTestId("epoch-cards-list");
-  await expect(cards).toContainText("Synthetic Watch B");
-  await expect(cards).toContainText("primary for 10 metrics");
-  await expect(cards).toContainText("learning 9/14");
-  await expect(cards).toContainText("step +0.52 °C — device or you, can't separate");
-  await expect(cards).toContainText("offset −4.0 ms (n=10 shared days)");
-  await expect(cards).toContainText("10.4 → 11.0 on Feb 26");
-  await expect(cards).toContainText("Synthetic Watch A");
-  await expect(cards).toContainText("Synthetic Phone");
+  await expect(cards).toContainText("Watch7,5");
+  await expect(cards).toContainText("primary for 11 metrics");
+  await expect(cards).toContainText("learning 10/14");
+  await expect(cards).toContainText("can't separate");
+  await expect(cards).toContainText("11.0 → 11.1 on Oct 25");
+  await expect(cards).toContainText("11.1 → 11.2 on Nov 9");
+  await expect(cards).toContainText("Watch6,1");
+  await expect(cards).toContainText("iPhone16,1");
 
-  // Minor occasional sources collapsed by default; expand on click
+  // Minor occasional sources collapsed by default; expand shows app fallback name "Sleep Tracker App"
   const occCard = page.getByTestId("occasional-sources-card");
   await expect(occCard).toBeVisible();
   await expect(occCard).toContainText("Occasional sources (1)");
   await expect(page.getByTestId("occasional-sources-list")).toHaveCount(0);
   await page.getByTestId("occasional-sources-toggle").click();
   await expect(page.getByTestId("occasional-sources-list")).toBeVisible();
-  await expect(page.getByTestId("occasional-sources-list")).toContainText("Synthetic Phone App");
-  // Collapse back cleanly for clean desktop screenshot
+  await expect(page.getByTestId("occasional-sources-list")).toContainText("Sleep Tracker App");
   await page.getByTestId("occasional-sources-toggle").click();
   await expect(page.getByTestId("occasional-sources-list")).toHaveCount(0);
 
   await assertNoHorizontalOverflow(page);
-  await snap(page, "s17-devices-1440.png");
+  await snapShot(page, "int-devices-1440.png");
 
   // Responsive 390px layout check + mobile screenshot
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(canvas).toBeVisible();
-  await expect(cards).toContainText("Synthetic Watch B");
+  await expect(cards).toContainText("Watch7,5");
   await assertNoHorizontalOverflow(page);
-  await snap(page, "s17-devices-390.png");
+  await snapShot(page, "int-devices-390.png");
 
   // Click metric name to navigate to Metric detail at 180d
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -122,7 +83,7 @@ test("Devices /devices renders timeline, newest-first epoch cards, seam labels, 
   expect(errors).toEqual([]);
 });
 
-test("Devices §7 states: single epoch omits seam column and occasional section, empty imports -> B-R4, error -> retry", async ({
+test("Devices §7 states: single epoch omits seam column and occasional section, empty imports -> B-R4, error -> retry (route-intercepted)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

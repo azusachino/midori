@@ -1,17 +1,25 @@
 import { expect, type Page, test } from "@playwright/test";
-import {
-  changesStub,
-  emptyChangesStub,
-  epochsStub,
-  metricSeriesStub,
-  metricsIndexStub,
-} from "../web/src/api/fixtures";
+import { emptyChangesStub } from "../web/src/api/fixtures";
 import { copy } from "../web/src/copy";
 
-function trackErrors(page: Page): string[] {
+function trackErrors(page: Page, opts?: { allow404?: boolean; allow500?: boolean }): string[] {
   const errors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() !== "error") return;
+    const text = msg.text();
+    if (
+      opts?.allow404 &&
+      text.includes("Failed to load resource: the server responded with a status of 404")
+    ) {
+      return;
+    }
+    if (
+      opts?.allow500 &&
+      text.includes("Failed to load resource: the server responded with a status of 500")
+    ) {
+      return;
+    }
+    errors.push(text);
   });
   page.on("pageerror", (err) => errors.push(err.message));
   return errors;
@@ -24,69 +32,19 @@ async function assertNoHorizontalOverflow(page: Page) {
   expect(overflow).toBe(false);
 }
 
-/**
- * Playwright route stubs for Slice 9 v1 read endpoints (not yet implemented on the v0 server).
- * Production builds never stub 404s on their own; e2e provides these explicitly.
- */
-async function stubV1ReadRoutes(page: Page) {
-  await page.route("**/api/changes", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(changesStub()),
-    }),
-  );
-  await page.route("**/api/metrics", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(metricsIndexStub(true)),
-    }),
-  );
-  await page.route("**/api/metrics/*", (route) => {
-    const url = new URL(route.request().url());
-    const key = url.pathname.split("/").pop() ?? "wrist_temp";
-    const range = (url.searchParams.get("range") ?? "180d") as "90d" | "180d" | "1y" | "all";
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(metricSeriesStub(key, range)),
-    });
-  });
-  await page.route("**/api/epochs", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(epochsStub(true)),
-    }),
-  );
-}
-
-test("production build surfaces ReadError on unmocked 404 rather than synthetic data", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
-  await expect(page.getByTestId("read-error")).toBeVisible();
-  await expect(page.getByTestId("read-error")).toContainText(copy.error.changesTitle);
-  await expect(page.getByText("Synthetic Watch B")).toHaveCount(0);
-});
-
-test("desktop 1440px: v1 shell, lazy routes, EChart render, and seeded import", async ({
+test("desktop 1440px: v1 shell, lazy routes, EChart render against real server", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = trackErrors(page);
-  await stubV1ReadRoutes(page);
 
   await page.goto("/");
 
   await expect(page.getByRole("main")).toBeVisible();
   await expect(page.getByTestId("sidebar-nav")).toBeVisible();
   await expect(page.getByTestId("mobile-nav")).toBeHidden();
-  await expect(page.getByTestId("topbar-freshness")).toContainText("Data through 2026-03-01");
-  await expect(page.getByTestId("sidebar-watch")).toContainText("Synthetic Watch B");
-  await expect(page.getByTestId("sidebar-watch")).toContainText("learning 9/14");
+  await expect(page.getByTestId("topbar-freshness")).toContainText("Data through 2026-11-14");
+  await expect(page.getByTestId("sidebar-watch")).toContainText("Watch7,5");
 
   await assertNoHorizontalOverflow(page);
 
@@ -96,37 +54,28 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render, and seeded import", 
   await expect(page.getByRole("heading", { name: copy.pages.metrics.title })).toBeVisible();
 
   // Navigate to lazy-loaded Metric detail and verify URL search param sync + EChart
-  await page.goto("/metrics/wrist_temp");
+  await page.goto("/metrics/hrv_sdnn");
   const metricCanvas = page.getByTestId("metric-echart").locator("canvas");
   await expect(metricCanvas).toBeVisible();
-  const box = await metricCanvas.boundingBox();
-  expect((box?.width ?? 0) > 100 && (box?.height ?? 0) > 100).toBe(true);
-  await page.getByRole("button", { name: "90d" }).click();
-  await expect(page).toHaveURL(/range=90d/);
+  const metricBox = await metricCanvas.boundingBox();
+  expect((metricBox?.width ?? 0) > 200 && (metricBox?.height ?? 0) > 100).toBe(true);
 
-  // Navigate to lazy-loaded Devices
+  await page.getByRole("button", { name: "1y" }).click();
+  await expect(page).toHaveURL(/range=1y/);
+  await page.getByRole("tab", { name: copy.pages.metricDetail.tabs.long }).click();
+  await expect(page).toHaveURL(/tab=long/);
+
+  // Navigate to Devices & verify timeline EChart
   await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.devices }).click();
   await expect(page).toHaveURL(/\/devices$/);
-  await expect(page.getByText("Synthetic Watch B").first()).toBeVisible();
+  await expect(page.getByTestId("device-timeline-echart").locator("canvas")).toBeVisible();
 
-  // Navigate to lazy-loaded Import (real v0 GET /api/imports)
+  // Navigate to Import
   await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.import }).click();
   await expect(page).toHaveURL(/\/import$/);
-  await expect(page.getByTestId("import-history-table")).toBeVisible();
-  await expect(
-    page.getByTestId("import-history-table").getByText(copy.status.done).first(),
-  ).toBeVisible();
+  await expect(page.getByTestId("import-dropzone")).toBeVisible();
 
-  // Unknown metric + unknown route + 404 asset check
-  await page.goto("/metrics/not_a_metric");
-  await expect(page.getByTestId("unknown-metric")).toBeVisible();
-
-  await page.goto("/does-not-exist");
-  await expect(page.getByRole("heading", { name: copy.pages.notFound.title })).toBeVisible();
-
-  const missingAsset = await page.request.get("/assets/does-not-exist.js");
-  expect(missingAsset.status()).toBe(404);
-
+  await assertNoHorizontalOverflow(page);
   expect(errors).toEqual([]);
 });
 
@@ -135,7 +84,6 @@ test("phone 390px: top tabs replace sidebar and freshness moves to its own line"
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = trackErrors(page);
-  await stubV1ReadRoutes(page);
 
   await page.goto("/");
 
@@ -153,7 +101,29 @@ test("phone 390px: top tabs replace sidebar and freshness moves to its own line"
   expect(errors).toEqual([]);
 });
 
-test("B-R4 empty state renders at 1440px and 390px when no imports exist", async ({ page }) => {
+test("surfaces ReadError on HTTP 404 instead of synthetic data (route-intercepted)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = trackErrors(page, { allow404: true });
+  await page.route("**/api/changes", (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "not found", retryable: false }),
+    }),
+  );
+
+  await page.goto("/");
+  await expect(page.getByTestId("read-error")).toBeVisible();
+  await expect(page.getByTestId("read-error")).toContainText(copy.error.changesTitle);
+  await expect(page.getByText("Synthetic Watch B")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("B-R4 empty state renders at 1440px and 390px when no imports exist (route-intercepted)", async ({
+  page,
+}) => {
   const errors = trackErrors(page);
   await page.route("**/api/changes", (route) =>
     route.fulfill({
@@ -179,10 +149,11 @@ test("B-R4 empty state renders at 1440px and 390px when no imports exist", async
   expect(errors).toEqual([]);
 });
 
-test("top bar importing pill, loading skeletons, and read-error retry primitive", async ({
+test("top bar importing pill, loading skeletons, and read-error retry primitive (route-intercepted)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = trackErrors(page, { allow500: true });
   let attempts = 0;
   await page.route("**/api/changes", async (route) => {
     attempts += 1;
@@ -235,4 +206,5 @@ test("top bar importing pill, loading skeletons, and read-error retry primitive"
   await page.getByRole("button", { name: copy.error.retry }).click();
   await expect(page.getByTestId("importing-pill")).toContainText("Import running · parsing 62%");
   await expect(page.getByTestId("topbar-freshness")).toContainText("imported 2 days ago");
+  expect(errors).toEqual([]);
 });

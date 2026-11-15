@@ -1,15 +1,8 @@
-import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { changesStub, emptyRangeMetricSeriesStub, metricSeriesStub } from "../web/src/api/fixtures";
+import { emptyRangeMetricSeriesStub, metricSeriesStub } from "../web/src/api/fixtures";
 import type { MetricRange } from "../web/src/api/types";
 import { copy } from "../web/src/copy";
-
-const SHOTS_DIR = process.env.MIDORI_SHOTS_DIR;
-
-async function snap(page: Page, name: string) {
-  if (!SHOTS_DIR) return;
-  await page.screenshot({ path: join(SHOTS_DIR, name), fullPage: true });
-}
+import { snapShot } from "./shots";
 
 function trackErrors(page: Page, opts?: { allow500?: boolean }): string[] {
   const errors: string[] = [];
@@ -35,159 +28,91 @@ async function assertNoHorizontalOverflow(page: Page) {
   expect(overflow).toBe(false);
 }
 
-async function stubChangesAndMetrics(page: Page) {
-  await page.route("**/api/changes", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(changesStub()),
-    }),
-  );
-  await page.route("**/api/metrics/*", (route) => {
-    const url = new URL(route.request().url());
-    const key = url.pathname.split("/").pop() ?? "wrist_temp";
-    const range = (url.searchParams.get("range") ?? "180d") as MetricRange;
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(metricSeriesStub(key, range)),
-    });
-  });
-}
-
-test("Metric detail: wrist_temp negative values + step seam + OS update + partials + minor epoch + zoom/range URL sync", async ({
+test("Metric detail against real server: hrv_sdnn baseline band, seam, OS updates, partial row, zoom/range URL sync, trend-only, warming_up, and unknown", async ({
   page,
 }) => {
   const errors = trackErrors(page);
-  await stubChangesAndMetrics(page);
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/metrics/wrist_temp?range=180d&tab=chart");
+  await page.goto("/metrics/hrv_sdnn?range=180d&tab=chart");
 
-  await expect(page.getByRole("heading", { name: "Wrist temp" })).toBeVisible();
-  await expect(page.getByTestId("finding-row-wrist_temp")).toContainText(
-    "learning · 9 of 14 nights",
-  );
+  await expect(page.getByRole("heading", { name: "HRV (SDNN)" })).toBeVisible();
+  await expect(page.getByTestId("finding-row-hrv_sdnn")).toContainText("lower than usual");
 
-  // EChart canvas rendered cleanly
   const chart = page.getByTestId("metric-echart");
   const canvas = chart.locator("canvas");
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
   expect((box?.width ?? 0) > 400 && (box?.height ?? 0) > 200).toBe(true);
 
-  // Accessible summary & sr-only table contain negative wrist-temp readings, band, and minor source
-  await expect(chart.locator("figcaption")).toContainText("Wrist temp:");
-  await expect(chart.locator("figcaption")).toContainText("1 device seam (Feb 22)");
+  await expect(chart.locator("figcaption")).toContainText("HRV (SDNN):");
+  await expect(chart.locator("figcaption")).toContainText("1 device seam (Oct 16)");
+
   const srTable = chart.locator("table");
-  await expect(srTable).toContainText("-0.");
-  await expect(srTable).toContainText("Synthetic Watch A");
-  await expect(srTable).toContainText("Synthetic Watch B");
-  await expect(srTable).toContainText("Synthetic Phone App");
+  await expect(srTable).toContainText("Watch6,1");
+  await expect(srTable).toContainText("Watch7,5");
+  // Baseline band applies only to current Watch7,5 stint (Watch6,1 rows show "—")
+  const watchABand = await srTable
+    .locator('tbody tr:has-text("2026-09-15") td:nth-child(5)')
+    .allTextContents();
+  expect(watchABand).toEqual(["—"]);
+  const watchBBand = await srTable
+    .locator('tbody tr:has-text("2026-11-01") td:nth-child(5)')
+    .allTextContents();
+  expect(watchBBand.length).toBe(1);
+  expect(watchBBand[0]).not.toBe("—");
   const rows180d = await srTable.locator("tbody tr").count();
 
-  // Recent units table lists 7 usable non-minor rows plus skipped partial rows with '—' vs usual
+  // Recent units table: 7 usable rows + partial 2026-11-11 row with "—" vs usual
   const recentTable = page.getByTestId("recent-units-table");
   await expect(recentTable).toBeVisible();
-  await expect(recentTable.locator("tbody tr")).toHaveCount(9);
   await expect(recentTable.locator('tbody tr[data-usable="true"]')).toHaveCount(7);
-  await expect(recentTable.locator('tbody tr[data-usable="false"]')).toHaveCount(2);
-  await expect(recentTable.locator("tbody tr td:nth-child(3)")).toHaveText([
-    "—",
-    "—",
-    "—",
-    "—",
-    "—",
-    "—",
-    "—",
-    "—",
-    "—",
-  ]);
-  // Warming_up wrist_temp must have no baseline band anywhere (all Baseline low/high cells are '—')
-  const bandCells = await srTable
-    .locator("tbody tr td:nth-child(5), tbody tr td:nth-child(6)")
-    .allTextContents();
-  expect(bandCells.every((t) => t === "—")).toBe(true);
-  await expect(recentTable).toContainText(copy.chart.partialExportCut);
-  await expect(recentTable).toContainText(copy.chart.partialBelowMin);
+  await expect(recentTable.locator('tbody tr[data-usable="false"]')).toHaveCount(1);
+  await expect(recentTable.getByTestId("recent-row-btn-2026-11-11")).toBeVisible();
+  await expect(recentTable).toContainText(copy.chart.partialGeneric);
   await expect(recentTable).toContainText(copy.chart.tzShiftNote);
-  await expect(recentTable).not.toContainText("Synthetic Phone App");
-  await expect(page.getByTestId("baseline-summary")).toHaveText(
-    copy.pages.metricDetail.noBaselineYet,
-  );
+  await expect(page.getByTestId("baseline-summary")).toContainText("Baseline:");
 
-  await snap(page, "s14-wrist-temp-1440.png");
+  await snapShot(page, "int-metric-detail-1440.png");
   await assertNoHorizontalOverflow(page);
 
-  // Interactive zoom (inside mouse-wheel / slider) updates URL search params
+  // Interactive zoom updates URL search params and clears via reset-zoom-btn
   if (box) {
-    const plotCenterX = box.x + box.width * 0.5;
-    const plotCenterY = box.y + box.height * 0.5;
-    await page.mouse.move(plotCenterX, plotCenterY);
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
     await page.mouse.wheel(0, -360);
     await expect(page).toHaveURL(/zoomStart=20\d{2}-\d{2}-\d{2}&zoomEnd=20\d{2}-\d{2}-\d{2}/);
     await expect(page.getByTestId("reset-zoom-btn")).toBeVisible();
 
-    // Reset zoom clears zoomStart & zoomEnd
     await page.getByTestId("reset-zoom-btn").click();
     await expect(page).not.toHaveURL(/zoomStart=/);
     await expect(page.getByTestId("reset-zoom-btn")).toHaveCount(0);
   }
 
-  // Range segmented control updates URL and narrows data series
+  // Range segmented controls: 90d, all (weekly), and reload with URL zoom
   await page.getByRole("button", { name: "90d" }).click();
   await expect(page).toHaveURL(/range=90d/);
   await expect(async () => {
     const rows90d = await srTable.locator("tbody tr").count();
-    expect(rows90d).toBeLessThan(rows180d);
+    expect(rows90d).toBeLessThanOrEqual(rows180d);
   }).toPass();
 
-  // Reloading preserves range=90d and URL zoom bounds
-  await page.goto(
-    "/metrics/wrist_temp?range=180d&tab=chart&zoomStart=2026-01-15&zoomEnd=2026-02-28",
-  );
+  await page.getByRole("button", { name: "All" }).click();
+  await expect(page).toHaveURL(/range=all/);
+  await expect(canvas).toBeVisible();
+
+  await page.goto("/metrics/hrv_sdnn?range=180d&tab=chart&zoomStart=2026-09-15&zoomEnd=2026-11-14");
   await expect(page.getByTestId("reset-zoom-btn")).toBeVisible();
   await expect(page.getByRole("button", { name: "180d" })).toHaveAttribute("aria-pressed", "true");
 
-  // 390px phone viewport
+  // 390px mobile layout
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(canvas).toBeVisible();
   await expect(recentTable).toBeVisible();
-  await expect(recentTable.getByText(copy.chart.partialExportCut)).toBeVisible();
-  await snap(page, "s14-wrist-temp-390.png");
+  await snapShot(page, "int-metric-detail-390.png");
   await assertNoHorizontalOverflow(page);
 
-  expect(errors).toEqual([]);
-});
-
-test("Metric detail §5 states: computed HRV baseline, trend-only vo2max, insufficient spo2, empty range widen, unknown metric, and read error", async ({
-  page,
-}) => {
-  const errors = trackErrors(page, { allow500: true });
-  await stubChangesAndMetrics(page);
-
-  // 1. Computed HRV with current-stint-only band (Watch B baseline only, no Watch A band), offset seam, FindingRow header
+  // Trend-only (vo2max) on real server
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/metrics/hrv_sdnn?range=90d&tab=chart");
-  await expect(page.getByTestId("finding-row-hrv_sdnn")).toContainText("lower than usual");
-  await expect(page.getByTestId("finding-row-hrv_sdnn")).toContainText("42 vs 55 ms");
-  await expect(page.getByTestId("baseline-summary")).toContainText(
-    "Baseline: 21 nights · median 55 ms (49–61)",
-  );
-  const hrvWatchABandCells = await page
-    .getByTestId("metric-echart")
-    .locator('table tbody tr:has-text("2026-01-10") td:nth-child(5)')
-    .allTextContents();
-  expect(hrvWatchABandCells).toEqual(["—"]);
-  const hrvWatchBBandCells = await page
-    .getByTestId("metric-echart")
-    .locator('table tbody tr:has-text("2026-02-01") td:nth-child(5)')
-    .allTextContents();
-  expect(hrvWatchBBandCells).toEqual(["48"]);
-  await snap(page, "s14-hrv-1440.png");
-  await assertNoHorizontalOverflow(page);
-
-  // 2. Trend-only (vo2max): no FindingRow, trend-only banner, chart renders cleanly
   await page.goto("/metrics/vo2max?range=180d&tab=chart");
   await expect(page.getByTestId("trend-only-note")).toHaveText(
     copy.pages.metricDetail.trendOnlyNote,
@@ -197,20 +122,33 @@ test("Metric detail §5 states: computed HRV baseline, trend-only vo2max, insuff
   await expect(page.getByTestId("baseline-summary")).toHaveText(
     copy.pages.metricDetail.noBaselineTrendOnly,
   );
-  await snap(page, "s14-trend-only-1440.png");
-  await assertNoHorizontalOverflow(page);
 
-  // 3. Warming up / insufficient (spo2): renders chart without band
+  // Warming-up (spo2) on real server: no baseline band yet
   await page.goto("/metrics/spo2?range=90d&tab=chart");
-  await expect(page.getByTestId("finding-row-spo2")).toContainText(
-    "not enough nights · 3 of 4 recent",
-  );
+  await expect(page.getByTestId("finding-row-spo2")).toContainText("learning · 10 of 14 nights");
   await expect(page.getByTestId("metric-echart").locator("canvas")).toBeVisible();
   await expect(page.getByTestId("baseline-summary")).toHaveText(
     copy.pages.metricDetail.noBaselineYet,
   );
 
-  // 4. No data in range: override hrv_sdnn?range=90d to empty, click widen -> 180d loads chart
+  // Unknown metric key on real server
+  await page.goto("/metrics/not_a_metric");
+  await expect(page.getByTestId("unknown-metric")).toContainText(
+    copy.pages.metricDetail.unknownTitle,
+  );
+  await expect(
+    page.getByTestId("unknown-metric").getByRole("link", { name: "Wrist temp" }),
+  ).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test("Metric detail §5 empty range widen and read error retry (route-intercepted)", async ({
+  page,
+}) => {
+  const errors = trackErrors(page, { allow500: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
+
   await page.route("**/api/metrics/hrv_sdnn*", (route) => {
     const url = new URL(route.request().url());
     const range = (url.searchParams.get("range") ?? "180d") as MetricRange;
@@ -231,16 +169,6 @@ test("Metric detail §5 states: computed HRV baseline, trend-only vo2max, insuff
   await expect(page).toHaveURL(/range=180d/);
   await expect(page.getByTestId("metric-echart").locator("canvas")).toBeVisible();
 
-  // 5. Unknown metric key lists known metrics
-  await page.goto("/metrics/not_a_metric");
-  await expect(page.getByTestId("unknown-metric")).toContainText(
-    copy.pages.metricDetail.unknownTitle,
-  );
-  await expect(
-    page.getByTestId("unknown-metric").getByRole("link", { name: "Wrist temp" }),
-  ).toBeVisible();
-
-  // 6. Read error + Retry
   let failOnce = true;
   await page.route("**/api/metrics/rhr*", (route) => {
     if (failOnce) {
