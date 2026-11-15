@@ -8,7 +8,7 @@ E2E_INSTALL_FLAGS ?=
 # manifests (imagePullPolicy: Never there). Never build with --pull aliases
 # that would retag from a registry: the base is a pinned public tag.
 IMAGE_NS := azusachino.com
-TAG ?= v0.1.0
+TAG ?= v0.2.0
 SOURCE_REVISION ?= $(shell git rev-parse HEAD)$(if $(shell git status --porcelain),-dirty)
 .PHONY: image-app image-local images smoke-container
 
