@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import type { ChangesDTO as DomainChangesDTO } from "@midori/domain/api";
+import { IMPORT_STATUSES as DOMAIN_IMPORT_STATUSES } from "@midori/domain/api";
 import {
   ApiError,
   createApiClient,
@@ -6,6 +8,8 @@ import {
   type XhrLike,
   type XhrProgressEventLike,
 } from "../../web/src/api/client";
+import type { ChangesDTO as WebChangesDTO } from "../../web/src/api/types";
+import { IMPORT_STATUSES as WEB_IMPORT_STATUSES } from "../../web/src/api/types";
 import { loadShellChanges } from "../../web/src/lib/shell-context";
 
 /**
@@ -148,17 +152,21 @@ describe("api client (v1)", () => {
     expect((err as ApiError).kind).toBe("network");
   });
 
-  test("importDetail falls back to GET /api/imports when GET /api/imports/:id returns 404", async () => {
+  test("web DTO contract matches @midori/domain/api", () => {
+    expect(WEB_IMPORT_STATUSES).toBe(DOMAIN_IMPORT_STATUSES);
+    // Compile-time mutual assignability check between domain and web ChangesDTO.
+    type AssertSame<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+    const ok: AssertSame<DomainChangesDTO, WebChangesDTO> = true;
+    expect(ok).toBe(true);
+  });
+
+  test("importDetail surfaces 404 when an import id is missing", async () => {
     const c = createApiClient({
-      fetch: (async (url: string) => {
-        if (url === "/api/imports/2") return json({ error: "not found", retryable: false }, 404);
-        if (url === "/api/imports") return json([{ id: 2, status: "done", error: null }]);
-        return json({}, 404);
-      }) as never,
+      fetch: stub(json({ error: "import 999 not found", retryable: false }, 404)),
     });
-    const row = await c.importDetail(2);
-    expect(row.id).toBe(2);
-    expect(row.status).toBe("done");
+    const err = await c.importDetail(999).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(404);
   });
 
   test("pollImport resolves on done", async () => {
@@ -235,19 +243,6 @@ describe("api client (v1)", () => {
     expect((err as ApiError).kind).toBe("http");
     expect((err as ApiError).status).toBe(409);
     expect((err as ApiError).body?.retryable).toBe(true);
-  });
-
-  test("importDetail falls back to GET /api/imports when /api/imports/:id returns 404", async () => {
-    const c = createApiClient({
-      fetch: (async (url: string) => {
-        if (url === "/api/imports/9") return json({ error: "not found", retryable: false }, 404);
-        if (url === "/api/imports") return json([{ id: 9, status: "done", error: null }]);
-        return json({}, 500);
-      }) as never,
-    });
-    const row = await c.importDetail(9);
-    expect(row.id).toBe(9);
-    expect(row.status).toBe("done");
   });
 
   test("retryImport resolves 202 receipt and surfaces 410 as http ApiError", async () => {

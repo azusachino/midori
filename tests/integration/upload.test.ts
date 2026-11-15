@@ -552,14 +552,4 @@ describe("POST /api/imports", () => {
       h.close();
     }
   });
-
-  test("v0 read routes return 501 when upload is mounted", async () => {
-    const h = harness();
-    try {
-      const res = await h.app.request("/api/sources");
-      expect(res.status).toBe(501);
-    } finally {
-      h.close();
-    }
-  });
 });

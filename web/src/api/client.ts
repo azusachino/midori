@@ -123,7 +123,6 @@ export interface ApiClient {
 }
 
 const DEFAULT_POLL_MS = 1500;
-const IS_DEV = Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
 
 function isErrorBody(value: unknown): value is ErrorResponse {
   return (
@@ -145,7 +144,7 @@ function is404(err: unknown): boolean {
 export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const baseUrl = options.baseUrl ?? "";
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
-  const fallbackOn404 = options.fallbackOn404 ?? IS_DEV;
+  const fallbackOn404 = options.fallbackOn404 ?? false;
   const xhrFactory: (() => XhrLike) | null =
     options.createXhr ??
     (!options.fetch && typeof XMLHttpRequest !== "undefined"
@@ -359,16 +358,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     imports: (signal) => getJson<ImportDTO[]>("/api/imports", signal),
 
     async importDetail(id, signal) {
-      try {
-        return await getJson<ImportDTO>(`/api/imports/${id}`, signal);
-      } catch (err) {
-        if (!is404(err)) throw err;
-        // Real-data fallback while v0 server exposes only GET /api/imports.
-        const rows = await client.imports(signal);
-        const found = rows.find((r) => r.id === id);
-        if (!found) throw err;
-        return found;
-      }
+      return getJson<ImportDTO>(`/api/imports/${id}`, signal);
     },
 
     retryImport(id, signal) {
