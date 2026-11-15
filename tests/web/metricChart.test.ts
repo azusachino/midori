@@ -8,11 +8,14 @@ import {
   buildMetricChartTable,
   buildRecentUnitRows,
   currentStintBandPoints,
+  deduplicateUnitsByDay,
   formatSeamLabel,
   hasEstablishedBaseline,
   nextWiderRange,
+  resolveUnitEpochId,
   resolveZoomWindow,
   shouldIncludeZero,
+  toWeekStartMonday,
   zoomEventToDays,
 } from "../../web/src/lib/metric-chart";
 
@@ -228,5 +231,102 @@ describe("metric-chart helpers", () => {
     expect(nextWiderRange("180d")).toBe("1y");
     expect(nextWiderRange("1y")).toBe("all");
     expect(nextWiderRange("all")).toBeNull();
+  });
+
+  test("reconciles server range=all weekly buckets, mixed epochId=0, and same-day multi-epoch steps", () => {
+    expect(toWeekStartMonday("2026-01-24")).toBe("2026-01-19");
+
+    const base = metricSeriesStub("hrv_sdnn", "180d");
+    const weeklySeries = {
+      ...base,
+      range: "all" as const,
+      units: [
+        {
+          day: "2026-01-12",
+          epochId: 1,
+          value: 52,
+          n: 0,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: null,
+          isRecent: false,
+        },
+        {
+          day: "2026-01-19",
+          epochId: 0,
+          value: 54,
+          n: 0,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: null,
+          isRecent: false,
+        },
+        {
+          day: "2026-02-02",
+          epochId: 2,
+          value: 56,
+          n: 0,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: null,
+          isRecent: false,
+        },
+      ],
+    };
+
+    const days = buildCalendarDays(weeklySeries);
+    // Adjacent Monday ticks from 2026-01-12 to end of band/units (stepping by 7d, never daily)
+    expect(days.slice(0, 4)).toEqual(["2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02"]);
+    const mixedUnit = weeklySeries.units[1];
+    if (!mixedUnit) throw new Error("expected mixed unit");
+    expect(resolveUnitEpochId(mixedUnit, weeklySeries)).toBe(1);
+
+    const alignedBand = currentStintBandPoints(weeklySeries);
+    expect(alignedBand.every((pt) => toWeekStartMonday(pt.day) === pt.day)).toBe(true);
+
+    // Same-day watch+phone records (when server sets minor:false on all epochs) deduplicate to covering stint
+    const stepsBase = metricSeriesStub("hrv_sdnn", "90d");
+    const epoch1 = stepsBase.epochs[0];
+    const epoch2 = stepsBase.epochs[1];
+    if (!epoch1 || !epoch2) throw new Error("expected fixture epochs");
+    const deduped = deduplicateUnitsByDay(
+      [
+        {
+          day: "2026-02-20",
+          epochId: epoch1.id,
+          value: 2000,
+          n: 2,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: null,
+          isRecent: true,
+        },
+        {
+          day: "2026-02-20",
+          epochId: epoch2.id,
+          value: 8000,
+          n: 12,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: null,
+          isRecent: true,
+        },
+      ],
+      {
+        epochs: [
+          { ...epoch1, minor: false },
+          { ...epoch2, minor: false },
+        ],
+        stints: [{ epochId: epoch2.id, startDay: "2026-02-01", endDay: "2026-03-01" }],
+      },
+    );
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0]?.epochId).toBe(epoch2.id);
+    expect(deduped[0]?.value).toBe(8000);
   });
 });

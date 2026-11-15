@@ -159,6 +159,7 @@ export const copy = {
       devicesCta: "Devices",
       allWithin: (count: number) => `Nothing stands out across ${count} overnight metrics.`,
       overnightTitle: "Overnight",
+      emptyOvernight: "No overnight metrics with data yet.",
       rankedHint: "ranked by distance from usual",
       daytimeTitle: "Daytime",
       daytimeHint: "only rows that are notable or alert",

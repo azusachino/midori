@@ -4,7 +4,12 @@ import { useCallback, useMemo } from "react";
 import type { MetricSeriesDTO, MetricUnitPointDTO } from "@/api/types";
 import { EChart, type EChartPointClickEvent, type EChartZoomEvent } from "@/components/EChart";
 import { copy } from "@/copy";
-import { displayUnit, formatDayWithWeekday, formatMetricNumber } from "@/lib/finding-format";
+import {
+  displayUnit,
+  epochDisplayLabel,
+  formatDayWithWeekday,
+  formatMetricNumber,
+} from "@/lib/finding-format";
 import {
   buildBandPolygons,
   buildCalendarDays,
@@ -14,8 +19,10 @@ import {
   findRecentWindow,
   formatPartialReason,
   formatSeamLabel,
+  resolveUnitEpochId,
   resolveZoomWindow,
   shouldIncludeZero,
+  toWeekStartMonday,
   zoomEventToDays,
 } from "@/lib/metric-chart";
 import { type ChartTheme, epochColor } from "@/lib/theme";
@@ -122,15 +129,18 @@ export function MetricChart({
       const unitLabel = displayUnit(series.metric, series.unit);
       const nonMinorEpochs = series.epochs.filter((e) => !e.minor);
       const minorEpochs = series.epochs.filter((e) => e.minor);
+      const isWeekly = series.range === "all";
+      const axisDay = (d: string) => (isWeekly ? toWeekStartMonday(d) : d);
       const epochById = new Map(series.epochs.map((e) => [e.id, e]));
 
       const unitByEpochDay = new Map<string, MetricUnitPointDTO>();
       for (const u of series.units) {
-        unitByEpochDay.set(`${u.epochId}:${u.day}`, u);
+        const resolvedId = resolveUnitEpochId(u, series);
+        unitByEpochDay.set(`${resolvedId}:${u.day}`, u);
       }
       const bandByDay = new Map(currentBand.map((b) => [b.day, b]));
-      const seamsByDay = new Map(series.seams.map((s) => [s.seamDay, s]));
-      const osUpdatesByDay = new Map(series.osUpdates.map((u) => [u.day, u]));
+      const seamsByDay = new Map(series.seams.map((s) => [axisDay(s.seamDay), s]));
+      const osUpdatesByDay = new Map(series.osUpdates.map((u) => [axisDay(u.day), u]));
 
       const echartsSeries: Record<string, unknown>[] = [];
 
@@ -235,13 +245,18 @@ export function MetricChart({
         const osUpdatesForEpoch = series.osUpdates
           .filter((u) => u.epochId === epoch.id)
           .flatMap((u) => {
-            const val = nearestValueForEpoch(series.units, epoch.id, u.day);
-            if (val === null || !dayIndex.has(u.day)) return [];
+            const coordDay = axisDay(u.day);
+            const val = nearestValueForEpoch(
+              series.units.map((pt) => ({ ...pt, epochId: resolveUnitEpochId(pt, series) })),
+              epoch.id,
+              coordDay,
+            );
+            if (val === null || !dayIndex.has(coordDay)) return [];
             const swText = u.fromSw ? `${u.fromSw} → ${u.toSw}` : u.toSw;
             return [
               {
                 name: `${copy.chart.osUpdateLabel} ${swText}`,
-                coord: [u.day, val],
+                coord: [coordDay, val],
                 value: `OS ${u.toSw}`,
               },
             ];
@@ -249,30 +264,42 @@ export function MetricChart({
 
         const attachSharedAnnotations = idx === 0;
         const seamLines = attachSharedAnnotations
-          ? series.seams.map((seam) => ({
-              xAxis: seam.seamDay,
-              lineStyle: {
-                color: theme.borderStrong,
-                type: "dashed" as const,
-                width: 1.25,
-              },
-              label: {
-                show: true,
-                rotate: 0,
-                align: "right" as const,
-                verticalAlign: "top" as const,
-                distance: 8,
-                formatter: formatSeamLabel(seam, series.epochs, series.metric, series.unit),
-                color: theme.foreground,
-                backgroundColor: theme.card,
-                borderColor: theme.borderStrong,
-                borderWidth: 1,
-                borderRadius: 4,
-                padding: [3, 6],
-                fontSize: 11,
-                position: "insideEndTop" as const,
-              },
-            }))
+          ? series.seams.flatMap((seam) => {
+              const seamDay = axisDay(seam.seamDay);
+              if (!dayIndex.has(seamDay)) return [];
+              return [
+                {
+                  xAxis: seamDay,
+                  lineStyle: {
+                    color: theme.borderStrong,
+                    type: "dashed" as const,
+                    width: 1.25,
+                  },
+                  label: {
+                    show: true,
+                    rotate: 0,
+                    align: "right" as const,
+                    verticalAlign: "top" as const,
+                    distance: 8,
+                    formatter: formatSeamLabel(
+                      seam,
+                      series.epochs,
+                      series.metric,
+                      series.unit,
+                      series.stints,
+                    ),
+                    color: theme.foreground,
+                    backgroundColor: theme.card,
+                    borderColor: theme.borderStrong,
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    padding: [3, 6],
+                    fontSize: 11,
+                    position: "insideEndTop" as const,
+                  },
+                },
+              ];
+            })
           : [];
 
         const recentArea =
@@ -296,7 +323,7 @@ export function MetricChart({
             : undefined;
 
         echartsSeries.push({
-          name: epoch.label,
+          name: epochDisplayLabel(epoch),
           type: "line",
           z: 4,
           connectNulls: false,
@@ -349,7 +376,7 @@ export function MetricChart({
         });
 
         echartsSeries.push({
-          name: epoch.label,
+          name: epochDisplayLabel(epoch),
           type: "scatter",
           z: 3,
           symbolSize: 6,
@@ -370,7 +397,7 @@ export function MetricChart({
         legend: {
           top: 2,
           left: 0,
-          data: nonMinorEpochs.map((e) => e.label),
+          data: nonMinorEpochs.map((e) => epochDisplayLabel(e)),
           icon: "circle",
           itemWidth: 8,
           itemHeight: 8,
@@ -424,8 +451,9 @@ export function MetricChart({
               if (epoch.minor) notes.push(copy.chart.minorEpochNote);
               if (u.n > 0) notes.push(`n=${u.n}`);
               const suffix = notes.length > 0 ? ` · ${escapeHtml(notes.join(", "))}` : "";
+              const resolvedEpoch = epochById.get(epoch.id) ?? epoch;
               lines.push(
-                `<div><span style="display:inline-block;width:7px;height:7px;border-radius:9999px;background:${dotColor};margin-right:6px;"></span>${escapeHtml(epochById.get(epoch.id)?.label ?? epoch.label)}: <strong>${escapeHtml(valWithUnit)}</strong><span style="color:${theme.mutedForeground};">${suffix}</span></div>`,
+                `<div><span style="display:inline-block;width:7px;height:7px;border-radius:9999px;background:${dotColor};margin-right:6px;"></span>${escapeHtml(epochDisplayLabel(resolvedEpoch))}: <strong>${escapeHtml(valWithUnit)}</strong><span style="color:${theme.mutedForeground};">${suffix}</span></div>`,
               );
             }
 
@@ -442,7 +470,7 @@ export function MetricChart({
             const seam = seamsByDay.get(day);
             if (seam) {
               lines.push(
-                `<div style="color:${theme.notable};margin-top:3px;">${escapeHtml(formatSeamLabel(seam, series.epochs, series.metric, series.unit))}</div>`,
+                `<div style="color:${theme.notable};margin-top:3px;">${escapeHtml(formatSeamLabel(seam, series.epochs, series.metric, series.unit, series.stints))}</div>`,
               );
             }
 

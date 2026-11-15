@@ -118,9 +118,16 @@ export function ChangesPage() {
         </div>
 
         <div className="divide-y divide-border rounded-lg border border-border bg-card">
-          {overnightRows.map((row) => (
-            <FindingRow key={row.metric} row={row} />
-          ))}
+          {overnightRows.length > 0 ? (
+            overnightRows.map((row) => <FindingRow key={row.metric} row={row} />)
+          ) : (
+            <p
+              data-testid="overnight-empty"
+              className="px-4 py-6 text-center text-sm text-muted-foreground"
+            >
+              {copy.pages.changes.emptyOvernight}
+            </p>
+          )}
         </div>
       </section>
 

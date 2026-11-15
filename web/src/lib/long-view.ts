@@ -6,7 +6,13 @@ import type {
   StintDTO,
 } from "../api/types";
 import { copy } from "../copy";
-import { displayUnit, formatMetricNumber, formatShortDay } from "./finding-format";
+import {
+  displayUnit,
+  epochDisplayLabel,
+  formatMetricNumber,
+  formatShortDay,
+} from "./finding-format";
+import { deduplicateUnitsByDay, resolveUnitEpochId } from "./metric-chart";
 
 export interface ChartAccessibleTable {
   columns: Array<{ key: string; label: string }>;
@@ -143,12 +149,17 @@ export function buildLongViewModel(series: MetricSeriesDTO): LongViewModel {
   const epochById = new Map(series.epochs.map((e) => [e.id, e]));
   const seamByDay = new Map(series.seams.map((s) => [s.seamDay, s]));
 
-  const nonMinorUnits = series.units
+  const rawNonMinor = series.units
     .filter((u) => {
-      const ep = epochById.get(u.epochId);
+      const resolvedId = resolveUnitEpochId(u, series);
+      const ep = epochById.get(resolvedId);
       return !ep?.minor && u.value !== null;
     })
-    .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+    .map((u) => ({ ...u, epochId: resolveUnitEpochId(u, series) }));
+
+  const nonMinorUnits = deduplicateUnitsByDay(rawNonMinor, series).sort((a, b) =>
+    a.day < b.day ? -1 : a.day > b.day ? 1 : 0,
+  );
 
   const stintStats = computeStintStats(nonMinorUnits, series.stints);
   const epochFallbackCache = new Map<number, StintStats>();
@@ -177,7 +188,7 @@ export function buildLongViewModel(series: MetricSeriesDTO): LongViewModel {
       usable: u.usable,
       partialReason: u.partialReason,
       epochId: u.epochId,
-      epochLabel: ep?.label ?? `#${u.epochId}`,
+      epochLabel: ep ? epochDisplayLabel(ep) : `#${u.epochId}`,
       colorIndex: ep?.colorIndex ?? null,
       stintMedian: median,
       deviation,

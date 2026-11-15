@@ -5,6 +5,7 @@ import type {
   MetricSeriesDTO,
   MetricUnitPointDTO,
   SeamStepDTO,
+  StintDTO,
 } from "../api/types";
 import { copy } from "../copy";
 
@@ -20,6 +21,7 @@ export interface ChartTableData {
 
 import {
   displayUnit,
+  epochDisplayLabel,
   formatDayWithWeekday,
   formatMetricNumber,
   formatRangeSpan,
@@ -70,15 +72,74 @@ function formatMsAsIsoDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+/** Snaps an ISO day to the ISO week Monday matching the server's weekly bucket key. */
+export function toWeekStartMonday(day: string): string {
+  const ms = parseDayMs(day);
+  if (ms === null) return day;
+  const dow = (new Date(ms).getUTCDay() + 6) % 7;
+  return formatMsAsIsoDay(ms - dow * MS_PER_DAY);
+}
+
+/** Resolves mixed-epoch weekly buckets (epochId === 0) or missing epoch ids to a display epoch id. */
+export function resolveUnitEpochId(
+  unit: Pick<MetricUnitPointDTO, "day" | "epochId">,
+  series: Pick<MetricSeriesDTO, "epochs" | "stints">,
+): number {
+  if (unit.epochId > 0 && series.epochs.some((e) => e.id === unit.epochId)) {
+    return unit.epochId;
+  }
+  const covering = [...series.stints]
+    .reverse()
+    .find((s) => s.startDay <= unit.day && unit.day <= s.endDay);
+  if (covering) return covering.epochId;
+  const fallbackStint = series.stints[series.stints.length - 1];
+  if (fallbackStint) return fallbackStint.epochId;
+  return series.epochs.find((e) => !e.minor)?.id ?? unit.epochId;
+}
+
 /**
- * Builds a contiguous daily calendar axis across units, bands, and seams so missing days
- * stay visually proportional and `connectNulls: false` splits lines cleanly across holes.
+ * Deduplicates multiple epochs reporting on the same calendar day (e.g. watch + phone steps),
+ * preferring the active covering stint epoch, then usable non-null values.
+ */
+export function deduplicateUnitsByDay(
+  units: readonly MetricUnitPointDTO[],
+  series: Pick<MetricSeriesDTO, "epochs" | "stints">,
+): MetricUnitPointDTO[] {
+  const stintEpochForDay = (day: string): number | null => {
+    const match = [...series.stints].reverse().find((s) => s.startDay <= day && day <= s.endDay);
+    return match?.epochId ?? null;
+  };
+  const score = (u: MetricUnitPointDTO): number => {
+    let s = 0;
+    const primaryId = stintEpochForDay(u.day);
+    if (primaryId !== null && u.epochId === primaryId) s += 4;
+    if (u.usable && u.value !== null) s += 2;
+    else if (u.value !== null) s += 1;
+    return s;
+  };
+
+  const bestByDay = new Map<string, MetricUnitPointDTO>();
+  for (const u of units) {
+    const existing = bestByDay.get(u.day);
+    if (!existing || score(u) > score(existing)) {
+      bestByDay.set(u.day, u);
+    }
+  }
+  return Array.from(bestByDay.values());
+}
+
+/**
+ * Builds a contiguous daily (or weekly Monday for `range === "all"`) calendar axis across units,
+ * bands, and seams so missing days/weeks stay proportional and `connectNulls: false` splits holes.
  */
 export function buildCalendarDays(series: MetricSeriesDTO): string[] {
+  const isWeekly = series.range === "all";
+  const normalizeDay = (d: string) => (isWeekly ? toWeekStartMonday(d) : d);
+
   const days = new Set<string>();
-  for (const u of series.units) days.add(u.day);
-  for (const b of series.band) days.add(b.day);
-  for (const s of series.seams) days.add(s.seamDay);
+  for (const u of series.units) days.add(normalizeDay(u.day));
+  for (const b of series.band) days.add(normalizeDay(b.day));
+  for (const s of series.seams) days.add(normalizeDay(s.seamDay));
 
   if (days.size === 0) return [];
   const sorted = Array.from(days).sort();
@@ -88,14 +149,16 @@ export function buildCalendarDays(series: MetricSeriesDTO): string[] {
     return sorted;
   }
 
-  const totalDays = Math.floor((lastMs - firstMs) / MS_PER_DAY) + 1;
-  if (totalDays > MAX_CALENDAR_SPAN_DAYS) {
+  const stepMs = isWeekly ? 7 * MS_PER_DAY : MS_PER_DAY;
+  const maxSteps = isWeekly ? Math.floor(MAX_CALENDAR_SPAN_DAYS / 7) : MAX_CALENDAR_SPAN_DAYS;
+  const totalSteps = Math.floor((lastMs - firstMs) / stepMs) + 1;
+  if (totalSteps > maxSteps) {
     return sorted;
   }
 
   const out: string[] = [];
-  for (let i = 0; i < totalDays; i++) {
-    out.push(formatMsAsIsoDay(firstMs + i * MS_PER_DAY));
+  for (let i = 0; i < totalSteps; i++) {
+    out.push(formatMsAsIsoDay(firstMs + i * stepMs));
   }
   return out;
 }
@@ -167,15 +230,21 @@ export function formatSeamLabel(
   epochs: readonly EpochRefDTO[],
   metric: string,
   unit: string,
+  stints?: readonly StintDTO[],
 ): string {
   const deltaText = formatSignedDelta(seam.value, metric, unit);
   if (seam.kind === "step") {
     return copy.chart.seamStep(deltaText);
   }
-  const fromEpoch = epochs.find((e) => e.id === seam.fromEpochId);
+  const fromEpochId =
+    seam.fromEpochId ||
+    [...(stints ?? [])]
+      .reverse()
+      .find((s) => s.epochId !== seam.toEpochId && s.endDay < seam.seamDay)?.epochId;
+  const fromEpoch = epochs.find((e) => e.id === fromEpochId);
   const toEpoch = epochs.find((e) => e.id === seam.toEpochId);
-  const fromLabel = fromEpoch?.label ?? `#${seam.fromEpochId}`;
-  const toLabel = toEpoch?.label ?? `#${seam.toEpochId}`;
+  const fromLabel = fromEpoch ? epochDisplayLabel(fromEpoch) : "prior";
+  const toLabel = toEpoch ? epochDisplayLabel(toEpoch) : `#${seam.toEpochId}`;
   return copy.chart.seamOffset(fromLabel, toLabel, deltaText);
 }
 
@@ -299,10 +368,19 @@ export function currentStintBandPoints(series: MetricSeriesDTO): BandPointDTO[] 
   const currentStint = [...series.stints].sort((a, b) =>
     a.endDay < b.endDay ? 1 : a.endDay > b.endDay ? -1 : 0,
   )[0];
-  if (!currentStint) {
-    return [...series.band];
+  const filtered = currentStint
+    ? series.band.filter((b) => b.day >= currentStint.startDay && b.day <= currentStint.endDay)
+    : [...series.band];
+  if (series.range !== "all") {
+    return filtered;
   }
-  return series.band.filter((b) => b.day >= currentStint.startDay && b.day <= currentStint.endDay);
+  // Align daily band points onto Monday weekly buckets for `range === "all"`.
+  const byWeek = new Map<string, BandPointDTO>();
+  for (const pt of filtered) {
+    const weekStart = toWeekStartMonday(pt.day);
+    byWeek.set(weekStart, { ...pt, day: weekStart });
+  }
+  return Array.from(byWeek.values()).sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 }
 
 /**
@@ -313,12 +391,13 @@ export function currentStintBandPoints(series: MetricSeriesDTO): BandPointDTO[] 
 export function buildRecentUnitRows(series: MetricSeriesDTO, usableLimit = 7): RecentUnitRow[] {
   const baselined = hasEstablishedBaseline(series);
   const epochById = new Map(series.epochs.map((e) => [e.id, e]));
-  const sortedNonMinor = series.units
-    .filter((u) => {
-      const epoch = epochById.get(u.epochId);
-      return !epoch?.minor;
-    })
-    .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
+  const nonMinor = series.units.filter((u) => {
+    const epoch = epochById.get(u.epochId);
+    return !epoch?.minor;
+  });
+  const sortedNonMinor = deduplicateUnitsByDay(nonMinor, series).sort((a, b) =>
+    a.day < b.day ? 1 : a.day > b.day ? -1 : 0,
+  );
 
   const selectedUnits: MetricUnitPointDTO[] = [];
   let usableCount = 0;
@@ -339,7 +418,8 @@ export function buildRecentUnitRows(series: MetricSeriesDTO, usableLimit = 7): R
   const unitLabel = displayUnit(series.metric, series.unit);
 
   return selectedUnits.map((u) => {
-    const epoch = epochById.get(u.epochId);
+    const resolvedEpochId = resolveUnitEpochId(u, series);
+    const epoch = epochById.get(resolvedEpochId);
     const valStr =
       u.value === null
         ? "—"
@@ -353,7 +433,7 @@ export function buildRecentUnitRows(series: MetricSeriesDTO, usableLimit = 7): R
       valueText: valStr,
       zText: formatZScore(effectiveZ),
       zTone: zToneFor(effectiveZ),
-      deviceLabel: epoch?.label ?? `#${u.epochId}`,
+      deviceLabel: epoch ? epochDisplayLabel(epoch) : `#${resolvedEpochId}`,
       partialNote: !u.usable
         ? (formatPartialReason(u.partialReason) ?? copy.chart.partialGeneric)
         : null,
@@ -460,6 +540,8 @@ export function buildMetricChartTable(series: MetricSeriesDTO): ChartTableData {
     ],
     rows: series.units.map((u) => {
       const band = bandByDay.get(u.day);
+      const resolvedEpochId = resolveUnitEpochId(u, series);
+      const ep = epochById.get(resolvedEpochId);
       const valStr =
         u.value === null
           ? "—"
@@ -469,7 +551,7 @@ export function buildMetricChartTable(series: MetricSeriesDTO): ChartTableData {
       return {
         day: u.day,
         value: valStr,
-        device: epochById.get(u.epochId)?.label ?? `#${u.epochId}`,
+        device: ep ? epochDisplayLabel(ep) : `#${resolvedEpochId}`,
         usable: u.usable ? "yes" : (u.partialReason ?? "partial"),
         bandLow: band ? formatMetricNumber(band.low, series.metric, series.unit) : "—",
         bandHigh: band ? formatMetricNumber(band.high, series.metric, series.unit) : "—",

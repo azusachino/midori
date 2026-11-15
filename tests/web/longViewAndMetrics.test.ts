@@ -112,4 +112,45 @@ describe("Metrics index weekly helpers", () => {
       expect(buildMiniChartSummary(emptyMetric)).toContain("No data yet");
     }
   });
+
+  test("deduplicates same-day units across non-minor epochs using covering stint", () => {
+    const hrv = metricSeriesStub("hrv_sdnn", "1y");
+    const day = "2026-02-10";
+    const e1 = hrv.epochs[0];
+    const e2 = hrv.epochs[1];
+    if (!e1 || !e2) throw new Error("expected fixture epochs");
+    const withDup = {
+      ...hrv,
+      epochs: hrv.epochs.map((e) => ({ ...e, minor: false })),
+      units: [
+        ...hrv.units.filter((u) => u.day !== day),
+        {
+          day,
+          epochId: e1.id,
+          value: 41,
+          n: 3,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: 0,
+          isRecent: false,
+        },
+        {
+          day,
+          epochId: e2.id,
+          value: 57,
+          n: 5,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: 0,
+          isRecent: false,
+        },
+      ],
+    };
+    const model = buildLongViewModel(withDup);
+    const feb10Cells = model.years.flatMap((y) => y.cells).filter((c) => c.day === day);
+    expect(feb10Cells).toHaveLength(1);
+    expect(feb10Cells[0]?.epochId).toBe(e2.id);
+  });
 });

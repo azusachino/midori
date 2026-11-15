@@ -21,6 +21,7 @@ import {
   formatEvidenceSummaryLine,
   formatEvidenceValue,
 } from "@/lib/evidence";
+import { epochDisplayLabel } from "@/lib/finding-format";
 import { useAsyncQuery } from "@/lib/useAsyncQuery";
 
 export interface EvidenceSheetProps {
@@ -147,27 +148,36 @@ function EvidenceBody({ evidence, unit, copied, onCopyLink }: EvidenceBodyProps)
           {formatEvidenceSummaryLine(evidence, unit)}
         </p>
 
-        {hasSamples ? (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{evCopy.devicePrefix}</span>
-            <span className="font-medium text-foreground">
-              {evidence.primaryEpoch ? evidence.primaryEpoch.label : evCopy.unknownDevice}
-            </span>
-            {evidence.primaryEpoch ? (
-              <span>
-                ({evidence.primaryEpoch.deviceHw}
-                {evidence.deviceSw ? ` · OS ${evidence.deviceSw}` : ""})
-              </span>
-            ) : null}
-            <Badge
-              variant="secondary"
-              data-testid="evidence-usability-badge"
-              className={evidence.usable ? undefined : "text-partial"}
-            >
-              {evidence.usable ? evCopy.usableLabel : evCopy.partialLabel(partialReasonText)}
-            </Badge>
-          </div>
-        ) : null}
+        {hasSamples
+          ? (() => {
+              const primaryLabel = evidence.primaryEpoch
+                ? epochDisplayLabel(evidence.primaryEpoch)
+                : evCopy.unknownDevice;
+              const metaParts = evidence.primaryEpoch
+                ? [
+                    evidence.primaryEpoch.deviceHw &&
+                    evidence.primaryEpoch.deviceHw !== primaryLabel
+                      ? evidence.primaryEpoch.deviceHw
+                      : null,
+                    evidence.deviceSw ? `OS ${evidence.deviceSw}` : null,
+                  ].filter((part): part is string => part !== null)
+                : [];
+              return (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>{evCopy.devicePrefix}</span>
+                  <span className="font-medium text-foreground">{primaryLabel}</span>
+                  {metaParts.length > 0 ? <span>({metaParts.join(" · ")})</span> : null}
+                  <Badge
+                    variant="secondary"
+                    data-testid="evidence-usability-badge"
+                    className={evidence.usable ? undefined : "text-partial"}
+                  >
+                    {evidence.usable ? evCopy.usableLabel : evCopy.partialLabel(partialReasonText)}
+                  </Badge>
+                </div>
+              );
+            })()
+          : null}
       </div>
 
       {evidence.samples.length > 0 ? (
@@ -182,17 +192,25 @@ function EvidenceBody({ evidence, unit, copied, onCopyLink }: EvidenceBodyProps)
             data-testid="evidence-samples-list"
             className="grid grid-cols-2 gap-2 rounded-md border border-border bg-background/50 p-3 sm:grid-cols-3"
           >
-            {evidence.samples.map((s) => (
-              <div
-                key={`${s.timestamp}-${s.value}`}
-                className="flex items-baseline justify-between gap-2 rounded bg-card/80 px-2 py-1 text-xs tabular-nums"
-              >
-                <span className="font-mono text-muted-foreground">{s.localTime}</span>
-                <span className="font-medium text-foreground">
-                  {formatEvidenceValue(s.value, evidence.metric, unit)}
-                </span>
-              </div>
-            ))}
+            {(() => {
+              const seenCounts = new Map<string, number>();
+              return evidence.samples.map((s) => {
+                const base = `${s.timestamp}-${s.value}`;
+                const count = (seenCounts.get(base) ?? 0) + 1;
+                seenCounts.set(base, count);
+                return (
+                  <div
+                    key={`${base}-${count}`}
+                    className="flex items-baseline justify-between gap-2 rounded bg-card/80 px-2 py-1 text-xs tabular-nums"
+                  >
+                    <span className="font-mono text-muted-foreground">{s.localTime}</span>
+                    <span className="font-medium text-foreground">
+                      {formatEvidenceValue(s.value, evidence.metric, unit)}
+                    </span>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </section>
       ) : null}
@@ -229,7 +247,7 @@ function EvidenceBody({ evidence, unit, copied, onCopyLink }: EvidenceBodyProps)
         <p data-testid="evidence-also-recorded" className="text-xs text-muted-foreground">
           {evCopy.alsoRecordedBy}{" "}
           <span className="text-foreground">
-            {evidence.alsoRecordedBy.map((e) => e.label).join(", ")}
+            {evidence.alsoRecordedBy.map((e) => epochDisplayLabel(e)).join(", ")}
           </span>
         </p>
       ) : null}
