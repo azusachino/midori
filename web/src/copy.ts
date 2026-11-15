@@ -130,12 +130,53 @@ export const copy = {
     changes: {
       title: "Changes",
       asOf: (day: string) => `as of ${day}`,
+      staleBanner: (daysAgo: number, span: string) =>
+        `Your last import was ${daysAgo} days ago. Findings describe ${span}.`,
+      staleImportCta: "Import",
+      warmingNotice: (
+        metricLabel: string,
+        current: number,
+        target: number,
+        readyDay: string | null,
+      ) =>
+        readyDay
+          ? `Learning your new watch — ${metricLabel}: ${current} of ${target} usable nights. First reading around ${readyDay}. Other overnight metrics are ready.`
+          : `Learning your new watch — ${metricLabel}: ${current} of ${target} usable nights. Other overnight metrics are ready.`,
+      devicesCta: "Devices",
+      allWithin: (count: number) => `Nothing stands out across ${count} overnight metrics.`,
       overnightTitle: "Overnight",
       rankedHint: "ranked by distance from usual",
-      placeholderNote:
-        "Foundation shell active. Full ranked overnight/daytime findings and last-night cards land in Slice 13.",
-      smokePreviewTitle: "Wrist temperature trend preview",
-      openMetric: "Open metric detail",
+      daytimeTitle: "Daytime",
+      daytimeHint: "only rows that are notable or alert",
+      frequency: (k: number, recentCount: number, noun: "nights" | "days") =>
+        `${k}/${recentCount} ${noun}`,
+      onset: (day: string, openEnded: boolean) =>
+        openEnded ? `at least since ${day}` : `since ${day}`,
+      clippedZ: "≥10σ",
+      learningRow: (current: number, target: number, noun: "nights" | "days") =>
+        `learning · ${current} of ${target} ${noun}`,
+      insufficientRow: (recentCount: number, noun: "nights" | "days") =>
+        `not enough ${noun} · ${recentCount} of 4 recent`,
+      staleRow: (noun: "nights" | "days") => `no recent ${noun}`,
+      lowTrustBadge: "low trust",
+      trustButtonLabel: (metricLabel: string) => `${metricLabel} data trust details`,
+      checksButtonLabel: (metricLabel: string, count: number) =>
+        `${metricLabel}: ${count} flagged checks`,
+      checksHeading: "Flagged checks",
+      sparklineAria: (metricLabel: string, count: number, hasClipped: boolean) =>
+        hasClipped
+          ? `${metricLabel} trend across ${count} units (capped at ≥10σ)`
+          : `${metricLabel} trend across ${count} units`,
+      lastNight: {
+        title: (dayLabel: string) => `Last complete night — ${dayLabel}`,
+        emptyTitle: "Last complete night",
+        noneRecent: "No complete night in the last 14 days.",
+        breakdown: (asleepH: string, deepH: string, remH: string, coreH: string) =>
+          `asleep ${asleepH} h · deep ${deepH} · REM ${remH} · core ${coreH}`,
+        skippedExportCut: (dayLabel: string) => `${dayLabel} skipped: export taken before noon.`,
+        stageBarAria: (deepH: string, remH: string, coreH: string) =>
+          `Sleep stages: deep ${deepH} h, REM ${remH} h, core ${coreH} h`,
+      },
     },
     metrics: {
       title: "Metrics",
