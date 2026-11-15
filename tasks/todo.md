@@ -319,14 +319,24 @@ Goal: the v1 derived tables exist; epochs are derived with inheritance and OS-up
   - `scripts/smoke-container.ts`
   - `scripts/e2e/run.ts`
 - AC:
-  - [ ] The routes listed in design.md "Interfaces" are implemented, read-only over the
+  - [x] The routes listed in design.md "Interfaces" are implemented, read-only over the
     derived tables.
-  - [ ] Integration test: fixture zip → `/api/changes` (rank order, states, as-of, freshness,
+  - [x] Integration test: fixture zip → `/api/changes` (rank order, states, as-of, freshness,
     notice, last usable night).
-  - [ ] `range=all` returns weekly medians.
-  - [ ] v0 read routes remain until slice 11.
-  - [ ] Smoke and e2e harness use `/api/changes`.
+  - [x] `range=all` returns weekly medians.
+  - [x] v0 read routes remain until slice 11.
+  - [x] Smoke and e2e harness use `/api/changes`.
 - Verify: `bun run check`; `make e2e` (the v0 UI may show empty data, but the harness passes).
+- **Done 2026-11-15** — `midori-engine-s9` (pi, gpt-6-luna high), commit `9480ef6`.
+  - `bun run check` (lead): exit 0, 200 tests. `make e2e` (writer): exit 0.
+  - The first attempt stalled: the fixture-import test found no metric values. Root cause: the
+    wrist-temperature-only spike corpus has no sleep, so as-of (sleep_h-based) is null. The
+    test now uses a corpus with sleep.
+  - DTOs follow the UI client (`task/v1-17-devices:web/src/api/types.ts`).
+  - Real-data API smoke (lead, on a derived db copy; codes, timings, sizes only): every route
+    returns 200 in under 17 ms (`/api/changes` 7 ms, `/api/metrics` index 184 KB); an unknown
+    metric returns 404. `/api/changes` keys match the UI `ChangesDTO`: 10 overnight rows, 0
+    daytime (none notable).
 
 ### Slice 10 — MCP v1 `[midori-engine, lead checkpoint]`
 
