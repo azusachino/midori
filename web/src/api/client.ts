@@ -6,6 +6,7 @@ import type {
   ImportDTO,
   MetricDailyDTO,
   SourceDTO,
+  UploadAcceptedDTO,
 } from "@midori/domain/api";
 import { copy } from "../copy";
 
@@ -76,6 +77,12 @@ export interface PollOptions {
   onUpdate?: (row: ImportDTO) => void;
 }
 
+export interface UploadOptions {
+  /** Original file name, sent as the x-zip-name header (the server sanitizes it). */
+  name?: string;
+  signal?: AbortSignal;
+}
+
 export interface ApiClient {
   briefing(signal?: AbortSignal): Promise<BriefingDTO>;
   imports(signal?: AbortSignal): Promise<ImportDTO[]>;
@@ -84,6 +91,8 @@ export interface ApiClient {
   deviations(days?: number, signal?: AbortSignal): Promise<DeviationDTO[]>;
   metricDaily(metric: string, signal?: AbortSignal): Promise<MetricDailyDTO[]>;
   pollImport(id: number, options?: PollOptions): Promise<ImportDTO>;
+  /** POST /api/imports with the raw zip as the body; resolves to the 202 job receipt. */
+  upload(file: File | Blob, opts?: UploadOptions): Promise<UploadAcceptedDTO>;
 }
 
 const DEFAULT_POLL_MS = 1500;
@@ -105,11 +114,12 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const baseUrl = options.baseUrl ?? "";
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
 
-  async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  /** Sends one request and maps every failure to a typed ApiError. */
+  async function send<T>(path: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
     let res: Response;
     try {
       res = await doFetch(`${baseUrl}${path}`, {
-        headers: { accept: "application/json" },
+        ...init,
         ...(signal ? { signal } : {}),
       });
     } catch (err) {
@@ -136,6 +146,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     return parsed as T;
   }
 
+  function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+    return send<T>(path, { headers: { accept: "application/json" } }, signal);
+  }
+
   function query(params: Record<string, string | number | undefined>): string {
     const entries = Object.entries(params).filter(
       (e): e is [string, string | number] => e[1] !== undefined,
@@ -153,6 +167,19 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       getJson<DeviationDTO[]>(`/api/deviations${query({ days })}`, signal),
     metricDaily: (metric, signal) =>
       getJson<MetricDailyDTO[]>(`/api/metrics/${encodeURIComponent(metric)}/daily`, signal),
+
+    upload(file, opts = {}) {
+      const headers: Record<string, string> = {
+        accept: "application/json",
+        "content-type": "application/zip",
+      };
+      if (opts.name !== undefined) headers["x-zip-name"] = opts.name;
+      return send<UploadAcceptedDTO>(
+        "/api/imports",
+        { method: "POST", headers, body: file },
+        opts.signal,
+      );
+    },
 
     async pollImport(id, opts = {}) {
       const intervalMs = opts.intervalMs ?? DEFAULT_POLL_MS;

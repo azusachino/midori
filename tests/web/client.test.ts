@@ -101,4 +101,76 @@ describe("api client", () => {
     expect((err as ApiError).kind).toBe("aborted");
     expect(Date.now() - started).toBeLessThan(2_000);
   });
+  test("upload POSTs the raw zip with content-type and x-zip-name, and resolves the 202 receipt", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const c = createApiClient({
+      fetch: (async (url: string, init: RequestInit) => {
+        calls.push({ url, init });
+        return json({ importId: 7, status: "queued" }, 202);
+      }) as never,
+    });
+    const body = new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], { type: "application/zip" });
+    const receipt = await c.upload(body, { name: "export.zip" });
+    expect(receipt).toEqual({ importId: 7, status: "queued" });
+    expect(calls).toHaveLength(1);
+    const call = calls[0] as { url: string; init: RequestInit };
+    expect(call.url).toBe("/api/imports");
+    expect(call.init.method).toBe("POST");
+    expect(call.init.body).toBe(body);
+    const headers = call.init.headers as Record<string, string>;
+    expect(headers["content-type"]).toBe("application/zip");
+    expect(headers["x-zip-name"]).toBe("export.zip");
+  });
+
+  test("upload omits x-zip-name when no name is given", async () => {
+    let headers: Record<string, string> = {};
+    const c = createApiClient({
+      fetch: (async (_url: string, init: RequestInit) => {
+        headers = init.headers as Record<string, string>;
+        return json({ importId: 8, status: "queued" }, 202);
+      }) as never,
+    });
+    await c.upload(new Blob([new Uint8Array([1])]));
+    expect("x-zip-name" in headers).toBe(false);
+    expect(headers["content-type"]).toBe("application/zip");
+  });
+
+  test("upload maps 415 to a typed http ApiError carrying the server body", async () => {
+    const c = createApiClient({
+      fetch: stub(
+        json(
+          {
+            error: "content-type must be application/zip (send the export.zip as the raw body)",
+            retryable: false,
+          },
+          415,
+        ),
+      ),
+    });
+    const err = await c.upload(new Blob([new Uint8Array([1])])).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).kind).toBe("http");
+    expect((err as ApiError).status).toBe(415);
+    expect((err as ApiError).body?.retryable).toBe(false);
+  });
+
+  test("upload maps 409 to a retryable http ApiError", async () => {
+    const c = createApiClient({
+      fetch: stub(json({ error: "an import is already running", retryable: true }, 409)),
+    });
+    const err = await c.upload(new Blob([new Uint8Array([1])])).catch((e: unknown) => e);
+    expect((err as ApiError).kind).toBe("http");
+    expect((err as ApiError).status).toBe(409);
+    expect((err as ApiError).body?.retryable).toBe(true);
+  });
+
+  test("upload: a refused connection is a network error", async () => {
+    const c = createApiClient({
+      fetch: (async () => {
+        throw new TypeError("connection refused");
+      }) as never,
+    });
+    const err = await c.upload(new Blob([new Uint8Array([1])])).catch((e: unknown) => e);
+    expect((err as ApiError).kind).toBe("network");
+  });
 });
