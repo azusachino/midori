@@ -102,8 +102,16 @@ export async function runImport(
     setStatus("done");
     db.run(
       `UPDATE imports SET records_seen = ?, records_inserted = ?, records_deduped = ?,
-         duration_ms = ?, export_version = ? WHERE id = ?`,
-      [stats.recordCount, counters.inserted, counters.deduped, durationMs, stats.exportVersion, id],
+         duration_ms = ?, export_version = ?, export_date = ? WHERE id = ?`,
+      [
+        stats.recordCount,
+        counters.inserted,
+        counters.deduped,
+        durationMs,
+        stats.exportVersion,
+        stats.exportDate,
+        id,
+      ],
     );
 
     return {

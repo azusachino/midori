@@ -42,9 +42,22 @@ describe("parser: general corpus", () => {
     expect((stats.presence.MetadataEntry ?? 0) > 0).toBe(true);
   });
 
-  test("ExportDate element value is captured", async () => {
+  test("B-I8 ExportDate element value is captured", async () => {
     const { stats } = await runOnce();
     expect(stats.exportDate).toBe(fx.expected.exportDate);
+  });
+
+  test("B-I12 extracts hardware/software and metadata, with NULLs when absent", async () => {
+    const { mapped } = await runOnce();
+    const rows = mapped.flatMap((m) => (m.ok ? [m.record.row] : []));
+    const sensor = rows.find((row) => row.type === "HKQuantityTypeIdentifierHeartRate");
+    const sleep = rows.find((row) => row.type === "HKCategoryTypeIdentifierSleepAnalysis");
+    const deviceLess = rows.find((row) => row.type === "HKQuantityTypeIdentifierRestingHeartRate");
+    expect(sensor?.deviceHw).toBe("Watch7,5");
+    expect(sensor?.deviceSw).toBe("26.1");
+    expect(JSON.parse(sleep?.metaJson ?? "{}")).toHaveProperty("HKTimeZone", "Asia/Tokyo");
+    expect(deviceLess?.deviceHw).toBeNull();
+    expect(deviceLess?.deviceSw).toBeNull();
   });
 
   test("every well-formed record maps to the expected row", async () => {
@@ -75,6 +88,20 @@ describe("parser: general corpus", () => {
       expect(result.record.row.startOffsetMin).toBe(exp.offsetMinutes);
       expect(result.record.row.value).toBe(exp.valueNumeric);
       expect(result.record.row.valueStr ?? null).toBe(exp.category ? exp.value : null);
+      expect(result.record.row.deviceHw).toBe(
+        exp.device?.includes("hardware:")
+          ? (exp.device.match(/hardware:(.*?)(?=,\s*(?:software|model|name):|>)/)?.[1]?.trim() ??
+              null)
+          : null,
+      );
+      expect(result.record.row.deviceSw).toBe(
+        exp.device?.includes("software:")
+          ? (exp.device.match(/software:([^,>]+)/)?.[1] ?? null)
+          : null,
+      );
+      expect(result.record.row.metaJson).toBe(
+        Object.keys(exp.metadata).length > 0 ? JSON.stringify(exp.metadata) : null,
+      );
       if (exp.category) expect(result.record.row.value).toBeNull();
       expect(result.record.localDay).toBe(exp.localDay);
     }

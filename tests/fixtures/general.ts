@@ -31,6 +31,10 @@ function sample(
 ): RecordSpec {
   const r: RecordSpec = { type, sourceName, startDate: start, endDate: start, value };
   if (unit !== undefined) r.unit = unit;
+  r.device =
+    sourceName === WATCH
+      ? "<<HKDevice: 0x1>, name:Synthetic Watch, hardware:Watch7,5, software:26.1, model:Watch>"
+      : "<<HKDevice: 0x2>, name:Synthetic iPhone, hardware:iPhone17,1, software:26.1, model:iPhone>";
   if (metadata !== undefined) r.metadata = metadata;
   return r;
 }
@@ -42,7 +46,14 @@ function stage(
   end: string,
   unit?: string,
 ): RecordSpec {
-  const r: RecordSpec = { type: TYPE.sleep, sourceName, startDate: start, endDate: end, value };
+  const r: RecordSpec = {
+    type: TYPE.sleep,
+    sourceName,
+    startDate: start,
+    endDate: end,
+    value,
+    metadata: { HKTimeZone: "Asia/Tokyo" },
+  };
   if (unit !== undefined) r.unit = unit;
   return r;
 }
@@ -109,7 +120,14 @@ export function generalSpec(): ExportSpec {
     sample(TYPE.hrv, WATCH, "ms", "2026-01-06 06:45:00 +0900", "52.7"),
     sample(TYPE.hrv, WATCH, "ms", "2026-01-06 14:00:00 +0900", "39.1"),
     // --- Resting heart rate and steps, multi-source.
-    sample(TYPE.restingHeartRate, WATCH, "count/min", "2026-01-06 07:00:00 +0900", "57"),
+    {
+      type: TYPE.restingHeartRate,
+      sourceName: WATCH,
+      unit: "count/min",
+      startDate: "2026-01-06 07:00:00 +0900",
+      endDate: "2026-01-06 07:00:00 +0900",
+      value: "57",
+    },
     sample(TYPE.steps, PHONE, "count", "2026-01-06 08:15:00 +0900", "1240"),
     sample(TYPE.steps, PHONE, "count", "2026-01-06 12:45:00 +0900", "3302"),
     sample(TYPE.steps, WATCH, "count", "2026-01-06 18:20:00 +0900", "2877"),

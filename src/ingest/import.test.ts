@@ -80,6 +80,7 @@ describe("runImport", () => {
       expect(imp.status).toBe("done");
       expect(imp.records_seen).toBe(fx.expected.recordCount);
       expect(imp.records_inserted).toBe(fx.expected.recordCount - malformed);
+      expect(imp.export_date).toBe(fx.expected.exportDate);
 
       const stored = db.query("SELECT COUNT(*) AS n FROM records").get() as { n: number };
       expect(stored.n).toBe(fx.expected.recordCount - malformed);
@@ -111,6 +112,38 @@ describe("runImport", () => {
       expect(imports.n).toBe(2);
     } finally {
       db.close();
+    }
+  });
+});
+
+describe("runImport: capture backfill", () => {
+  test("B-I12 re-import fills device columns on pre-v1 rows", async () => {
+    const dbPath = freshDb();
+    const zipPath = await fixtureZip(general, "capture-backfill");
+    zips.push(zipPath);
+    const first = await runImport(dbPath, zipPath);
+    const db = new Database(dbPath);
+    try {
+      db.run("UPDATE records SET device_hw = NULL, device_sw = NULL, meta_json = NULL");
+    } finally {
+      db.close();
+    }
+
+    const second = await runImport(dbPath, zipPath);
+    expect(second.inserted).toBe(0);
+    expect(second.deduped).toBe(first.attempted);
+    const check = new Database(dbPath);
+    try {
+      const device = check
+        .query("SELECT device_hw, device_sw FROM records WHERE type = ? LIMIT 1")
+        .get("HKQuantityTypeIdentifierHeartRate") as { device_hw: string; device_sw: string };
+      expect(device).toEqual({ device_hw: "Watch7,5", device_sw: "26.1" });
+      const metadata = check
+        .query("SELECT meta_json FROM records WHERE type = ? AND meta_json IS NOT NULL LIMIT 1")
+        .get("HKCategoryTypeIdentifierSleepAnalysis") as { meta_json: string };
+      expect(JSON.parse(metadata.meta_json)).toHaveProperty("HKTimeZone", "Asia/Tokyo");
+    } finally {
+      check.close();
     }
   });
 });

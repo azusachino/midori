@@ -1,7 +1,7 @@
 import { parseHealthKitDate } from "../domain/dates";
 import { METRICS } from "../domain/metrics";
 import type { RecordRow } from "../domain/types";
-import type { XmlRecordRow } from "./parser";
+import { devicePart, type XmlRecordRow } from "./parser";
 
 /**
  * Record → typed row mapping (T5). Unknown HK types map to rows with a null
@@ -49,6 +49,9 @@ export function mapRecord(raw: XmlRecordRow): MapResult {
         endOffsetMin: end.date.offsetMinutes,
         value: isQuantity ? numeric : null,
         valueStr: isQuantity ? null : raw.value,
+        deviceHw: devicePart(raw.device, "hardware"),
+        deviceSw: devicePart(raw.device, "software"),
+        metaJson: Object.keys(raw.metadata).length > 0 ? JSON.stringify(raw.metadata) : null,
       },
       metricKey: TYPE_TO_METRIC.get(raw.type) ?? null,
       localDay: start.date.localDay,

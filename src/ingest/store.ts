@@ -18,6 +18,7 @@ export interface WriteCounters {
 
 export class RecordWriter {
   private stmt: import("bun:sqlite").Statement;
+  private backfillStmt: import("bun:sqlite").Statement;
   private buffered = 0;
   readonly counters: WriteCounters = { attempted: 0, inserted: 0, deduped: 0 };
 
@@ -29,8 +30,17 @@ export class RecordWriter {
     this.stmt = db.prepare(
       `INSERT OR IGNORE INTO records
          (type, source_name, unit, start_at, end_at, start_offset_min, end_offset_min,
-          value, value_str, import_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          value, value_str, import_id, device_hw, device_sw, meta_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    this.backfillStmt = db.prepare(
+      `UPDATE records SET
+         device_hw = COALESCE(device_hw, ?),
+         device_sw = COALESCE(device_sw, ?),
+         meta_json = COALESCE(meta_json, ?)
+       WHERE type = ? AND source_name = ? AND start_at = ? AND end_at = ?
+         AND coalesce(value, value_str, '<NULL>') = coalesce(?, ?, '<NULL>')
+         AND (device_hw IS NULL OR device_sw IS NULL OR meta_json IS NULL)`,
     );
     this.db.exec("BEGIN");
   }
@@ -48,10 +58,26 @@ export class RecordWriter {
       r.value,
       r.valueStr,
       this.importId,
+      r.deviceHw,
+      r.deviceSw,
+      r.metaJson,
     );
     this.counters.attempted += 1;
     if (res.changes > 0) this.counters.inserted += 1;
-    else this.counters.deduped += 1;
+    else {
+      this.backfillStmt.run(
+        r.deviceHw,
+        r.deviceSw,
+        r.metaJson,
+        r.type,
+        r.sourceName,
+        r.startAt,
+        r.endAt,
+        r.value,
+        r.valueStr,
+      );
+      this.counters.deduped += 1;
+    }
     if (++this.buffered >= this.batch) {
       this.db.exec("COMMIT");
       this.db.exec("BEGIN");
