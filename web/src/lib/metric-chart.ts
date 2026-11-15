@@ -272,6 +272,128 @@ export function clampSeamLabel(label: string, maxLen = 44): string {
   return `${label.slice(0, Math.max(1, maxLen - 1)).trimEnd()}…`;
 }
 
+export interface SeamLabelLayout {
+  seam: SeamStepDTO;
+  seamDay: string;
+  seamIdx: number;
+  fullLabel: string;
+  displayLabel: string;
+  align: "left" | "center" | "right";
+  showLabel: boolean;
+}
+
+const SEAM_MIN_SPACING_PX = 120;
+const SEAM_LABEL_PADDING_PX = 16;
+
+function estimateTextWidthPx(text: string): number {
+  let width = 0;
+  for (const ch of text) {
+    width += ch.charCodeAt(0) > 0x7f ? 11.5 : 6.4;
+  }
+  return width;
+}
+
+function clampSeamLabelToWidth(label: string, maxChars: number, maxWidthPx: number): string {
+  let out = clampSeamLabel(label, maxChars);
+  while (out.length > 2 && estimateTextWidthPx(out) + SEAM_LABEL_PADDING_PX > maxWidthPx) {
+    out = `${out.slice(0, out.length - 2).trimEnd()}…`;
+  }
+  return out;
+}
+
+/**
+ * Places seam markLine labels inside the grid and suppresses overlapping labels when seams
+ * fall within ~120 px (or bounding boxes collide), keeping a marker on the line and full text in tooltip.
+ */
+export function resolveSeamLabelLayouts(
+  seams: readonly SeamStepDTO[],
+  epochs: readonly EpochRefDTO[],
+  days: readonly string[],
+  metric: string,
+  unit: string,
+  options?: {
+    isWeekly?: boolean | undefined;
+    gridWidth?: number | undefined;
+    viewStartIdx?: number | undefined;
+    viewEndIdx?: number | undefined;
+    minSpacingPx?: number | undefined;
+  },
+): SeamLabelLayout[] {
+  if (seams.length === 0 || days.length === 0) return [];
+
+  const isWeekly = options?.isWeekly ?? false;
+  const gridWidth = Math.max(160, options?.gridWidth ?? 800);
+  const viewStart = Math.max(0, options?.viewStartIdx ?? 0);
+  const viewEnd = Math.min(days.length - 1, options?.viewEndIdx ?? days.length - 1);
+  const span = Math.max(1, viewEnd - viewStart);
+  const minSpacingPx = options?.minSpacingPx ?? SEAM_MIN_SPACING_PX;
+  const maxBoxWidthPx = Math.max(110, gridWidth - 20);
+
+  const dayIndex = new Map<string, number>();
+  days.forEach((d, idx) => {
+    dayIndex.set(d, idx);
+  });
+
+  const candidates = seams.flatMap((seam) => {
+    const seamDay = isWeekly ? toWeekStartMonday(seam.seamDay) : seam.seamDay;
+    const seamIdx = dayIndex.get(seamDay);
+    if (seamIdx === undefined) return [];
+    const ratio = (seamIdx - viewStart) / span;
+    const align: "left" | "center" | "right" =
+      ratio < 0.35 ? "left" : ratio > 0.65 ? "right" : "center";
+    const fullLabel = formatSeamLabel(seam, epochs, metric, unit);
+    const displayLabel = clampSeamLabelToWidth(fullLabel, 44, maxBoxWidthPx);
+    const xPx = ratio * gridWidth;
+    const boxWidthPx = estimateTextWidthPx(displayLabel) + SEAM_LABEL_PADDING_PX;
+    const rawSpanStart =
+      align === "left" ? xPx : align === "right" ? xPx - boxWidthPx : xPx - boxWidthPx / 2;
+    const spanStart = Math.max(0, Math.min(gridWidth - boxWidthPx, rawSpanStart));
+    const spanEnd = spanStart + boxWidthPx;
+    return [
+      {
+        seam,
+        seamDay,
+        seamIdx,
+        fullLabel,
+        displayLabel,
+        align,
+        xPx,
+        spanStart,
+        spanEnd,
+      },
+    ];
+  });
+
+  // Prefer keeping labels on newer seams (rightmost first); older colliding seams become markers + tooltip.
+  const orderedNewestFirst = [...candidates].sort((a, b) => b.seamIdx - a.seamIdx);
+  const placed: Array<{ xPx: number; spanStart: number; spanEnd: number }> = [];
+  const showBySeam = new Map<SeamStepDTO, boolean>();
+
+  for (const cand of orderedNewestFirst) {
+    const inPlot = cand.seamIdx >= viewStart && cand.seamIdx <= viewEnd;
+    const collides = placed.some(
+      (p) =>
+        Math.abs(cand.xPx - p.xPx) < minSpacingPx ||
+        (cand.spanStart - 8 <= p.spanEnd && cand.spanEnd + 8 >= p.spanStart),
+    );
+    const showLabel = inPlot && !collides;
+    if (showLabel) {
+      placed.push({ xPx: cand.xPx, spanStart: cand.spanStart, spanEnd: cand.spanEnd });
+    }
+    showBySeam.set(cand.seam, showLabel);
+  }
+
+  return candidates.map(({ seam, seamDay, seamIdx, fullLabel, displayLabel, align }) => ({
+    seam,
+    seamDay,
+    seamIdx,
+    fullLabel,
+    displayLabel,
+    align,
+    showLabel: showBySeam.get(seam) ?? false,
+  }));
+}
+
 /**
  * Filters OS update events to those inside the plotted axis window belonging to the active
  * primary epoch in view (covering baseline stint, or latest active non-minor epoch when trend-only).
@@ -467,10 +589,90 @@ export function currentStintBandPoints(series: MetricSeriesDTO): BandPointDTO[] 
 export function buildRecentUnitRows(series: MetricSeriesDTO, usableLimit = 7): RecentUnitRow[] {
   const baselined = hasEstablishedBaseline(series);
   const epochById = new Map(series.epochs.map((e) => [e.id, e]));
-  const nonMinor = series.units.filter((u) => {
-    const epoch = epochById.get(u.epochId);
-    return !epoch?.minor;
-  });
+  const unitLabel = displayUnit(series.metric, series.unit);
+
+  const dailyNonMinorByDay = new Map<string, MetricUnitPointDTO>();
+  if (series.range !== "all") {
+    const nonMinorDaily = series.units.filter((u) => !epochById.get(u.epochId)?.minor);
+    for (const u of deduplicateUnitsByDay(nonMinorDaily, series)) {
+      dailyNonMinorByDay.set(u.day, u);
+    }
+  }
+
+  const finding = series.finding;
+  if (finding && finding.sparkline.length > 0) {
+    const orderedSparkline = [...finding.sparkline].sort((a, b) =>
+      a.day < b.day ? 1 : a.day > b.day ? -1 : 0,
+    );
+
+    const selected: Array<{
+      day: string;
+      value: number | null;
+      z: number | null;
+      usable: boolean;
+      deviceLabel: string;
+      partialNote: string | null;
+      tzChange: boolean;
+      isRecent: boolean;
+    }> = [];
+    let usableCount = 0;
+
+    for (const pt of orderedSparkline) {
+      const daily = dailyNonMinorByDay.get(pt.day);
+      const value = pt.value;
+      const isUsable = (daily ? daily.usable : pt.usable) && value !== null;
+      if (!isUsable && value === null && (!daily || daily.partialReason === "missing")) {
+        continue;
+      }
+      const fallbackLabel =
+        finding.epochLabel ?? (finding.epochId !== null ? `#${finding.epochId}` : "—");
+      const deviceLabel = daily
+        ? (epochById.get(daily.epochId)?.label ?? fallbackLabel)
+        : fallbackLabel;
+      selected.push({
+        day: pt.day,
+        value,
+        z: pt.z,
+        usable: isUsable,
+        deviceLabel,
+        partialNote: !isUsable
+          ? (formatPartialReason(daily?.partialReason ?? null) ?? copy.chart.partialGeneric)
+          : null,
+        tzChange: daily?.tzChange ?? false,
+        isRecent: isUsable && usableCount < usableLimit,
+      });
+      if (isUsable) {
+        usableCount += 1;
+        if (usableCount >= usableLimit) break;
+      } else if (selected.length >= usableLimit + 7) {
+        break;
+      }
+    }
+
+    return selected.map((row) => {
+      const valStr =
+        row.value === null
+          ? "—"
+          : unitLabel
+            ? `${formatMetricNumber(row.value, series.metric, series.unit)} ${unitLabel}`
+            : formatMetricNumber(row.value, series.metric, series.unit);
+      const effectiveZ = baselined && row.usable ? row.z : null;
+      return {
+        day: row.day,
+        dayLabel: formatDayWithWeekday(row.day),
+        valueText: valStr,
+        zText: formatZScore(effectiveZ),
+        zTone: zToneFor(effectiveZ),
+        deviceLabel: row.deviceLabel,
+        partialNote: row.partialNote,
+        tzChange: row.tzChange,
+        usable: row.usable,
+        isRecent: row.isRecent,
+      };
+    });
+  }
+
+  const nonMinor = series.units.filter((u) => !epochById.get(u.epochId)?.minor);
   const sortedNonMinor = deduplicateUnitsByDay(nonMinor, series).sort((a, b) =>
     a.day < b.day ? 1 : a.day > b.day ? -1 : 0,
   );
@@ -490,8 +692,6 @@ export function buildRecentUnitRows(series: MetricSeriesDTO, usableLimit = 7): R
       break;
     }
   }
-
-  const unitLabel = displayUnit(series.metric, series.unit);
 
   return selectedUnits.map((u) => {
     const epoch = epochById.get(u.epochId);
@@ -541,7 +741,13 @@ export function buildBaselineSummary(series: MetricSeriesDTO): string {
   const medianText = unitLabel
     ? `${formatVal(f.baselineMedian)} ${unitLabel}`
     : formatVal(f.baselineMedian);
-  const bandDays = currentStintBandPoints(series)
+  const currentStint = [...series.stints].sort((a, b) =>
+    a.endDay < b.endDay ? 1 : a.endDay > b.endDay ? -1 : 0,
+  )[0];
+  const bandDays = series.band
+    .filter(
+      (b) => !currentStint || (b.day >= currentStint.startDay && b.day <= currentStint.endDay),
+    )
     .map((b) => b.day)
     .sort();
   const firstBandDay = bandDays[0];

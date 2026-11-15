@@ -89,6 +89,8 @@ test("Metric detail against real server: hrv_sdnn baseline band, seam, OS update
   }
 
   // Range segmented controls: 90d, all (weekly), and reload with URL zoom
+  const baseline180d = await page.getByTestId("baseline-summary").textContent();
+
   await page.getByRole("button", { name: "90d" }).click();
   await expect(page).toHaveURL(/range=90d/);
   await expect(async () => {
@@ -99,6 +101,18 @@ test("Metric detail against real server: hrv_sdnn baseline band, seam, OS update
   await page.getByRole("button", { name: "All" }).click();
   await expect(page).toHaveURL(/range=all/);
   await expect(canvas).toBeVisible();
+  // Switching chart range=all keeps the same daily finding rows & baseline summary
+  await expect(recentTable.locator("tbody tr").first()).toContainText("Nov 14 (Sat)");
+  await expect(recentTable.locator("tbody tr").first()).toContainText("36 ms");
+  await expect(recentTable.locator("tbody tr").first()).toContainText("−5.0σ");
+  await expect(page.getByTestId("baseline-summary")).toHaveText(baseline180d ?? "");
+
+  // Real server daytime metric (steps) at range=all renders non-null finding header, daily table, baseline, and checks
+  await page.goto("/metrics/steps?range=all&tab=chart");
+  await expect(page.getByTestId("finding-row-steps")).toBeVisible();
+  await expect(page.getByTestId("baseline-summary")).not.toContainText("warming up");
+  await expect(recentTable.locator("tbody tr").first()).toContainText("Nov 14 (Sat)");
+  await expect(recentTable.locator("tbody tr").first()).toContainText("≥10σ");
 
   await page.goto("/metrics/hrv_sdnn?range=180d&tab=chart&zoomStart=2026-09-15&zoomEnd=2026-11-14");
   await expect(page.getByTestId("reset-zoom-btn")).toBeVisible();
@@ -189,6 +203,91 @@ test("Metric detail §5 empty range widen and read error retry (route-intercepte
   await expect(page.getByTestId("read-error")).toContainText(copy.error.metricDetailTitle);
   await page.getByRole("button", { name: copy.error.retry }).click();
   await expect(page.getByTestId("metric-echart").locator("canvas")).toBeVisible();
+
+  // Within-usual daytime metric at range=all with colliding seams: finding-backed table/checks + tooltip exposes hidden seam text
+  await page.route("**/api/metrics/steps*", (route) => {
+    const base = metricSeriesStub("steps", "all");
+    const epoch1 = base.epochs[0];
+    const epoch2 = base.epochs[1];
+    if (!epoch1 || !epoch2) throw new Error("expected two fixture epochs");
+    const weeklyUnits = Array.from({ length: 60 }, (_, idx) => {
+      const ms = Date.UTC(2025, 0, 6) + idx * 7 * 86_400_000;
+      const day = new Date(ms).toISOString().slice(0, 10);
+      return {
+        day,
+        epochId: idx < 12 ? epoch1.id : epoch2.id,
+        value: 6200 + (idx % 5) * 180,
+        n: 0,
+        usable: true,
+        partialReason: null,
+        tzChange: false,
+        z: null,
+        isRecent: false,
+      };
+    });
+    const baseFinding = base.finding;
+    const withinSteps = {
+      ...base,
+      range: "all" as const,
+      units: weeklyUnits,
+      finding: baseFinding
+        ? {
+            ...baseFinding,
+            direction: "within" as const,
+            severity: "within" as const,
+            z: 0.2,
+            recentMedian: 6350,
+            checks: [{ key: "device_change" as const, flagged: true, day: "2026-02-10" }],
+          }
+        : null,
+      seams: [
+        {
+          seamDay: weeklyUnits[8]?.day ?? "2025-03-03",
+          fromEpochId: epoch1.id,
+          toEpochId: epoch2.id,
+          kind: "step" as const,
+          value: 1300,
+          nOld: 20,
+          nNew: 20,
+        },
+        {
+          seamDay: weeklyUnits[10]?.day ?? "2025-03-17", // <120px from first seam -> older seam suppressed to marker
+          fromEpochId: epoch2.id,
+          toEpochId: epoch1.id,
+          kind: "offset" as const,
+          value: 2100,
+          nOld: 20,
+          nNew: 20,
+        },
+      ],
+    };
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(withinSteps),
+    });
+  });
+
+  await page.goto("/metrics/steps?range=all&tab=chart");
+  await expect(page.getByTestId("finding-row-steps")).toContainText("within usual");
+  await expect(page.getByTestId("check-row-device_change")).toHaveAttribute(
+    "data-status",
+    "flagged",
+  );
+  await expect(page.getByTestId("recent-units-table").locator("tbody tr").first()).toContainText(
+    "Mar 1 (Sun)",
+  );
+  await expect(page.getByTestId("baseline-summary")).toContainText("Baseline: 28 days");
+  const stepsCanvas = page.getByTestId("metric-echart").locator("canvas");
+  await expect(stepsCanvas).toBeVisible();
+  const box = await stepsCanvas.boundingBox();
+  if (box) {
+    // Hover over seam 0 (8 / 59 across grid) so tooltip surfaces the suppressed seam description
+    const targetX = box.x + 52 + ((box.width - 72) * 8) / 59;
+    const targetY = box.y + box.height / 2;
+    await page.mouse.move(targetX, targetY);
+    await expect(page.getByTestId("metric-echart")).toContainText("can't be separated");
+  }
 
   expect(errors).toEqual([]);
 });

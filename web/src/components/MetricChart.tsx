@@ -1,7 +1,12 @@
 import type { EChartsCoreOption } from "echarts/core";
 import { graphic } from "echarts/core";
 import { useCallback, useMemo } from "react";
-import type { MetricSeriesDTO, MetricUnitPointDTO, OsUpdateEventDTO } from "@/api/types";
+import type {
+  MetricSeriesDTO,
+  MetricUnitPointDTO,
+  OsUpdateEventDTO,
+  SeamStepDTO,
+} from "@/api/types";
 import { EChart, type EChartPointClickEvent, type EChartZoomEvent } from "@/components/EChart";
 import { copy } from "@/copy";
 import { displayUnit, formatDayWithWeekday, formatMetricNumber } from "@/lib/finding-format";
@@ -10,11 +15,11 @@ import {
   buildCalendarDays,
   buildMetricChartSummary,
   buildMetricChartTable,
-  clampSeamLabel,
   currentStintBandPoints,
   findRecentWindow,
   formatPartialReason,
   formatSeamLabel,
+  resolveSeamLabelLayouts,
   resolveZoomWindow,
   selectPrimaryOsUpdatesInView,
   shouldIncludeZero,
@@ -98,7 +103,7 @@ export function MetricChart({
   );
 
   const buildOption = useCallback(
-    (theme: ChartTheme): EChartsCoreOption => {
+    (theme: ChartTheme, chartWidth = 880): EChartsCoreOption => {
       const unitLabel = displayUnit(series.metric, series.unit);
       const nonMinorEpochs = series.epochs.filter((e) => !e.minor);
       const minorEpochs = series.epochs.filter((e) => e.minor);
@@ -111,7 +116,29 @@ export function MetricChart({
         unitByEpochDay.set(`${u.epochId}:${u.day}`, u);
       }
       const bandByDay = new Map(currentBand.map((b) => [b.day, b]));
-      const seamsByDay = new Map(series.seams.map((s) => [axisDay(s.seamDay), s]));
+      const seamLayouts = resolveSeamLabelLayouts(
+        series.seams,
+        series.epochs,
+        days,
+        series.metric,
+        series.unit,
+        {
+          isWeekly,
+          gridWidth: Math.max(160, chartWidth - 72),
+          viewStartIdx: zoomWindow?.startValue,
+          viewEndIdx: zoomWindow?.endValue,
+        },
+      );
+      const seamsByDay = new Map<string, SeamStepDTO[]>();
+      for (const s of series.seams) {
+        const keyDay = axisDay(s.seamDay);
+        const list = seamsByDay.get(keyDay);
+        if (list) list.push(s);
+        else seamsByDay.set(keyDay, [s]);
+      }
+      const hiddenSeamXIndices = Array.from(
+        new Set(seamLayouts.filter((s) => !s.showLabel).map((s) => s.seamIdx)),
+      ).sort((a, b) => a - b);
       const primaryOsUpdates = selectPrimaryOsUpdatesInView(series, days);
       const osUpdatesByDay = new Map<string, OsUpdateEventDTO[]>();
       const osUpdateXSet = new Set<number>();
@@ -231,29 +258,21 @@ export function MetricChart({
 
         const attachSharedAnnotations = idx === 0;
         const seamLines = attachSharedAnnotations
-          ? series.seams.flatMap((seam) => {
-              const seamDay = axisDay(seam.seamDay);
-              const seamIdx = dayIndex.get(seamDay);
-              if (seamIdx === undefined) return [];
-              const ratio = days.length <= 1 ? 0.5 : seamIdx / (days.length - 1);
-              const align: "left" | "center" | "right" =
-                ratio < 0.35 ? "left" : ratio > 0.65 ? "right" : "center";
-              const fullLabel = formatSeamLabel(seam, series.epochs, series.metric, series.unit);
-              return [
-                {
-                  xAxis: seamDay,
-                  lineStyle: {
-                    color: theme.borderStrong,
-                    type: "dashed" as const,
-                    width: 1.25,
-                  },
-                  label: {
+          ? seamLayouts.map((layout) => ({
+              xAxis: layout.seamDay,
+              lineStyle: {
+                color: theme.borderStrong,
+                type: "dashed" as const,
+                width: 1.25,
+              },
+              label: layout.showLabel
+                ? {
                     show: true,
                     rotate: 0,
-                    align,
+                    align: layout.align,
                     verticalAlign: "top" as const,
                     distance: 6,
-                    formatter: clampSeamLabel(fullLabel),
+                    formatter: layout.displayLabel,
                     color: theme.foreground,
                     backgroundColor: theme.card,
                     borderColor: theme.borderStrong,
@@ -262,10 +281,9 @@ export function MetricChart({
                     padding: [3, 6],
                     fontSize: 11,
                     position: "insideEndTop" as const,
-                  },
-                },
-              ];
-            })
+                  }
+                : { show: false },
+            }))
           : [];
 
         const recentStart = recentWindow ? axisDay(recentWindow.startDay) : null;
@@ -382,6 +400,53 @@ export function MetricChart({
         });
       }
 
+      // 5. Top diamond markers for seams whose text label was suppressed to prevent overlap
+      if (hiddenSeamXIndices.length > 0) {
+        echartsSeries.push({
+          name: "Device seam",
+          type: "custom",
+          silent: true,
+          z: 5,
+          encode: { x: 0 },
+          renderItem: (
+            params: { coordSys: unknown },
+            api: {
+              value: (idx: number) => number | string;
+              coord: (val: [number, number]) => number[];
+            },
+          ) => {
+            const xIdx = Number(api.value(0));
+            const pt = api.coord([xIdx, 0]);
+            const coordSys = params.coordSys as {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            };
+            const xPx = pt[0] ?? 0;
+            if (xPx < coordSys.x || xPx > coordSys.x + coordSys.width) return null;
+            const topY = coordSys.y + 6;
+            return {
+              type: "polygon" as const,
+              shape: {
+                points: [
+                  [xPx, topY - 4.5],
+                  [xPx + 4.5, topY],
+                  [xPx, topY + 4.5],
+                  [xPx - 4.5, topY],
+                ],
+              },
+              style: {
+                fill: theme.notable,
+                stroke: theme.card,
+                lineWidth: 0.75,
+              },
+            };
+          },
+          data: hiddenSeamXIndices.map((xIdx) => [xIdx]),
+        });
+      }
+
       const zoomOptionBase = {
         filterMode: "none" as const,
         ...(zoomWindow ? zoomWindow : {}),
@@ -461,11 +526,13 @@ export function MetricChart({
               );
             }
 
-            const seam = seamsByDay.get(day);
-            if (seam) {
-              lines.push(
-                `<div style="color:${theme.notable};margin-top:3px;">${escapeHtml(formatSeamLabel(seam, series.epochs, series.metric, series.unit))}</div>`,
-              );
+            const seamsForDay = seamsByDay.get(day);
+            if (seamsForDay && seamsForDay.length > 0) {
+              for (const seam of seamsForDay) {
+                lines.push(
+                  `<div style="color:${theme.notable};margin-top:3px;">${escapeHtml(formatSeamLabel(seam, series.epochs, series.metric, series.unit))}</div>`,
+                );
+              }
             }
 
             const osUpdatesForDay = osUpdatesByDay.get(day);

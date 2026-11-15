@@ -12,7 +12,7 @@ import {
 import type { EChartsCoreOption, EChartsType } from "echarts/core";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type ChartTheme, readChartTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -56,8 +56,8 @@ export interface EChartPointClickEvent {
 }
 
 export interface EChartProps {
-  /** Builds the ECharts option using the resolved CSS-variable theme. */
-  buildOption: (theme: ChartTheme) => EChartsCoreOption;
+  /** Builds the ECharts option using the resolved CSS-variable theme and container width. */
+  buildOption: (theme: ChartTheme, width: number) => EChartsCoreOption;
   /** Accessible summary of the chart (ui-design §11). */
   summary: string;
   /** Optional tabular mirror rendered in a visually hidden table for screen readers. */
@@ -94,6 +94,9 @@ export function EChart({
 }: EChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<EChartsType | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const buildOptionRef = useRef(buildOption);
+  buildOptionRef.current = buildOption;
   const onDataZoomRef = useRef(onDataZoom);
   onDataZoomRef.current = onDataZoom;
   const onPointClickRef = useRef(onPointClick);
@@ -191,10 +194,18 @@ export function EChart({
       });
     });
 
+    let lastObservedWidth = el.clientWidth || chart.getWidth();
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
             chart.resize();
+            const nextWidth = el.clientWidth || chart.getWidth();
+            if (Math.abs(nextWidth - lastObservedWidth) >= 8) {
+              lastObservedWidth = nextWidth;
+              if (buildOptionRef.current.length >= 2) {
+                setContainerWidth(nextWidth);
+              }
+            }
           })
         : null;
     ro?.observe(el);
@@ -208,8 +219,10 @@ export function EChart({
 
   useEffect(() => {
     const chart = instanceRef.current;
-    if (!chart) return;
+    const el = containerRef.current;
+    if (!chart || !el) return;
     const theme = readChartTheme();
+    const resolvedWidth = containerWidth > 0 ? containerWidth : el.clientWidth || chart.getWidth();
     chart.setOption(
       {
         animation: false,
@@ -217,11 +230,11 @@ export function EChart({
           color: theme.mutedForeground,
           fontFamily: theme.fontSans,
         },
-        ...buildOption(theme),
+        ...buildOption(theme, resolvedWidth),
       },
       { notMerge: true },
     );
-  }, [buildOption]);
+  }, [buildOption, containerWidth]);
 
   return (
     <figure

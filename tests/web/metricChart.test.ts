@@ -13,6 +13,7 @@ import {
   formatSeamLabel,
   hasEstablishedBaseline,
   nextWiderRange,
+  resolveSeamLabelLayouts,
   resolveZoomWindow,
   selectPrimaryOsUpdatesInView,
   shouldIncludeZero,
@@ -401,5 +402,99 @@ describe("metric-chart helpers", () => {
     const clamped = clampSeamLabel(longSeam, 32);
     expect(clamped.length).toBeLessThanOrEqual(32);
     expect(clamped.endsWith("…")).toBe(true);
+  });
+
+  test("range=all recent rows and baseline summary stay anchored to daily finding while close seam labels suppress collisions", () => {
+    const base = metricSeriesStub("steps", "180d");
+    const epoch1 = base.epochs[0];
+    const epoch2 = base.epochs[1];
+    if (!epoch1 || !epoch2) throw new Error("expected two fixture epochs");
+
+    const allWeeklySteps = {
+      ...base,
+      range: "all" as const,
+      units: [
+        {
+          day: "2024-01-01",
+          epochId: epoch1.id,
+          value: 6100,
+          n: 0,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: null,
+          isRecent: false,
+        },
+        {
+          day: "2026-02-23",
+          epochId: epoch2.id,
+          value: 9000,
+          n: 0,
+          usable: true,
+          partialReason: null,
+          tzChange: false,
+          z: null,
+          isRecent: false,
+        },
+      ],
+    };
+
+    const allRows = buildRecentUnitRows(allWeeklySteps, 7);
+    expect(allRows.map((r) => r.day)).toEqual([
+      "2026-03-01",
+      "2026-02-28",
+      "2026-02-27",
+      "2026-02-26",
+      "2026-02-25",
+      "2026-02-24",
+      "2026-02-23",
+    ]);
+    expect(allRows.some((r) => r.day === "2024-01-01")).toBe(false);
+    expect(allRows.every((r) => r.zText !== "—")).toBe(true);
+    expect(buildBaselineSummary(allWeeklySteps)).toBe(
+      "Baseline: 28 days · median 6.0k (4.5k–7.5k) · Jan 24–Feb 22",
+    );
+
+    const days100Weeks = Array.from({ length: 100 }, (_, i) => {
+      const ms = Date.UTC(2024, 0, 1) + i * 7 * 86_400_000;
+      return new Date(ms).toISOString().slice(0, 10);
+    });
+    const seamA = {
+      seamDay: days100Weeks[10] ?? "2024-03-11",
+      fromEpochId: epoch1.id,
+      toEpochId: epoch2.id,
+      kind: "step" as const,
+      value: 1300,
+      nOld: 20,
+      nNew: 20,
+    };
+    const seamB = {
+      seamDay: days100Weeks[14] ?? "2024-04-08", // ~32 px from seamA on 800px grid
+      fromEpochId: epoch2.id,
+      toEpochId: epoch1.id,
+      kind: "offset" as const,
+      value: 2100,
+      nOld: 20,
+      nNew: 20,
+    };
+    const seamC = {
+      seamDay: days100Weeks[88] ?? "2025-09-08",
+      fromEpochId: epoch1.id,
+      toEpochId: epoch2.id,
+      kind: "step" as const,
+      value: 17,
+      nOld: 20,
+      nNew: 20,
+    };
+
+    const desktopLayouts = resolveSeamLabelLayouts(
+      [seamA, seamB, seamC],
+      base.epochs,
+      days100Weeks,
+      "steps",
+      "count",
+      { isWeekly: true, gridWidth: 800 },
+    );
+    expect(desktopLayouts.map((l) => l.showLabel)).toEqual([false, true, true]);
   });
 });

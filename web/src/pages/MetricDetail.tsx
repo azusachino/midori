@@ -180,6 +180,8 @@ export function MetricDetailPage() {
   const baselineSummary = buildBaselineSummary(data);
   const widerRange = nextWiderRange(search.range);
   const isZoomed = Boolean(search.zoomStart && search.zoomEnd);
+  const hasDetailSections =
+    data.units.length > 0 || (data.finding !== null && data.finding.sparkline.length > 0);
 
   return (
     <div className="space-y-5">
@@ -279,124 +281,124 @@ export function MetricDetailPage() {
               ) : null}
             </Card>
           ) : (
-            <>
-              <Card className="min-w-0 overflow-hidden">
-                <CardContent className="pt-4">
-                  <MetricChart
-                    series={data}
-                    zoomStart={search.zoomStart}
-                    zoomEnd={search.zoomEnd}
-                    onZoomChange={handleZoomChange}
-                    onSelectDay={handleSelectDay}
-                  />
-                </CardContent>
-              </Card>
+            <Card className="min-w-0 overflow-hidden">
+              <CardContent className="pt-4">
+                <MetricChart
+                  series={data}
+                  zoomStart={search.zoomStart}
+                  zoomEnd={search.zoomEnd}
+                  onZoomChange={handleZoomChange}
+                  onSelectDay={handleSelectDay}
+                />
+              </CardContent>
+            </Card>
+          )}
 
-              <div
-                className={cn(
-                  "grid min-w-0 gap-5",
-                  data.kind !== "trendOnly" ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]" : "",
-                )}
-              >
-                {data.kind !== "trendOnly" ? (
-                  <ChecksPanel series={data} onSelectDay={handleSelectDay} />
-                ) : null}
+          {hasDetailSections ? (
+            <div
+              className={cn(
+                "grid min-w-0 gap-5",
+                data.kind !== "trendOnly" ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]" : "",
+              )}
+            >
+              {data.kind !== "trendOnly" ? (
+                <ChecksPanel series={data} onSelectDay={handleSelectDay} />
+              ) : null}
 
-                <Card data-testid="recent-units-card" className="min-w-0 overflow-hidden">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">
-                      {copy.pages.metricDetail.recentUnitsTitle(noun)}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 pt-0">
-                    <Table data-testid="recent-units-table">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="px-2 sm:px-3">
-                            {copy.pages.metricDetail.recentTable.colDay}
-                          </TableHead>
-                          <TableHead className="px-2 sm:px-3">
-                            {copy.pages.metricDetail.recentTable.colValue}
-                          </TableHead>
-                          <TableHead className="px-2 sm:px-3">
-                            {copy.pages.metricDetail.recentTable.colZ}
-                          </TableHead>
-                          <TableHead className="hidden px-2 sm:table-cell sm:px-3">
-                            {copy.pages.metricDetail.recentTable.colDevice}
-                          </TableHead>
-                          <TableHead className="px-2 sm:px-3">
-                            {copy.pages.metricDetail.recentTable.colNotes}
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {recentRows.map((row) => (
-                          <TableRow
-                            key={`${row.day}-${row.deviceLabel}`}
-                            data-usable={row.usable ? "true" : "false"}
-                            data-selected={search.night === row.day ? "true" : undefined}
+              <Card data-testid="recent-units-card" className="min-w-0 overflow-hidden">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">
+                    {copy.pages.metricDetail.recentUnitsTitle(noun)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <Table data-testid="recent-units-table">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="px-2 sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colDay}
+                        </TableHead>
+                        <TableHead className="px-2 sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colValue}
+                        </TableHead>
+                        <TableHead className="px-2 sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colZ}
+                        </TableHead>
+                        <TableHead className="hidden px-2 sm:table-cell sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colDevice}
+                        </TableHead>
+                        <TableHead className="px-2 sm:px-3">
+                          {copy.pages.metricDetail.recentTable.colNotes}
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recentRows.map((row) => (
+                        <TableRow
+                          key={`${row.day}-${row.deviceLabel}`}
+                          data-usable={row.usable ? "true" : "false"}
+                          data-selected={search.night === row.day ? "true" : undefined}
+                          className={cn(
+                            search.night === row.day && "bg-muted/40",
+                            !row.usable && "bg-muted/20 text-muted-foreground opacity-75",
+                          )}
+                        >
+                          <TableCell className="px-2 tabular-nums sm:px-3">
+                            <button
+                              type="button"
+                              data-day={row.day}
+                              data-testid={`recent-row-btn-${row.day}`}
+                              onClick={handleRowButtonClick}
+                              className={cn(
+                                "text-left font-medium underline decoration-border-strong underline-offset-4 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring cursor-pointer tabular-nums",
+                                row.usable ? "text-foreground" : "text-muted-foreground",
+                              )}
+                            >
+                              {row.dayLabel}
+                            </button>
+                          </TableCell>
+                          <TableCell
                             className={cn(
-                              search.night === row.day && "bg-muted/40",
-                              !row.usable && "bg-muted/20 text-muted-foreground opacity-75",
+                              "px-2 tabular-nums sm:px-3",
+                              row.usable ? "font-medium" : "text-muted-foreground",
                             )}
                           >
-                            <TableCell className="px-2 tabular-nums sm:px-3">
-                              <button
-                                type="button"
-                                data-day={row.day}
-                                data-testid={`recent-row-btn-${row.day}`}
-                                onClick={handleRowButtonClick}
-                                className={cn(
-                                  "text-left font-medium underline decoration-border-strong underline-offset-4 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-ring cursor-pointer tabular-nums",
-                                  row.usable ? "text-foreground" : "text-muted-foreground",
-                                )}
-                              >
-                                {row.dayLabel}
-                              </button>
-                            </TableCell>
-                            <TableCell
-                              className={cn(
-                                "px-2 tabular-nums sm:px-3",
-                                row.usable ? "font-medium" : "text-muted-foreground",
-                              )}
-                            >
-                              {row.valueText}
-                            </TableCell>
-                            <TableCell
-                              className={cn(
-                                "px-2 tabular-nums sm:px-3",
-                                row.zTone === "alert" && "text-alert font-medium",
-                                row.zTone === "notable" && "text-notable font-medium",
-                                (row.zTone === "within" || row.zTone === "none") &&
-                                  "text-muted-foreground",
-                              )}
-                            >
-                              {row.zText}
-                            </TableCell>
-                            <TableCell className="hidden px-2 text-muted-foreground sm:table-cell sm:px-3">
-                              {row.deviceLabel}
-                            </TableCell>
-                            <TableCell className="px-2 text-xs whitespace-normal text-muted-foreground sm:px-3">
-                              {[row.partialNote, row.tzChange ? copy.chart.tzShiftNote : null]
-                                .filter(Boolean)
-                                .join(" · ") || "—"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                            {row.valueText}
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              "px-2 tabular-nums sm:px-3",
+                              row.zTone === "alert" && "text-alert font-medium",
+                              row.zTone === "notable" && "text-notable font-medium",
+                              (row.zTone === "within" || row.zTone === "none") &&
+                                "text-muted-foreground",
+                            )}
+                          >
+                            {row.zText}
+                          </TableCell>
+                          <TableCell className="hidden px-2 text-muted-foreground sm:table-cell sm:px-3">
+                            {row.deviceLabel}
+                          </TableCell>
+                          <TableCell className="px-2 text-xs whitespace-normal text-muted-foreground sm:px-3">
+                            {[row.partialNote, row.tzChange ? copy.chart.tzShiftNote : null]
+                              .filter(Boolean)
+                              .join(" · ") || "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
 
-                    <p
-                      data-testid="baseline-summary"
-                      className="border-t border-border pt-3 text-xs text-muted-foreground tabular-nums"
-                    >
-                      {baselineSummary}
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            </>
-          )}
+                  <p
+                    data-testid="baseline-summary"
+                    className="border-t border-border pt-3 text-xs text-muted-foreground tabular-nums"
+                  >
+                    {baselineSummary}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="long">
