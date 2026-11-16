@@ -602,6 +602,17 @@ in `docs/reviews/`.
 5. Gates green and nothing personal in Git or images: met (CI, privacy guard, image scan).
 6. Running on harus-k3s with a re-import there and backups working: met. The harus-k3s
    commit is pending the hook fix.
+## Post-v1 follow-ups (2026-11-16)
+
+- Cluster db wiped and re-imported at the owner's request (pre-wipe snapshot job first): the
+  two synthetic smoke-test epochs are gone; real import done in 56 s.
+- Changes answer-first redesign (owner-approved): B-F12 groups (stands out / close to the edge
+  at |z| ≥1.0, top 3 / the rest behind "show all"), B-F7 and B-F9 amended, ui-design §1 and §4
+  updated. Checked against a scratch import of the real export at 1440 and 390 px.
+- Sidebar content pinned to the top on long pages (e2e regression check).
+- `tests/integration/server.test.ts` no longer writes archive zips and snapshots into the
+  repo's `data/` dir.
+
 ## Dispatch log
 
 | Slice | Writer (peer, model) | Worktree / branch | Base | Status |

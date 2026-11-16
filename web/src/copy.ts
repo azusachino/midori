@@ -104,6 +104,11 @@ export const copy = {
     lower: "lower than usual",
     within: "within usual",
   },
+  /** B-F12 "close to the edge" wording for leaning within rows. */
+  leaning: {
+    higher: "slightly higher than usual",
+    lower: "slightly lower than usual",
+  },
   confidence: {
     high: "high",
     medium: "medium",
@@ -157,8 +162,20 @@ export const copy = {
           ? `Learning your new watch — ${metricLabel}: ${current} of ${target} usable nights. First reading around ${readyDay}. Other overnight metrics are ready.`
           : `Learning your new watch — ${metricLabel}: ${current} of ${target} usable nights. Other overnight metrics are ready.`,
       devicesCta: "Devices",
-      allWithin: (count: number) =>
-        `Nothing stands out across ${count} ${count === 1 ? "overnight metric" : "overnight metrics"}.`,
+      answerNone: "Nothing stands out in your last 7 nights.",
+      answerSome: (count: number) =>
+        `${count} ${count === 1 ? "metric stands out" : "metrics stand out"} in your recent data.`,
+      answerDetail: (within: number, other: number) =>
+        other > 0
+          ? `${within} overnight within usual · ${other} still learning or short of data.`
+          : `${within} overnight ${within === 1 ? "metric" : "metrics"} within usual.`,
+      standsOutTitle: "Stands out",
+      closeToEdgeTitle: "Close to the edge",
+      closeToEdgeHint: "within usual, nearest the band edge",
+      showAll: (count: number) => `Show all ${count} overnight metrics`,
+      showMore: (count: number) =>
+        `Show ${count} more overnight ${count === 1 ? "metric" : "metrics"}`,
+      hideAll: "Hide the full list",
       overnightTitle: "Overnight",
       emptyOvernight: "No overnight metrics with data yet.",
       rankedHint: "ranked by distance from usual",

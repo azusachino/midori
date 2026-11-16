@@ -10,6 +10,7 @@ import {
   flaggedChecksFor,
   formatRecentVsBaseline,
   formatShortDay,
+  isLeaning,
   unitNounFor,
 } from "@/lib/finding-format";
 import { cn } from "@/lib/utils";
@@ -109,7 +110,9 @@ export function FindingRow({ row, mode = "link", className }: FindingRowProps) {
 
           {row.state === "computed" && row.direction ? (
             <span className={cn("text-xs md:text-sm", directionTintClass(row.severity))}>
-              {copy.direction[row.direction]}
+              {isLeaning(row)
+                ? copy.leaning[(row.z ?? 0) > 0 ? "higher" : "lower"]
+                : copy.direction[row.direction]}
             </span>
           ) : null}
 

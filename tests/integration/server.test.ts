@@ -38,7 +38,14 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     );
     db.close();
 
-    server = startServer({ db: openDb(dbPath), dbPath, port: 0, spoolDir: join(workdir, "spool") });
+    server = startServer({
+      db: openDb(dbPath),
+      dbPath,
+      port: 0,
+      spoolDir: join(workdir, "spool"),
+      archiveDir: join(workdir, "archive"),
+      backupDir: join(workdir, "backups"),
+    });
     const res = await fetch(`http://127.0.0.1:${server.port}/api/imports/1`);
     expect(res.status).toBe(200);
     const item = (await res.json()) as Record<string, unknown>;
@@ -50,7 +57,14 @@ describe("server entry: REST + web shell + MCP on one port", () => {
 
   test("GET /api/health returns ok", async () => {
     const dbPath = join(workdir, "health.db");
-    server = startServer({ db: openDb(dbPath), dbPath, port: 0, spoolDir: join(workdir, "spool") });
+    server = startServer({
+      db: openDb(dbPath),
+      dbPath,
+      port: 0,
+      spoolDir: join(workdir, "spool"),
+      archiveDir: join(workdir, "archive"),
+      backupDir: join(workdir, "backups"),
+    });
     const response = await fetch(`http://127.0.0.1:${server.port}/api/health`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
@@ -97,6 +111,8 @@ describe("server entry: REST + web shell + MCP on one port", () => {
       dbPath,
       port: 0,
       spoolDir: join(workdir, "spool"),
+      archiveDir: join(workdir, "archive"),
+      backupDir: join(workdir, "backups"),
       onDeriveStage: async () => {
         signalDeriving();
         await deriveLatch;
@@ -156,7 +172,14 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     mkdirSync(webDist, { recursive: true });
     writeFileSync(join(webDist, "index.html"), "<!doctype html><title>midori</title>");
 
-    server = startServer({ db: openDb(dbPath, { readonly: true }), dbPath, port: 0, webDist });
+    server = startServer({
+      db: openDb(dbPath, { readonly: true }),
+      dbPath,
+      port: 0,
+      webDist,
+      archiveDir: join(workdir, "archive"),
+      backupDir: join(workdir, "backups"),
+    });
     baseUrl = `http://127.0.0.1:${server.port}`;
 
     const changes = await fetch(`${baseUrl}/api/changes`);

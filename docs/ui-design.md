@@ -10,8 +10,9 @@ date and device label in them is an invented placeholder.
 
 1. **The answer first, evidence one click away.** Every screen opens with a sentence-level
    answer, and charts and tables support it. The order is Changes → Metric → night evidence.
-2. **Always show the full overnight set.** Ranking, not filtering. "Nothing stands out" is a
-   result too, and the rows stay visible (B-F7).
+2. **Lead with what moved; keep the full set one click away.** "Nothing stands out" is a
+   result and gets the headline. Rows that stand out and the ones closest to the edge stay
+   visible; the rest of the ranked overnight set sits behind "show all" (B-F7, B-F12).
 3. **Uncertainty is visible, never alarming.** Confidence, trust, warming-up, partial and
    "can't be separated" each have a fixed treatment. Severity uses amber and rose tints, never
    full-red blocks.
@@ -63,15 +64,16 @@ Changes                                                        as of Nov 7 (Fri)
 │   around Nov 12. Other overnight metrics are ready.                [Devices]  │
 └───────────────────────────────────────────────────────────────────────────────┘
 
-Overnight                                         ranked by distance from usual
+2 overnight metrics stand out in your last 7 nights.            (answer, B-F12)
+
+Stands out                                        ranked by distance from usual
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │▌HRV (SDNN)   lower than usual   42 vs 55 ms  5/7 nights  since Oct 31  ◆ med  ⚑1 ~~▁│
 │▌Sleeping HR  higher than usual  58 vs 54 bpm 4/7 nights  since Nov 2   ◆ high    ~~▔│
-│ Sleep        within usual       6.9 vs 7.1 h 1/7 nights                ◆ high    ~~~│
-│ Resp. rate   within usual       …                                                │
-│ Wrist temp   learning · 9 of 14 nights  ▓▓▓▓▓▓░░░                                │
-│ SpO₂         not enough nights · 3 of 4 recent                                   │
 └───────────────────────────────────────────────────────────────────────────────┘
+Close to the edge
+│ Sleep        slightly lower than usual  6.6 vs 7.1 h 3/7 nights        ◆ high    ~~~│
+▸ Show all 10 overnight metrics            (within usual, learning, not enough data)
 Daytime — only rows that are notable or alert
 │ Steps        higher than usual  9.1k vs 6.0k 6/7 days    since Oct 30  ◆ high    ~~▔│
 
@@ -104,7 +106,7 @@ States:
 | --- | --- |
 | No imports (B-R4) | Centered empty state with three export steps and a button to Import |
 | Importing | Normal page plus a top-bar pill "Import running · parsing 62%" linking to Import (B-I6) |
-| All within | Rows stay; header line "Nothing stands out across 10 overnight metrics." |
+| All within | Answer card "Nothing stands out in your last 7 nights" with "10 overnight metrics within usual"; up to 3 "close to the edge" rows; the rest behind "show all 10" (B-F12) |
 | Stale (B-F2) | Affected rows read "no recent nights"; the banner from B-R2 appears if the import is old |
 | Loading | Row skeletons, never a spinner over a blank page |
 | Read error | Inline `Alert`: "Couldn't load changes. [Retry]"; the shell and top bar stay usable |

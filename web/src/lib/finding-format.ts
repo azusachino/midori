@@ -1,3 +1,4 @@
+import { LEANING_ABS_Z, LEANING_MAX_ROWS } from "@midori/domain/stats";
 import type {
   CheckResultDTO,
   ConfidenceLevel,
@@ -153,16 +154,28 @@ export function isNotableDaytime(row: FindingRowDTO): boolean {
   return row.severity === "notable" || row.severity === "alert";
 }
 
-export function isAllWithin(
-  overnight: readonly FindingRowDTO[],
-  daytime: readonly FindingRowDTO[],
-): boolean {
-  if (overnight.length === 0) return false;
-  const allOvernightWithin = overnight.every(
-    (r) => r.state === "computed" && r.severity === "within",
+/** B-F12: a computed `within` row at or past the leaning |z|, worded "slightly …". */
+export function isLeaning(row: FindingRowDTO): boolean {
+  return (
+    row.state === "computed" &&
+    row.severity === "within" &&
+    row.z !== null &&
+    Math.abs(row.z) >= LEANING_ABS_Z
   );
-  const anyDaytime = daytime.some(isNotableDaytime);
-  return allOvernightWithin && !anyDaytime;
+}
+
+export interface ChangesGroups {
+  standsOut: FindingRowDTO[];
+  closeToEdge: FindingRowDTO[];
+  rest: FindingRowDTO[];
+}
+
+/** B-F12: splits an already ranked overnight list into the three Changes groups. */
+export function groupChangesRows(ranked: readonly FindingRowDTO[]): ChangesGroups {
+  const standsOut = ranked.filter(isNotableDaytime);
+  const closeToEdge = ranked.filter(isLeaning).slice(0, LEANING_MAX_ROWS);
+  const shown = new Set([...standsOut, ...closeToEdge]);
+  return { standsOut, closeToEdge, rest: ranked.filter((row) => !shown.has(row)) };
 }
 
 export interface SparklinePlottedPoint {

@@ -58,6 +58,12 @@ test("Changes page: real server overnight/daytime findings, popovers, last night
   await expect(overnightRows.nth(0)).toHaveAttribute("data-testid", "finding-row-rhr");
   await expect(overnightRows.nth(1)).toHaveAttribute("data-testid", "finding-row-hrv_sdnn");
   await expect(overnightRows.nth(1)).toContainText("lower than usual");
+  // B-F12: the answer leads; rows that stand out are visible without expanding
+  await expect(page.getByTestId("changes-answer")).toContainText("stand out");
+  await expect(
+    page.getByTestId("stands-out-group").getByTestId("finding-row-hrv_sdnn"),
+  ).toBeVisible();
+  await expect(page.getByTestId("finding-row-spo2")).toBeHidden();
   await expect(page.getByTestId("finding-row-spo2")).toContainText("learning · 10 of 14 nights");
 
   // Daytime: notable/alert only (steps alert shown; within metrics hidden)
@@ -106,7 +112,7 @@ test("Changes page: real server overnight/daytime findings, popovers, last night
   expect(errors).toEqual([]);
 });
 
-test('Changes §4 state: "All within" keeps all overnight rows visible at 1440px & 390px (route-intercepted)', async ({
+test('Changes §4 state: "All within" leads with the answer and keeps all rows one click away at 1440px & 390px (route-intercepted)', async ({
   page,
 }) => {
   const errors = trackErrors(page);
@@ -120,17 +126,23 @@ test('Changes §4 state: "All within" keeps all overnight rows visible at 1440px
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await expect(page.getByTestId("all-within-banner")).toHaveText(
-    `Nothing stands out across ${OVERNIGHT_ORDER.length} overnight metrics.`,
+  await expect(page.getByTestId("changes-answer")).toContainText(copy.pages.changes.answerNone);
+  await expect(page.getByTestId("changes-answer")).toContainText(
+    copy.pages.changes.answerDetail(OVERNIGHT_ORDER.length, 0),
   );
-  await expect(
-    page.getByTestId("overnight-section").locator('[data-testid^="finding-row-"]'),
-  ).toHaveCount(OVERNIGHT_ORDER.length);
+  // B-F12: nothing stands out or leans, so every row sits behind "show all", collapsed
+  await expect(page.getByTestId("stands-out-group")).toHaveCount(0);
+  await expect(page.getByTestId("close-to-edge-group")).toHaveCount(0);
+  const allRows = page.getByTestId("overnight-all").locator('[data-testid^="finding-row-"]');
+  await expect(allRows).toHaveCount(OVERNIGHT_ORDER.length);
+  await expect(allRows.first()).toBeHidden();
+  await page.getByText(copy.pages.changes.showAll(OVERNIGHT_ORDER.length)).click();
+  await expect(allRows.first()).toBeVisible();
   await expect(page.getByTestId("daytime-section")).toHaveCount(0);
   await assertNoHorizontalOverflow(page);
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByTestId("all-within-banner")).toBeVisible();
+  await expect(page.getByTestId("changes-answer")).toBeVisible();
   await assertNoHorizontalOverflow(page);
 
   expect(errors).toEqual([]);
