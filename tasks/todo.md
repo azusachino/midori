@@ -609,6 +609,10 @@ in `docs/reviews/`.
 - Changes answer-first redesign (owner-approved): B-F12 groups (stands out / close to the edge
   at |z| ≥1.0, top 3 / the rest behind "show all"), B-F7 and B-F9 amended, ui-design §1 and §4
   updated. Checked against a scratch import of the real export at 1440 and 390 px.
+- Changes next step (owner-approved): B-F13 names checks flagged on at least half the
+  computed overnight rows under the answer; B-F14 adds a what-to-watch line and the next
+  import day under close-to-the-edge rows. Per-metric "often moves with" notes were offered
+  and not taken.
 - Sidebar content pinned to the top on long pages (e2e regression check).
 - `tests/integration/server.test.ts` no longer writes archive zips and snapshots into the
   repo's `data/` dir.

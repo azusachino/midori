@@ -148,6 +148,31 @@ test('Changes §4 state: "All within" leads with the answer and keeps all rows o
   expect(errors).toEqual([]);
 });
 
+test("Changes B-F13/B-F14: shared confounders under the answer and what to watch under close-to-the-edge rows (route-intercepted)", async ({
+  page,
+}) => {
+  const stub = allWithinChangesStub();
+  stub.overnight = stub.overnight.map((row, index) => ({
+    ...row,
+    z: index === 0 ? -1.3 : row.z,
+    checks: [{ key: "os_update", flagged: true }],
+  }));
+  await page.route("**/api/changes", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(stub) }),
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByTestId("shared-checks")).toHaveText(
+    copy.pages.changes.sharedChecks([copy.pages.changes.checkNouns.os_update ?? ""]),
+  );
+  const group = page.getByTestId("close-to-edge-group");
+  await expect(group.locator('[data-testid^="finding-row-"]')).toHaveCount(1);
+  await expect(group).toContainText("slightly lower than usual");
+  await expect(page.getByTestId("watch-hint")).toContainText(copy.pages.changes.watchHint);
+  // The stub's as-of day is long past, so the next look is due now
+  await expect(page.getByTestId("watch-hint")).toContainText("Import again now");
+});
+
 test("Changes §4 states: stale banner (B-R2), stale rows (B-F2), >=10σ cap, low trust, open-ended onset, and no complete night (route-intercepted)", async ({
   page,
 }) => {

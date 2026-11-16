@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ChevronRight, CircleDashed } from "lucide-react";
-import { useId } from "react";
+import { type ReactNode, useId } from "react";
 import type { FindingRowDTO } from "@/api/types";
 import { EmptyState } from "@/components/EmptyState";
 import { FindingRow } from "@/components/FindingRow";
@@ -16,7 +16,9 @@ import {
   formatShortDay,
   groupChangesRows,
   isNotableDaytime,
+  nextLook,
   rankFindingRows,
+  sharedFlaggedChecks,
 } from "@/lib/finding-format";
 import { useShell } from "@/lib/shell-context";
 
@@ -51,6 +53,10 @@ export function ChangesPage() {
     (r) => r.state === "computed" && r.severity === "within",
   ).length;
   const otherCount = overnightRows.filter((r) => r.state !== "computed").length;
+  const sharedNouns = sharedFlaggedChecks(overnightRows).map(
+    (key) => copy.pages.changes.checkNouns[key] ?? key,
+  );
+  const look = changes.asOfDay ? nextLook(changes.asOfDay, new Date()) : null;
 
   return (
     <div className="space-y-6">
@@ -118,6 +124,11 @@ export function ChangesPage() {
             {copy.pages.changes.answerDetail(withinCount, otherCount)}
           </p>
         ) : null}
+        {sharedNouns.length > 0 ? (
+          <p data-testid="shared-checks" className="mt-2 text-sm text-foreground/80">
+            {copy.pages.changes.sharedChecks(sharedNouns)}
+          </p>
+        ) : null}
       </div>
 
       {/* Overnight findings in B-F12 groups; the full ranked set stays one click away (B-F7) */}
@@ -154,6 +165,19 @@ export function ChangesPage() {
             title={copy.pages.changes.closeToEdgeTitle}
             hint={copy.pages.changes.closeToEdgeHint}
             rows={groups.closeToEdge}
+            footer={
+              <p data-testid="watch-hint" className="px-1 text-xs text-muted-foreground">
+                {copy.pages.changes.watchHint}
+                {look && changes.asOfDay ? (
+                  <>
+                    {" "}
+                    {look.due
+                      ? copy.pages.changes.nextLookDue(formatShortDay(changes.asOfDay))
+                      : copy.pages.changes.nextLookSoon(formatShortDay(look.day))}
+                  </>
+                ) : null}
+              </p>
+            }
           />
         ) : null}
 
@@ -213,11 +237,13 @@ function RowGroup({
   title,
   hint,
   rows,
+  footer,
 }: {
   testId: string;
   title: string;
   hint: string;
   rows: readonly FindingRowDTO[];
+  footer?: ReactNode;
 }) {
   return (
     <div data-testid={testId} className="space-y-2">
@@ -230,6 +256,7 @@ function RowGroup({
           <FindingRow key={row.metric} row={row} />
         ))}
       </div>
+      {footer}
     </div>
   );
 }

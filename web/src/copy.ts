@@ -2,6 +2,11 @@
  * Single centralized UI copy module (docs/design.md + docs/ui-design.md).
  * Neutral language only (B-F9): never "better", "worse", "caused", or "your watch is wrong".
  */
+function joinAnd(items: string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 export const copy = {
   app: {
     name: "midori",
@@ -169,6 +174,19 @@ export const copy = {
         other > 0
           ? `${within} overnight within usual · ${other} still learning or short of data.`
           : `${within} overnight ${within === 1 ? "metric" : "metrics"} within usual.`,
+      sharedChecks: (nouns: string[]) =>
+        `Inside this window: ${joinAnd(nouns)}. Small shifts may come from ${nouns.length === 1 ? "this" : "these"} rather than from you.`,
+      checkNouns: {
+        device_change: "a watch change",
+        os_update: "an OS update",
+        partial_nights: "partial nights",
+        tz_change: "a timezone change",
+        missing_nights: "missing nights",
+        low_trust: "low-trust data",
+      } as Record<string, string>,
+      watchHint: "These become findings only if the shift holds through a full new week of nights.",
+      nextLookSoon: (day: string) => `Import again around ${day}.`,
+      nextLookDue: (asOf: string) => `Import again now — your data ends ${asOf}.`,
       standsOutTitle: "Stands out",
       closeToEdgeTitle: "Close to the edge",
       closeToEdgeHint: "within usual, nearest the band edge",
