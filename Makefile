@@ -8,20 +8,21 @@ E2E_INSTALL_FLAGS ?=
 # manifests (imagePullPolicy: Never there). Never build with --pull aliases
 # that would retag from a registry: the base is a pinned public tag.
 IMAGE_NS := azusachino.com
-TAG ?= v0.2.0
+# Image tags are pre-release candidates (0.0.1-rcN), not releases; always pass TAG.
+TAG ?= $(error TAG is required, e.g. TAG=0.0.1-rc1)
 SOURCE_REVISION ?= $(shell git rev-parse HEAD)$(if $(shell git status --porcelain),-dirty)
 .PHONY: image-app image-local images smoke-container
 
-image-app: ## Build the midori image and import it into the local k3s containerd store (TAG=v...)
+image-app: ## Build the midori image and import it into the local k3s containerd store (TAG=0.0.1-rcN)
 	podman build --build-arg SOURCE_REVISION=$(SOURCE_REVISION) -t $(IMAGE_NS)/midori:$(TAG) .
 	podman save $(IMAGE_NS)/midori:$(TAG) | sudo k3s ctr images import --all-platforms --digests --skip-digest-for-named -
 
 images: image-app ## Alias used by the ship-to-cluster playbook
 
-image-local: ## Build only, no containerd import (TAG=v...)
+image-local: ## Build only, no containerd import (TAG=0.0.1-rcN)
 	podman build --build-arg SOURCE_REVISION=$(SOURCE_REVISION) -t $(IMAGE_NS)/midori:$(TAG) .
 
-smoke-container: ## In-container check: image hygiene + import + briefing + MCP (TAG=v...)
+smoke-container: ## In-container check: image hygiene + import + briefing + MCP (TAG=0.0.1-rcN)
 	bun scripts/smoke-container.ts --image $(IMAGE_NS)/midori:$(TAG)
 
 e2e: ## Verify the web UI in headless Chromium (ARGS='-g "name"' to filter)

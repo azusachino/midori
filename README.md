@@ -32,8 +32,8 @@ MCP server.
 | `bun src/cli.ts mcp [--db <path>]` | read-only MCP server over stdio |
 | `bun run dev` | API (:5174) + Vite web (:5173, `/api` proxied) |
 | `bun run build` / `bun run start` | production web build; serve API + web + MCP (`/mcp`) |
-| `make image-app TAG=v…` | build the image and import it into local k3s containerd |
-| `make smoke-container TAG=v…` | in-container smoke (synthetic import, changes, MCP, backup) |
+| `make image-app TAG=<tag>` | build the image and import it into local k3s containerd |
+| `make smoke-container TAG=<tag>` | in-container smoke (synthetic import, changes, MCP, backup) |
 
 ## Rules
 
