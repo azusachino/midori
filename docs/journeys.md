@@ -62,7 +62,10 @@ Metric set:
 > "My readiness has felt off for a week. Is anything actually different?"
 
 1. Open midori → **Changes**. The top bar says "Data through Nov 7 · imported 8 days ago".
-2. The *Overnight* list shows every overnight metric in ranked order (B-F7). Each row shows:
+2. Changes opens with a one-line answer (B-F12): what stands out, or "Nothing stands out in
+   your last 7 nights". Rows that stand out (notable or alert) come first; the metrics closest
+   to the edge ("slightly lower than usual") follow, and the remaining rows sit behind a
+   "show all" toggle, still in ranked order (B-F7). Each row shows:
    - the direction in neutral words ("lower than usual")
    - frequency ("5 of the last 7 nights")
    - onset ("since Oct 31", or "at least since Oct 10", B-F11)
@@ -175,11 +178,12 @@ Metric set:
 | B-F4 | z | σ = max(1.4826·MAD, registry floor†). Floors: resp 0.5 /min, SpO2 1 pt, wrist temp 0.05 °C, HRV 2 ms, RHR / sleep HR / HR 1 bpm, sleep 0.25 h, deep / REM 0.1 h, steps 250, active energy 100 kJ. z = (median recent − median baseline) / σ, with displayed and ranked \|z\| capped at 10 ("≥10σ") |
 | B-F5 | Severity | \|z\| ≥1.5 notable, ≥2.5 alert, else within |
 | B-F6 | Confidence (first match wins) | 1. `low` if trust is low or baseline <14. 2. `medium` if baseline <24 or recent <6. 3. otherwise `high` |
-| B-F7 | Ranking (Changes and `changes()`) | Computed rows by capped \|z\| desc, then confidence high→low; then `warming_up`; then `insufficient`. Ties use registry order. Daytime rows appear on Changes only when notable or alert |
+| B-F7 | Ranking (Changes and `changes()`) | Computed rows by capped \|z\| desc, then confidence high→low; then `warming_up`; then `insufficient`. Ties use registry order. Daytime rows appear on Changes only when notable or alert. Changes shows the ranked overnight set in B-F12 groups; `changes()` returns it whole |
 | B-F8 | Frequency | k = recent units outside the band (baseline median ± 1.5σ) |
-| B-F9 | Wording | "higher/lower than usual / within usual". Never "better/worse", "caused by", "your watch is wrong" |
+| B-F9 | Wording | "higher/lower than usual / slightly higher/lower than usual (B-F12) / within usual". Never "better/worse", "caused by", "your watch is wrong" |
 | B-F10 | Trend-only metrics (`vo2max`) | Charted with epochs and seams; no finding, no Changes row |
 | B-F11 | Onset (notable/alert rows) | Walk back from rank 1 over usable units outside the band on the same side, tolerating one inside unit. Onset = the first unit of that run: "since Oct 31". If the run reaches rank 35 or the stint start: "at least since …" |
+| B-F12 | Changes grouping | *Stands out*: notable/alert rows. *Close to the edge*: `within` rows with \|z\| ≥1.0†, top 3, worded "slightly higher/lower than usual"; display only (no tint, no onset, not a finding). *All metrics*: every other overnight row, collapsed behind "show all N". The answer line reads "N stand out" when any row stands out, else "Nothing stands out in your last 7 nights" |
 
 ### Checks (confounders, B-C)
 

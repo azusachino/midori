@@ -9,6 +9,9 @@ export const RECENT_MAX_OFFSET_DAYS = 0; // anchor itself inclusive
 
 export const NOTABLE_ABS_Z = 1.5;
 export const ALERT_ABS_Z = 2.5;
+/** B-F12: within rows at or past this |z| are "close to the edge" on Changes (display only). */
+export const LEANING_ABS_Z = 1.0;
+export const LEANING_MAX_ROWS = 3;
 
 export const MAD_SCALE = 1.4826;
 export const MAX_ABS_Z = 10;

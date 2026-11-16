@@ -8,7 +8,8 @@ import {
   formatRangeSpan,
   formatRecentVsBaseline,
   formatShortDay,
-  isAllWithin,
+  groupChangesRows,
+  isLeaning,
   isNotableDaytime,
   rankFindingRows,
 } from "../../web/src/lib/finding-format";
@@ -121,17 +122,31 @@ describe("finding-format", () => {
     ]);
   });
 
-  test("isAllWithin and isNotableDaytime reflect §4/B-F7 gating", () => {
-    const withinOvernight = [makeRow({ metric: "sleep_h" }), makeRow({ metric: "rhr" })];
+  test("isNotableDaytime keeps only notable/alert daytime rows (B-F7)", () => {
     const withinDay = makeRow({ metric: "active_kj", kind: "daytime", severity: "within" });
     const notableDay = makeRow({ metric: "steps", kind: "daytime", severity: "notable" });
-
     expect(isNotableDaytime(withinDay)).toBe(false);
     expect(isNotableDaytime(notableDay)).toBe(true);
-    expect(isAllWithin(withinOvernight, [withinDay])).toBe(true);
-    expect(isAllWithin(withinOvernight, [notableDay])).toBe(false);
-    expect(isAllWithin([makeRow({ metric: "wrist_temp", state: "warming_up" })], [])).toBe(false);
-    expect(isAllWithin([], [])).toBe(false);
+  });
+
+  test("B-F12 groups: stands out, top-3 close to the edge (|z| >= 1), the rest", () => {
+    const within = (metric: string, z: number) =>
+      makeRow({ metric, state: "computed", severity: "within", z });
+    const ranked = [
+      makeRow({ metric: "hrv_sdnn", state: "computed", severity: "alert", z: -3 }),
+      within("rhr", 1.4),
+      within("sleep_hr", -1.2),
+      within("resp_rate", 1.1),
+      within("sleep_h", 1.0),
+      within("deep_h", 0.99),
+      makeRow({ metric: "wrist_temp", state: "warming_up", severity: "within", z: null }),
+    ];
+    expect(isLeaning(within("x", -1))).toBe(true);
+    expect(isLeaning(within("x", 0.99))).toBe(false);
+    const g = groupChangesRows(ranked);
+    expect(g.standsOut.map((r) => r.metric)).toEqual(["hrv_sdnn"]);
+    expect(g.closeToEdge.map((r) => r.metric)).toEqual(["rhr", "sleep_hr", "resp_rate"]);
+    expect(g.rest.map((r) => r.metric)).toEqual(["sleep_h", "deep_h", "wrist_temp"]);
   });
 
   test("flaggedChecksFor returns only flagged checks", () => {

@@ -65,6 +65,17 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render against real server",
   await page.getByRole("tab", { name: copy.pages.metricDetail.tabs.long }).click();
   await expect(page).toHaveURL(/tab=long/);
 
+  // Long page: the sidebar watch card sits under the nav and stays on screen when scrolled
+  const navBox = await page.getByTestId("sidebar-nav").boundingBox();
+  const watchTop = (await page.getByTestId("sidebar-watch").boundingBox())?.y ?? Infinity;
+  expect(watchTop - ((navBox?.y ?? 0) + (navBox?.height ?? 0))).toBeLessThan(64);
+  await page.setViewportSize({ width: 1440, height: 480 });
+  expect(await page.evaluate(() => document.body.scrollHeight > window.innerHeight)).toBe(true);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const scrolled = await page.getByTestId("sidebar-watch").boundingBox();
+  expect((scrolled?.y ?? -1) >= 0 && (scrolled?.y ?? 480) < 480).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
   // Navigate to Devices & verify timeline EChart
   await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.devices }).click();
   await expect(page).toHaveURL(/\/devices$/);

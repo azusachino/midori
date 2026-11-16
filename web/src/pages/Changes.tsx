@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { AlertTriangle, CircleDashed } from "lucide-react";
+import { AlertTriangle, ChevronRight, CircleDashed } from "lucide-react";
 import { useId } from "react";
+import type { FindingRowDTO } from "@/api/types";
 import { EmptyState } from "@/components/EmptyState";
 import { FindingRow } from "@/components/FindingRow";
 import { LastNightCard } from "@/components/LastNightCard";
@@ -13,7 +14,7 @@ import {
   formatDayWithWeekday,
   formatRangeSpan,
   formatShortDay,
-  isAllWithin,
+  groupChangesRows,
   isNotableDaytime,
   rankFindingRows,
 } from "@/lib/finding-format";
@@ -44,7 +45,12 @@ export function ChangesPage() {
 
   const overnightRows = rankFindingRows(changes.overnight);
   const daytimeRows = rankFindingRows(changes.daytime.filter(isNotableDaytime));
-  const allWithin = isAllWithin(overnightRows, daytimeRows);
+  const groups = groupChangesRows(overnightRows);
+  const standsOutCount = groups.standsOut.length + daytimeRows.length;
+  const withinCount = overnightRows.filter(
+    (r) => r.state === "computed" && r.severity === "within",
+  ).length;
+  const otherCount = overnightRows.filter((r) => r.state !== "computed").length;
 
   return (
     <div className="space-y-6">
@@ -97,38 +103,81 @@ export function ChangesPage() {
         </Alert>
       ) : null}
 
-      {/* Overnight findings (always full overnight set, B-F7) */}
+      {/* One-line answer (B-F12) */}
+      <div
+        data-testid="changes-answer"
+        className="rounded-lg border border-border bg-card px-5 py-4"
+      >
+        <p className="text-lg font-medium text-foreground">
+          {standsOutCount > 0
+            ? copy.pages.changes.answerSome(standsOutCount)
+            : copy.pages.changes.answerNone}
+        </p>
+        {overnightRows.length > 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+            {copy.pages.changes.answerDetail(withinCount, otherCount)}
+          </p>
+        ) : null}
+      </div>
+
+      {/* Overnight findings in B-F12 groups; the full ranked set stays one click away (B-F7) */}
       <section
         aria-labelledby={overnightHeadingId}
         data-testid="overnight-section"
         className="space-y-3"
       >
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div className="flex flex-wrap items-baseline gap-2.5">
-            <h2 id={overnightHeadingId} className="text-sm font-medium text-foreground">
-              {copy.pages.changes.overnightTitle}
-            </h2>
-            {allWithin ? (
-              <span data-testid="all-within-banner" className="text-xs text-muted-foreground">
-                {copy.pages.changes.allWithin(overnightRows.length)}
-              </span>
-            ) : null}
-          </div>
-          <span className="text-xs text-muted-foreground">{copy.pages.changes.rankedHint}</span>
-        </div>
+        <h2 id={overnightHeadingId} className="sr-only">
+          {copy.pages.changes.overnightTitle}
+        </h2>
 
-        <div className="divide-y divide-border rounded-lg border border-border bg-card">
-          {overnightRows.length > 0 ? (
-            overnightRows.map((row) => <FindingRow key={row.metric} row={row} />)
-          ) : (
-            <p
-              data-testid="overnight-empty"
-              className="px-4 py-6 text-center text-sm text-muted-foreground"
-            >
-              {copy.pages.changes.emptyOvernight}
-            </p>
-          )}
-        </div>
+        {overnightRows.length === 0 ? (
+          <p
+            data-testid="overnight-empty"
+            className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground"
+          >
+            {copy.pages.changes.emptyOvernight}
+          </p>
+        ) : null}
+
+        {groups.standsOut.length > 0 ? (
+          <RowGroup
+            testId="stands-out-group"
+            title={copy.pages.changes.standsOutTitle}
+            hint={copy.pages.changes.rankedHint}
+            rows={groups.standsOut}
+          />
+        ) : null}
+
+        {groups.closeToEdge.length > 0 ? (
+          <RowGroup
+            testId="close-to-edge-group"
+            title={copy.pages.changes.closeToEdgeTitle}
+            hint={copy.pages.changes.closeToEdgeHint}
+            rows={groups.closeToEdge}
+          />
+        ) : null}
+
+        {groups.rest.length > 0 ? (
+          <details data-testid="overnight-all" className="group/all">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+              <ChevronRight
+                aria-hidden="true"
+                className="h-4 w-4 transition-transform group-open/all:rotate-90"
+              />
+              <span className="group-open/all:hidden">
+                {groups.rest.length === overnightRows.length
+                  ? copy.pages.changes.showAll(overnightRows.length)
+                  : copy.pages.changes.showMore(groups.rest.length)}
+              </span>
+              <span className="hidden group-open/all:inline">{copy.pages.changes.hideAll}</span>
+            </summary>
+            <div className="mt-2 divide-y divide-border rounded-lg border border-border bg-card">
+              {groups.rest.map((row) => (
+                <FindingRow key={row.metric} row={row} />
+              ))}
+            </div>
+          </details>
+        ) : null}
       </section>
 
       {/* Daytime findings — shown only when notable or alert (B-F7) */}
@@ -155,6 +204,32 @@ export function ChangesPage() {
 
       {/* Last complete night card (B-R3) */}
       <LastNightCard lastNight={changes.lastNight} />
+    </div>
+  );
+}
+
+function RowGroup({
+  testId,
+  title,
+  hint,
+  rows,
+}: {
+  testId: string;
+  title: string;
+  hint: string;
+  rows: readonly FindingRowDTO[];
+}) {
+  return (
+    <div data-testid={testId} className="space-y-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+        <span className="text-xs text-muted-foreground">{hint}</span>
+      </div>
+      <div className="divide-y divide-border rounded-lg border border-border bg-card">
+        {rows.map((row) => (
+          <FindingRow key={row.metric} row={row} />
+        ))}
+      </div>
     </div>
   );
 }

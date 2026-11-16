@@ -122,54 +122,57 @@ export function Shell({ children }: { children: ReactNode }) {
 
       <div className="flex flex-1">
         {/* Desktop sidebar (>=768px) */}
-        <aside className="hidden md:flex md:w-52 md:shrink-0 md:flex-col md:justify-between md:border-r md:border-border md:bg-card/30 md:p-4">
-          <nav aria-label={copy.nav.label} className="space-y-1" data-testid="sidebar-nav">
-            {NAV_ITEMS.map((item) => {
-              const active = isRouteActive(pathname, item.to, item.matchPrefix);
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors no-underline",
-                    active
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          {primaryWatch ? (
-            <div className="pt-6" data-testid="sidebar-watch">
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                <span>{copy.sidebar.watchHeading}</span>
-                <Separator className="flex-1" />
-              </div>
-              <div className="rounded-md border border-border bg-card p-3 space-y-1">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: epochColor(primaryWatch.colorIndex) }}
-                  />
-                  <span className="truncate">{primaryWatch.label}</span>
-                </div>
-                {primaryWatch.warmingUp ? (
-                  <p className="text-xs text-learning tabular-nums">
-                    {copy.sidebar.learningProgress(
-                      primaryWatch.warmingUp.current,
-                      primaryWatch.warmingUp.target,
+        {/* The column stretches with the page; its content stays pinned at the top. */}
+        <aside className="hidden md:block md:w-52 md:shrink-0 md:border-r md:border-border md:bg-card/30">
+          <div className="md:sticky md:top-0 md:max-h-dvh md:overflow-y-auto md:p-4">
+            <nav aria-label={copy.nav.label} className="space-y-1" data-testid="sidebar-nav">
+              {NAV_ITEMS.map((item) => {
+                const active = isRouteActive(pathname, item.to, item.matchPrefix);
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors no-underline",
+                      active
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
-                  </p>
-                ) : null}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {primaryWatch ? (
+              <div className="pt-6" data-testid="sidebar-watch">
+                <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <span>{copy.sidebar.watchHeading}</span>
+                  <Separator className="flex-1" />
+                </div>
+                <div className="rounded-md border border-border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <span
+                      aria-hidden="true"
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: epochColor(primaryWatch.colorIndex) }}
+                    />
+                    <span className="truncate">{primaryWatch.label}</span>
+                  </div>
+                  {primaryWatch.warmingUp ? (
+                    <p className="text-xs text-learning tabular-nums">
+                      {copy.sidebar.learningProgress(
+                        primaryWatch.warmingUp.current,
+                        primaryWatch.warmingUp.target,
+                      )}
+                    </p>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </aside>
 
         {/* Page content: max-width 1200px, 24px gutters */}
