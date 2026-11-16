@@ -70,7 +70,7 @@ function harness(
   const spoolDir = `${dbPath}.spool`;
   const app = createApp({
     db,
-    upload: { dbPath, archiveDir, spoolDir, ...opts },
+    upload: { dbPath, archiveDir, spoolDir, backupDir: `.backups`, ...opts },
   });
   return {
     db,
@@ -258,7 +258,12 @@ describe("POST /api/imports", () => {
       utimesSync(expired, old, old);
       createApp({
         db: h.db,
-        upload: { dbPath: h.dbPath, archiveDir: h.archiveDir, spoolDir: h.spoolDir },
+        upload: {
+          dbPath: h.dbPath,
+          archiveDir: h.archiveDir,
+          spoolDir: h.spoolDir,
+          backupDir: `.backups`,
+        },
       });
       expect(existsSync(expired)).toBe(false);
       expect(existsSync(part)).toBe(false);
