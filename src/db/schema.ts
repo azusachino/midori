@@ -25,6 +25,7 @@ export const imports = sqliteTable("imports", {
   progressTotal: integer("progress_total"),
   newUsableNights: integer("new_usable_nights"),
   newEpochs: text("new_epochs"),
+  asOfDay: text("as_of_day"),
 });
 
 export const sources = sqliteTable("sources", {

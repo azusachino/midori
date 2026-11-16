@@ -28,9 +28,47 @@ describe("migrations", () => {
       "0003_derived.sql",
       "0004_imports.sql",
       "0005_import_progress_summary.sql",
+      "0006_import_as_of_day.sql",
     ]);
     const second = applyMigrations(db);
     expect(second).toEqual([]);
+    db.close();
+  });
+
+  test("migration 0006 backfills as_of_day on the newest done import only", () => {
+    const v5Migrations = mkdtempSync(join(dir, "migrations-v5-"));
+    for (const name of [
+      "0001_init.sql",
+      "0002_capture.sql",
+      "0003_derived.sql",
+      "0004_imports.sql",
+      "0005_import_progress_summary.sql",
+    ]) {
+      copyFileSync(join(import.meta.dir, "../../migrations", name), join(v5Migrations, name));
+    }
+    const db = new Database(":memory:");
+    applyMigrations(db, v5Migrations);
+    db.run(
+      `INSERT INTO imports (created_at, zip_name, zip_size, status) VALUES
+       ('2026-11-01T00:00:00Z', 'a.zip', 1, 'done'),
+       ('2026-11-08T00:00:00Z', 'b.zip', 1, 'done'),
+       ('2026-11-09T00:00:00Z', 'c.zip', 1, 'failed')`,
+    );
+    db.run(
+      `INSERT INTO epochs (source_name, device_hw, kind, first_day, last_day, days_present)
+       VALUES ('w', 'Watch1,1', 'watch', '2026-11-01', '2026-11-07', 7)`,
+    );
+    db.run(
+      `INSERT INTO metric_values (metric, epoch_id, unit_day, unit_kind, value, n, usable)
+       VALUES ('sleep_h', 1, '2026-11-06', 'night', 7, 1, 1), ('sleep_h', 1, '2026-11-07', 'night', 7, 1, 0)`,
+    );
+    expect(applyMigrations(db)).toEqual(["0006_import_as_of_day.sql"]);
+    const rows = db.query("SELECT zip_name, as_of_day FROM imports ORDER BY id").all();
+    expect(rows).toEqual([
+      { zip_name: "a.zip", as_of_day: null },
+      { zip_name: "b.zip", as_of_day: "2026-11-06" },
+      { zip_name: "c.zip", as_of_day: null },
+    ]);
     db.close();
   });
 
@@ -56,7 +94,11 @@ describe("migrations", () => {
        VALUES ('Synthetic Watch', '2026-01-06T00:00:00.000Z', '2026-01-06T00:01:00.000Z', 1, 7)`,
     );
 
-    expect(applyMigrations(db)).toEqual(["0004_imports.sql", "0005_import_progress_summary.sql"]);
+    expect(applyMigrations(db)).toEqual([
+      "0004_imports.sql",
+      "0005_import_progress_summary.sql",
+      "0006_import_as_of_day.sql",
+    ]);
 
     const imported = db.query("SELECT id, export_date FROM imports").get() as {
       id: number;

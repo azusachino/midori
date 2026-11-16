@@ -56,7 +56,7 @@ export function listImports(db: Database): ImportDTO[] {
       .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
       new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
       records_seen, records_inserted, records_deduped, duration_ms,
-      (SELECT MAX(unit_day) FROM metric_values WHERE metric='sleep_h' AND usable=1) AS as_of_day
+      as_of_day
       FROM imports ORDER BY id DESC`)
       .all() as ImportRow[]
   ).map((r) => importDto(r));
@@ -111,7 +111,7 @@ export function getImport(db: Database, id: number): ImportDTO | null {
     .query(`SELECT id, created_at, zip_name, zip_size, status, stage, progress, progress_total,
       new_usable_nights, new_epochs, error, export_version, export_date, older_than_stored,
       records_seen, records_inserted, records_deduped, duration_ms,
-      (SELECT MAX(unit_day) FROM metric_values WHERE metric='sleep_h' AND usable=1) AS as_of_day
+      as_of_day
       FROM imports WHERE id=?`)
     .get(id) as ImportRow | null;
   return row ? importDto(row) : null;

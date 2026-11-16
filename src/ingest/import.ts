@@ -181,7 +181,7 @@ export async function runImport(
     setStatus("done");
     db.run(
       `UPDATE imports SET progress = ?, progress_total = ?, records_seen = ?, records_inserted = ?, records_deduped = ?,
-         new_usable_nights = ?, new_epochs = ?, duration_ms = ?, export_version = ?, export_date = ? WHERE id = ?`,
+         new_usable_nights = ?, new_epochs = ?, duration_ms = ?, export_version = ?, export_date = ?, as_of_day = ? WHERE id = ?`,
       [
         parsedBytes,
         handle.uncompressedSize,
@@ -193,6 +193,7 @@ export async function runImport(
         durationMs,
         stats.exportVersion,
         stats.exportDate,
+        asOfDay,
         id,
       ],
     );
