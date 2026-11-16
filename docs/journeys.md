@@ -184,6 +184,8 @@ Metric set:
 | B-F10 | Trend-only metrics (`vo2max`) | Charted with epochs and seams; no finding, no Changes row |
 | B-F11 | Onset (notable/alert rows) | Walk back from rank 1 over usable units outside the band on the same side, tolerating one inside unit. Onset = the first unit of that run: "since Oct 31". If the run reaches rank 35 or the stint start: "at least since …" |
 | B-F12 | Changes grouping | *Stands out*: notable/alert rows. *Close to the edge*: `within` rows with \|z\| ≥1.0†, top 3, worded "slightly higher/lower than usual"; display only (no tint, no onset, not a finding). *All metrics*: every other overnight row, collapsed behind "show all N". The answer line reads "N stand out" when any row stands out, else "Nothing stands out in your last 7 nights" |
+| B-F13 | Shared confounders (answer card) | A check flagged on at least half the computed overnight rows is named under the answer: "Inside this window: a watch change and an OS update. Small shifts may come from these rather than from you." No line when no check reaches half |
+| B-F14 | What to watch (close to the edge) | Under the close-to-the-edge rows: "These become findings only if the shift holds through a full new week of nights." plus the next look: "Import again around <as-of + 7 days>", or "Import again now — your data ends <as-of>" once that day has passed |
 
 ### Checks (confounders, B-C)
 

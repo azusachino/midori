@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { FindingRowDTO } from "../../web/src/api/types";
+import { copy } from "../../web/src/copy";
 import {
   buildSparklineGeometry,
   displayUnit,
@@ -11,7 +12,9 @@ import {
   groupChangesRows,
   isLeaning,
   isNotableDaytime,
+  nextLook,
   rankFindingRows,
+  sharedFlaggedChecks,
 } from "../../web/src/lib/finding-format";
 
 function makeRow(overrides: Partial<FindingRowDTO>): FindingRowDTO {
@@ -147,6 +150,40 @@ describe("finding-format", () => {
     expect(g.standsOut.map((r) => r.metric)).toEqual(["hrv_sdnn"]);
     expect(g.closeToEdge.map((r) => r.metric)).toEqual(["rhr", "sleep_hr", "resp_rate"]);
     expect(g.rest.map((r) => r.metric)).toEqual(["sleep_h", "deep_h", "wrist_temp"]);
+  });
+
+  test("B-F13 names checks flagged on at least half the computed rows", () => {
+    const flagged = (metric: string, keys: string[]) =>
+      makeRow({
+        metric,
+        state: "computed",
+        checks: keys.map((key) => ({ key, flagged: true })) as FindingRowDTO["checks"],
+      });
+    const rows = [
+      flagged("rhr", ["device_change", "os_update"]),
+      flagged("sleep_hr", ["os_update"]),
+      flagged("resp_rate", ["os_update", "tz_change"]),
+      flagged("sleep_h", []),
+      makeRow({ metric: "wrist_temp", state: "warming_up", checks: [] }),
+    ];
+    expect(sharedFlaggedChecks(rows)).toEqual(["os_update"]);
+    expect(sharedFlaggedChecks(rows.slice(0, 2))).toEqual(["device_change", "os_update"]);
+    expect(sharedFlaggedChecks([])).toEqual([]);
+    expect(copy.pages.changes.sharedChecks(["a watch change", "an OS update"])).toBe(
+      "Inside this window: a watch change and an OS update. Small shifts may come from these rather than from you.",
+    );
+  });
+
+  test("B-F14 next look is as-of + 7 days and due once that day is reached", () => {
+    expect(nextLook("2026-11-06", new Date(2026, 10, 10))).toEqual({
+      day: "2026-11-13",
+      due: false,
+    });
+    expect(nextLook("2026-11-06", new Date(2026, 10, 13))).toEqual({
+      day: "2026-11-13",
+      due: true,
+    });
+    expect(nextLook("bad", new Date())).toBeNull();
   });
 
   test("flaggedChecksFor returns only flagged checks", () => {

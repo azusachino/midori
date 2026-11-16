@@ -150,6 +150,31 @@ export function rankFindingRows(rows: readonly FindingRowDTO[]): FindingRowDTO[]
     .map((item) => item.row);
 }
 
+/** B-F13: check keys flagged on at least half the computed rows, in first-seen order. */
+export function sharedFlaggedChecks(rows: readonly FindingRowDTO[]): CheckResultDTO["key"][] {
+  const computed = rows.filter((r) => r.state === "computed");
+  if (computed.length === 0) return [];
+  const counts = new Map<CheckResultDTO["key"], number>();
+  for (const row of computed) {
+    for (const check of row.checks) {
+      if (check.flagged) counts.set(check.key, (counts.get(check.key) ?? 0) + 1);
+    }
+  }
+  return [...counts].filter(([, n]) => n * 2 >= computed.length).map(([key]) => key);
+}
+
+/** B-F14: the day a full new recent window exists (as-of + 7), and whether it has passed. */
+export function nextLook(asOfDay: string, today: Date): { day: string; due: boolean } | null {
+  const asOf = parseIsoDayUtc(asOfDay);
+  if (!asOf) return null;
+  const next = new Date(asOf.getTime() + 7 * 86_400_000);
+  const day = next.toISOString().slice(0, 10);
+  const todayIso = new Date(today.getTime() - today.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
+  return { day, due: todayIso >= day };
+}
+
 export function isNotableDaytime(row: FindingRowDTO): boolean {
   return row.severity === "notable" || row.severity === "alert";
 }

@@ -65,6 +65,8 @@ Changes                                                        as of Nov 7 (Fri)
 └───────────────────────────────────────────────────────────────────────────────┘
 
 2 overnight metrics stand out in your last 7 nights.            (answer, B-F12)
+Inside this window: a watch change and an OS update. Small shifts may come
+from these rather than from you.                                (B-F13)
 
 Stands out                                        ranked by distance from usual
 ┌───────────────────────────────────────────────────────────────────────────────┐
@@ -73,6 +75,8 @@ Stands out                                        ranked by distance from usual
 └───────────────────────────────────────────────────────────────────────────────┘
 Close to the edge
 │ Sleep        slightly lower than usual  6.6 vs 7.1 h 3/7 nights        ◆ high    ~~~│
+These become findings only if the shift holds through a full new week of nights.
+Import again around Nov 14.                                      (B-F14)
 ▸ Show all 10 overnight metrics            (within usual, learning, not enough data)
 Daytime — only rows that are notable or alert
 │ Steps        higher than usual  9.1k vs 6.0k 6/7 days    since Oct 30  ◆ high    ~~▔│
