@@ -4,15 +4,15 @@
  */
 
 export const THEME_DEFAULTS = {
-  background: "#09090b",
+  background: "#0a0c0b",
   foreground: "#f4f4f5",
-  card: "#18181b",
-  muted: "#27272a",
+  card: "#121614",
+  muted: "#1a201d",
   mutedForeground: "#a1a1aa",
-  border: "#27272a",
-  borderStrong: "#3f3f46",
+  border: "#232b27",
+  borderStrong: "#37423c",
   accent: "#34d399",
-  primaryForeground: "#09090b",
+  primaryForeground: "#0a0c0b",
   notable: "#fbbf24",
   alert: "#fb7185",
   learning: "#38bdf8",

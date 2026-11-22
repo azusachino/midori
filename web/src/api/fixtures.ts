@@ -325,6 +325,7 @@ export function emptyChangesStub(): ChangesDTO {
     lastNight: null,
     sinceLastImport: null,
     recentNotes: [],
+    latestBriefing: null,
   };
 }
 
@@ -373,6 +374,7 @@ export function changesStub(imports: ImportDTO[] = []): ChangesDTO {
     },
     sinceLastImport: null,
     recentNotes: [],
+    latestBriefing: null,
   };
 }
 

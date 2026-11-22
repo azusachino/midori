@@ -10,6 +10,7 @@ import type {
   UnitEvidenceDTO,
 } from "../domain/api";
 import { METRICS } from "../domain/metrics";
+import { latestBriefing } from "../stats/briefings";
 import { latestSinceLastImport } from "../stats/diff";
 import { readFindings } from "../stats/findings";
 import { listNotes } from "../stats/notes";
@@ -298,6 +299,7 @@ export function getChanges(db: Database): ChangesDTO {
     daytime: rows.filter((r) => r.kind === "daytime"),
     sinceLastImport: latestSinceLastImport(db),
     recentNotes: day ? listNotes(db, addDays(day, -34), null) : listNotes(db),
+    latestBriefing: latestBriefing(db),
     lastNight: night
       ? {
           date: night.date,

@@ -1,6 +1,15 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { getBuildInfo } from "../domain/build";
+import {
+  BRIEFING_LIMIT_DEFAULT,
+  BRIEFING_LIMIT_MAX,
+  createBriefing,
+  deleteBriefing,
+  isValidBriefingLimit,
+  listBriefings,
+  validateBriefingFields,
+} from "../stats/briefings";
 import { getHealthContext, isValidContextDays } from "../stats/context";
 import { getImportDiff } from "../stats/diff";
 import {
@@ -97,6 +106,39 @@ export function createApp({ db, upload }: RouteDeps): Hono {
       return c.json({ error: "from and to must be calendar dates", retryable: false }, 400);
     return c.json({ notes: listNotes(db, from || null, to || null) });
   });
+
+  // B-B1: agent briefings. Reads are always available; mutations only where uploads are.
+  app.get("/api/briefings", (c) => {
+    const raw = c.req.query("limit");
+    const limit = raw === undefined || raw === "" ? BRIEFING_LIMIT_DEFAULT : Number(raw);
+    if (!isValidBriefingLimit(limit))
+      return c.json(
+        { error: `limit must be an integer between 1 and ${BRIEFING_LIMIT_MAX}`, retryable: false },
+        400,
+      );
+    return c.json({ briefings: listBriefings(db, limit) });
+  });
+  if (upload) {
+    app.post("/api/briefings", async (c) => {
+      const body: unknown = await c.req.json().catch(() => null);
+      const validation = validateBriefingFields(body);
+      if (!validation.ok) return c.json({ error: validation.error, retryable: false }, 400);
+      return c.json(createBriefing(db, validation.value), 201);
+    });
+    app.delete("/api/briefings/:id", (c) => {
+      const id = Number(c.req.param("id"));
+      if (!Number.isInteger(id) || id <= 0 || !deleteBriefing(db, id))
+        return c.json({ error: "briefing not found", retryable: false }, 404);
+      return c.json({ deleted: true as const });
+    });
+  } else {
+    app.post("/api/briefings", (c) =>
+      c.json({ error: "briefings are read-only", retryable: false }, 405),
+    );
+    app.delete("/api/briefings/:id", (c) =>
+      c.json({ error: "briefings are read-only", retryable: false }, 405),
+    );
+  }
   if (upload) {
     app.post("/api/notes", async (c) => {
       const body: unknown = await c.req.json().catch(() => null);

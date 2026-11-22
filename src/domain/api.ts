@@ -99,6 +99,11 @@ export interface CheckDTO {
 
 export type NoteCategory = "illness" | "travel" | "alcohol" | "medication" | "stress" | "other";
 
+/** B-A7: who wrote a note — the owner, or an auditable agent write. */
+export type NoteAuthor = "owner" | "agent";
+
+export const NOTE_AUTHORS: readonly NoteAuthor[] = ["owner", "agent"];
+
 export interface NoteDTO {
   id: number;
   startDay: string;
@@ -107,6 +112,20 @@ export interface NoteDTO {
   label: string;
   createdAt: string;
   updatedAt: string;
+  author: NoteAuthor;
+  authorName: string | null;
+}
+
+/** B-B1: a dated, evidence-cited agent analysis card rendered on Changes. */
+export interface BriefingDTO {
+  id: number;
+  asOfDay: string;
+  title: string;
+  summary: string;
+  citedNights: string[];
+  citedMetrics: string[];
+  authorName: string;
+  createdAt: string;
 }
 
 export type FindingsDiffClassification =
@@ -211,6 +230,8 @@ export interface ChangesDTO {
   lastNight: LastNightDTO | null;
   sinceLastImport: FindingsDiffDTO | null;
   recentNotes: NoteDTO[];
+  /** B-B1: newest agent briefing, or null when none was published. */
+  latestBriefing: BriefingDTO | null;
 }
 export interface WeeklySeriesPointDTO {
   weekStart: string;
@@ -386,6 +407,8 @@ export interface HealthContextDTO {
   sinceLastImport: FindingsDiffDTO | null;
   recentNights: AlignedNightDTO[];
   recentNotes: NoteDTO[];
+  /** B-B1: newest agent briefing, or null when none was published. */
+  latestBriefing: BriefingDTO | null;
   guidance: string;
 }
 

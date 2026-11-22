@@ -11,6 +11,7 @@ import type {
 } from "@/api/types";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { MetricIcon } from "@/components/MetricIcon";
 import { MetricMiniChart } from "@/components/MetricMiniChart";
 import { ReadError } from "@/components/ReadError";
 import { Badge } from "@/components/ui/badge";
@@ -159,6 +160,11 @@ export function MetricsPage() {
                       <CardHeader className="space-y-1.5 pb-2">
                         <div className="flex items-start justify-between gap-2">
                           <CardTitle className="flex flex-wrap items-baseline gap-1.5 text-sm">
+                            <MetricIcon
+                              metric={item.metric}
+                              size={15}
+                              className="translate-y-[2px] text-muted-foreground"
+                            />
                             <Link
                               to="/metrics/$key"
                               params={{ key: item.metric }}

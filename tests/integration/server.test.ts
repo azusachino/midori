@@ -176,8 +176,9 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     mkdirSync(webDist, { recursive: true });
     writeFileSync(join(webDist, "index.html"), "<!doctype html><title>midori</title>");
 
+    // B-A7: /mcp is writable, so the store is opened writable for the write round-trip.
     server = startServer({
-      db: openDb(dbPath, { readonly: true }),
+      db: openDb(dbPath),
       dbPath,
       port: 0,
       webDist,
@@ -235,7 +236,57 @@ describe("server entry: REST + web shell + MCP on one port", () => {
       "nights",
       "epochs",
       "list_notes",
+      "list_briefings",
       "list_imports",
+      "add_note",
+      "update_note",
+      "save_briefing",
+      "update_profile",
     ]);
+
+    // B-A7: the writable HTTP surface publishes a briefing that REST then serves.
+    const saved = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "save_briefing",
+          arguments: {
+            asOfDay: "2026-02-07",
+            title: "Sleep steady",
+            summary: "Citing Feb 1–7: sleep close to usual.",
+            citedNights: ["2026-02-07"],
+            citedMetrics: ["sleep_h"],
+            authorName: "test-agent",
+          },
+        },
+      }),
+    });
+    expect(saved.status).toBe(200);
+    const savedBody = (await saved.json()) as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(savedBody.result?.isError).toBeUndefined();
+    const briefing = JSON.parse(savedBody.result?.content?.[0]?.text ?? "{}") as {
+      id?: number;
+      title?: string;
+      authorName?: string;
+    };
+    expect(briefing).toMatchObject({ title: "Sleep steady", authorName: "test-agent" });
+
+    const listed = (await (await fetch(`${baseUrl}/api/briefings`)).json()) as {
+      briefings: Array<{ id: number; title: string }>;
+    };
+    expect(listed.briefings.map((b) => b.title)).toEqual(["Sleep steady"]);
+
+    const dismissed = await fetch(`${baseUrl}/api/briefings/${briefing.id}`, { method: "DELETE" });
+    expect(dismissed.status).toBe(200);
+    expect(await dismissed.json()).toEqual({ deleted: true });
   });
 });

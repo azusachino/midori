@@ -78,9 +78,13 @@ The SQL migrations are the source of truth. Changes from v0:
 - `findings(metric, state, z, severity, confidence, onset_day, onset_open, recent, baseline,
   k_outside, checks_json, asof_day, stint_id)`, plus `seam_steps(metric, seam_day, kind
   offset|step, value, n_old, n_new)`.
-- `notes(id, start_day, end_day, category, label, created_at, updated_at)`: owner-authored
-  annotations (B-U1–B-U4) that derive and imports never clear. `category` is one of
-  `illness | travel | alcohol | medication | stress | other`.
+- `notes(id, start_day, end_day, category, label, created_at, updated_at, author, author_name)`:
+  annotations (B-U1–B-U4, B-A7) that derive and imports never clear. `category` is one of
+  `illness | travel | alcohol | medication | stress | other`; `author` is `owner | agent`
+  (CHECK) and `author_name` records which agent appended the row.
+- `briefings(id, asof_day, title, summary, cited_nights_json, cited_metrics_json, author_name,
+  created_at)`: dated, evidence-cited agent cards for Changes (B-B1–B-B2), indexed by
+  `created_at DESC, id DESC`. derive and imports never clear or modify them.
 - `finding_snapshots(import_id, metric, state, z, severity, direction, confidence, asof_day)`:
   a compact per-import snapshot written inside derive (B-I13), used only for the
   import-to-import diff (B-F15). Primary key `(import_id, metric)`.
@@ -122,16 +126,25 @@ REST (Hono, JSON):
 - `GET /api/nights?from=&to=` (≤400 days).
 - `GET /api/notes?from=&to=`; `POST /api/notes`; `PATCH /api/notes/:id`;
   `DELETE /api/notes/:id` (mutations are absent in read-only deployments and answer 405).
+  Notes carry audit provenance (`author`, `authorName`).
+- `GET /api/briefings?limit=`; `POST /api/briefings`; `DELETE /api/briefings/:id` (B-B1;
+  mutations answer 405 in read-only deployments). `GET /api/changes` and
+  `GET /api/context` carry `latestBriefing`.
 - `GET /api/profile`; `PUT /api/profile` (owner agent context, B-P1; mutation answers 405 in
   read-only deployments).
 - `GET /api/context?days=7..30` (default 14): the B-A5 dossier that MCP `health_context`
   returns — findings with long-term primary-stint medians, aligned recent nights, profile,
   freshness and what changed since the previous import.
 
-MCP (read-only; stdio + streamable HTTP): `changes()` (quick ranked findings),
-`health_context(days?)` (the holistic dossier), `metric_series(metric,
-range)`, `nights(from, to)`, `list_notes(from?, to?)`, `epochs()`, `list_imports()`, per
-B-A1–B-A5.
+MCP (stdio + streamable HTTP), per B-A1–B-A7:
+
+- Always mounted, read-only (8 tools): `changes()`, `health_context(days?)`,
+  `metric_series(metric, range)`, `nights(from, to)`, `epochs()`, `list_notes(from?, to?)`,
+  `list_briefings(limit?)`, `list_imports()`.
+- Mounted when the server is `writable: true` (4 more, 12 total), all auditable and never
+  touching `records` or a derived table: `add_note`, `update_note`, `save_briefing`,
+  `update_profile`. HTTP `/mcp` is writable; CLI stdio stays read-only unless `--writable`
+  is passed (which also opens SQLite writable).
 
 ## UI
 
@@ -140,6 +153,7 @@ Pages per [ui-design.md](ui-design.md):
 | Page | Route |
 | --- | --- |
 | Changes | `/` |
+| Trends | `/trends` |
 | Metrics | `/metrics` |
 | Metric detail | `/metrics/:key` |
 | Devices | `/devices` |

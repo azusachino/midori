@@ -12,6 +12,8 @@ const note = (overrides: Partial<NoteDTO>): NoteDTO => ({
   label: "trip",
   createdAt: "2026-02-10T00:00:00Z",
   updatedAt: "2026-02-10T00:00:00Z",
+  author: "owner",
+  authorName: null,
   ...overrides,
 });
 

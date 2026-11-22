@@ -11,6 +11,7 @@ import {
   noteFields,
   updateNote,
   userNoteCheck,
+  validateAuthorName,
   validateNoteFields,
 } from "./notes";
 
@@ -166,6 +167,47 @@ describe("note persistence (B-U2–B-U4)", () => {
     derive(db);
     expect(getNote(db, note.id)).toEqual(note);
     db.close();
+  });
+
+  test("B-A7 provenance defaults to owner and agent writes record their name", () => {
+    const db = makeDb();
+    const owner = createNote(db, {
+      startDay: "2026-02-10",
+      endDay: "2026-02-10",
+      category: "travel",
+      label: "trip",
+    });
+    expect(owner).toMatchObject({ author: "owner", authorName: null });
+
+    const agent = createNote(
+      db,
+      { startDay: "2026-02-11", endDay: "2026-02-11", category: "stress", label: "deadline" },
+      { author: "agent", authorName: "luna" },
+    );
+    expect(agent).toMatchObject({ author: "agent", authorName: "luna" });
+    expect(listNotes(db).map((note) => note.author)).toEqual(["agent", "owner"]);
+
+    // An owner REST edit keeps the stored provenance when it is omitted.
+    const restEdit = updateNote(db, agent.id, { ...noteFields(agent), label: "deadline moved" });
+    expect(restEdit).toMatchObject({ author: "agent", authorName: "luna" });
+
+    // An agent write updates it when supplied.
+    const agentEdit = updateNote(db, agent.id, noteFields(agent), {
+      author: "agent",
+      authorName: "pi",
+    });
+    expect(agentEdit).toMatchObject({ author: "agent", authorName: "pi" });
+    db.close();
+  });
+
+  test("B-A7 validateAuthorName defaults to agent and bounds the trimmed name", () => {
+    expect(validateAuthorName(undefined)).toEqual({ ok: true, value: "agent" });
+    expect(validateAuthorName(null)).toEqual({ ok: true, value: "agent" });
+    expect(validateAuthorName("  luna ")).toEqual({ ok: true, value: "luna" });
+    expect(validateAuthorName("x".repeat(64)).ok).toBe(true);
+    expect(validateAuthorName("x".repeat(65)).ok).toBe(false);
+    expect(validateAuthorName("   ").ok).toBe(false);
+    expect(validateAuthorName(7).ok).toBe(false);
   });
 });
 

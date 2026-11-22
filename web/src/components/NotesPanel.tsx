@@ -14,6 +14,25 @@ const CATEGORIES: readonly NoteCategory[] = [
   "other",
 ];
 
+/**
+ * B-A7: a subtle marker on a note an agent appended, so the owner can tell agent context
+ * from their own. Never a severity signal.
+ */
+export function AgentBadge({ authorName }: { authorName: string | null }) {
+  return (
+    <span
+      data-testid="note-agent-badge"
+      title={copy.notes.agentBadgeAria(authorName)}
+      className="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-accent"
+    >
+      {copy.notes.agentBadge}
+      {authorName ? (
+        <span className="ml-1 normal-case text-muted-foreground">{authorName}</span>
+      ) : null}
+    </span>
+  );
+}
+
 const fieldClass =
   "w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring";
 
@@ -129,6 +148,11 @@ export function NotesPanel({
                   {copy.notes.categories[note.category] ?? note.category} ·{" "}
                   {copy.notes.range(note.startDay, note.endDay)}
                 </span>
+                {note.author === "agent" ? (
+                  <span className="ml-2 inline-block align-middle">
+                    <AgentBadge authorName={note.authorName} />
+                  </span>
+                ) : null}
               </span>
               <span className="flex items-center gap-1">
                 <Button

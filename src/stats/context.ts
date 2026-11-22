@@ -12,6 +12,7 @@ import { addDays } from "../domain/dates";
 import { METRICS } from "../domain/metrics";
 import { LEANING_ABS_Z, LEANING_MAX_ROWS } from "../domain/stats";
 import { getChanges } from "../http/queries";
+import { latestBriefing } from "./briefings";
 import { getProfileContext } from "./profile";
 
 /**
@@ -276,6 +277,7 @@ export function getHealthContext(
     sinceLastImport: changes.sinceLastImport,
     recentNights: alignedNights(db, changes.asOfDay, days),
     recentNotes: changes.recentNotes,
+    latestBriefing: latestBriefing(db),
     guidance: AGENT_GUIDANCE,
   };
 }

@@ -133,6 +133,24 @@ export const notes = sqliteTable("notes", {
   label: text("label").notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+  /** B-A7: `owner` unless an auditable agent write created or claimed the row. */
+  author: text("author").notNull().default("owner"),
+  authorName: text("author_name"),
+});
+
+/**
+ * B-B1–B-B2: dated, evidence-cited agent analysis cards shown on Changes. derive()
+ * and imports never clear or modify them; the owner dismisses a card by deleting it.
+ */
+export const briefings = sqliteTable("briefings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  asOfDay: text("asof_day").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  citedNightsJson: text("cited_nights_json").notNull().default("[]"),
+  citedMetricsJson: text("cited_metrics_json").notNull().default("[]"),
+  authorName: text("author_name").notNull(),
+  createdAt: text("created_at").notNull(),
 });
 
 /**

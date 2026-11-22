@@ -14,7 +14,8 @@ import { readFindings } from "./stats/findings";
 /**
  * midori CLI. Subcommands:
  *   import <export.zip> [--db <path>] [--backup-dir <dir>] [--archive-dir <dir>] [--keep-zip]
- *   mcp [--db <path>] — read-only MCP server over stdio (T20)
+ *   mcp [--db <path>] [--writable] — MCP server over stdio (T20); read-only by default,
+ *       --writable adds the auditable write tools (B-A7) and opens SQLite writable
  *   changes --json [--db <path>] — print ranked finding rows
  *
  * After a successful import (design: "backups are owned by midori"): WAL-checkpointed
@@ -27,7 +28,7 @@ function usage(): never {
     "usage: bun src/cli.ts import <export.zip> [--db <path>] [--backup-dir <dir>] " +
       "[--archive-dir <dir>] [--keep-zip]\n" +
       "       bun src/cli.ts backup [--db <path>] [--backup-dir <dir>] [--retention-days <n>]\n" +
-      "       bun src/cli.ts mcp [--db <path>]\n" +
+      "       bun src/cli.ts mcp [--db <path>] [--writable]\n" +
       "       bun src/cli.ts changes --json [--db <path>]",
   );
   process.exit(2);
@@ -57,17 +58,21 @@ if (command === "changes") {
 } else if (command === "mcp") {
   // stdio MCP server: JSON-RPC over stdin/stdout. Logs must go to stderr only.
   let dbPath = "data/midori.db";
+  let mcpWritable = false;
   for (let i = 1; i < args.length; i++) {
     const a = args[i];
     if (a === "--db") {
       dbPath = args[i + 1] ?? usage();
       i += 1;
+    } else if (a === "--writable") {
+      mcpWritable = true;
     } else {
       usage();
     }
   }
-  const db = openDb(dbPath, { readonly: true });
-  const server = createMcpServer({ db });
+  // B-A7: read-only by default; --writable opens SQLite writable and mounts the write tools.
+  const db = openDb(dbPath, { readonly: !mcpWritable });
+  const server = createMcpServer({ db, writable: mcpWritable });
   await server.connect(new StdioServerTransport());
 } else if (command === "import") {
   await runImportCommand(args);

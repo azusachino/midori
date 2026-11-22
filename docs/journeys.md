@@ -200,7 +200,7 @@ Notes are owner-authored annotations of a date or range. They are never cleared 
 | B-U1 | Create note (`POST /api/notes`) | Requires a valid real calendar date `startDay` (`YYYY-MM-DD`, UTC round-trip so `2026-02-30` fails), optional `endDay` (defaults to `startDay`, valid calendar date, `endDay >= startDay`), `category` in `illness \| travel \| alcohol \| medication \| stress \| other`, and a trimmed `label` (1–140 chars). Invalid input returns `400 { error, retryable: false }`. |
 | B-U2 | Edit / delete note (`PATCH /api/notes/:id`, `DELETE /api/notes/:id`) | `PATCH` loads the row (`404` if missing), merges partial fields, validates the merged range, dates, category and label, and returns `400 { error, retryable: false }` on violation. `DELETE` returns `200 { deleted: true }` or `404`. Mutations return `405 { error: "notes are read-only", retryable: false }` when the app runs read-only (no upload). |
 | B-U3 | Re-import or `derive()` runs | The `notes` table is never cleared or modified. |
-| B-U4 | Read notes (`GET /api/notes?from=&to=`, MCP `list_notes`) | Validates supplied dates (400 / `isError` when invalid). Returns notes overlapping `[from, to]` (all when omitted), ordered by `start_day DESC, id DESC`. MCP is strictly read-only (B-A2). |
+| B-U4 | Read notes (`GET /api/notes?from=&to=`, MCP `list_notes`) | Validates supplied dates (400 / `isError` when invalid). Returns notes overlapping `[from, to]` (all when omitted), ordered by `start_day DESC, id DESC`, each with `author` (`owner` or `agent`) and `authorName`. Notes are strictly immutable to imports and `derive()`; agents may append through the auditable write tools only (B-A7). |
 
 ### Owner profile context (B-P)
 
@@ -211,6 +211,36 @@ context for an agent, never a diagnosis, and are never cleared by `derive()` or 
 | --- | --- | --- |
 | B-P1 | `GET /api/profile` and `PUT /api/profile` | Returns `{ goals, routine, medicalContext, updatedAt }`, defaulting to empty strings and `updatedAt: null` when row `id = 1` is absent. `PUT` rejects non-object JSON with `400 { error, retryable: false }`, requires `goals`, `routine` and `medicalContext` to be strings whose trimmed length is `0..1000` (`""` clears a field), and upserts `id = 1`. Mutations return `405 { error: "profile is read-only", retryable: false }` in read-only deployments. |
 | B-P2 | Re-import or `derive()` runs | `profile_context` is never cleared or modified. |
+
+### Auditable agent writes (B-A6, B-A7)
+
+Raw Apple Health `records` and every deterministic derived table stay 100% immutable to
+agents. What an agent may append is auditable owner context: notes tagged with its name and
+briefing cards. Nothing here is cleared or modified by `derive()` or imports.
+
+| ID | Given / when | Then |
+| --- | --- | --- |
+| B-A6 | MCP `list_briefings({ limit? })` | Always mounted (read-only). Returns `{ briefings: BriefingDTO[] }` newest first, validating `limit` 1..50 (default 10) with `{ isError: true }` on invalid. |
+| B-A7 | MCP write tools (`add_note`, `update_note`, `save_briefing`, `update_profile`) | Mounted only when the server is `writable: true`: enabled on HTTP `/mcp` via `startServer`, opt-in `--writable` on CLI stdio (which opens SQLite writable), absent otherwise. `add_note`/`update_note` tag the row `author = "agent"` with a validated `authorName` (default `"agent"`, trimmed 1–64 chars); `update_note` merges the supplied fields over the stored row. `save_briefing` runs the B-B1 validators. `update_profile` accepts any subset of `goals`, `routine`, `medicalContext` and merges them over `getProfileContext(db)` before validating. Every write tool enforces the REST validators and returns `{ isError: true }` on invalid input. No tool mutates `records` or a derived table. |
+
+### Agent briefings (B-B1, B-B2)
+
+A briefing is a dated card an agent publishes for the owner: a short title, a summary that
+cites the nights and metrics it rests on, and the confounders behind them. It is advice
+grounded in midori's own data, never a diagnosis and never a cause claim (B-F9).
+
+| ID | Given / when | Then |
+| --- | --- | --- |
+| B-B1 | `GET /api/briefings?limit=`, `POST /api/briefings`, `DELETE /api/briefings/:id`, MCP `save_briefing` | `GET` returns `{ briefings }` newest first (`limit` integer 1..50, default 10; `400` on invalid). `POST` validates a real calendar `asOfDay`, a trimmed `title` (1–120), a trimmed `summary` (1–4000), `authorName` (trimmed 1–64), optional `citedNights` (real calendar dates, max 30) and `citedMetrics` (known metric keys, max 20), returning `201 BriefingDTO` (`400 { error, retryable: false }` on invalid). `DELETE` returns `200 { deleted: true }` or `404`. Mutations return `405 { error: "briefings are read-only", retryable: false }` when the app runs read-only (no upload). `Changes` and `GET /api/context` carry the newest briefing as `latestBriefing`. |
+| B-B2 | Re-import or `derive()` runs | The `briefings` table is never cleared or modified. |
+
+### Multi-metric graphs (B-T1)
+
+The Trends page reads the same B-A5 dossier as agents do; it adds no backend query.
+
+| ID | Given / when | Then |
+| --- | --- | --- |
+| B-T1 | Trends page (`/trends`) | Reads `GET /api/context?days=14|30`, reverses `recentNights` from newest-first into chronological ascending order before building the axis, and clamps `recentNotes` to that axis. Shows Sleep Architecture (14d or 30d stacked Deep / REM / Core with the usual-sleep median and partial-night marks) and the Correlated Vitals Stack (Sleep, HRV SDNN, Resting HR, Wrist temp on one shared ascending axis with a linked crosshair and note bands). Shows the B-R4 empty state when no import exists. |
 
 ### Import-to-import diff (B-I13, B-F15)
 
@@ -248,10 +278,10 @@ Computed per finding row and shown as clear or flagged:
 | ID | Given / when | Then |
 | --- | --- | --- |
 | B-A1 | `changes()` | Same rows/order as `/api/changes`; each row has `asOf, epoch, state, confidence, onset, checks, trust, caveats[]` |
-| B-A2 | Any tool | Read-only; unknown metric → `isError` with the known list |
+| B-A2 | Any tool | Raw `records` and every derived table are strictly immutable. The read tools (`changes`, `health_context`, `metric_series`, `nights`, `epochs`, `list_notes`, `list_briefings`, `list_imports`) never write. Unknown metric → `isError` with the known list |
 | B-A3 | Tool descriptions | Cite nights; device changes, OS updates, partial data and travel are confounders; midori asserts no causes |
 | B-A4 | Range limits | `nights` >400 days is rejected with a hint. `metric_series(range=all)` returns weekly medians |
-| B-A5 | `health_context({ days? })` and `GET /api/context?days=` | Read-only one-call dossier. `days` defaults to 14 and must be an integer 7..30 (`400` on REST, `isError` on MCP). Returns `{ asOfDay, freshness, primaryWatch, profile, summary, findings, sinceLastImport, recentNights, recentNotes, guidance }`. Findings reuse `apiFindings` plus human-readable caveats and add `longTerm: { median90d, median1y, n90d, n1y }` computed only from primary-stint `usable = 1` values at/after the stint start inside `[as-of - 89, as-of]` and `[as-of - 364, as-of]`. `recentNights` is empty when as-of is null, else up to `days` nights newest first aligning sleep stages, usable primary-stint overnight metrics (missing/unusable → `null`), timezone change, partial reason and overlapping notes. `summary` matches the Changes counts (stands out, close to the edge, within, other, shared confounders). |
+| B-A5 | `health_context({ days? })` and `GET /api/context?days=` | One-call dossier. `days` defaults to 14 and must be an integer 7..30 (`400` on REST, `isError` on MCP). Returns `{ asOfDay, freshness, primaryWatch, profile, summary, findings, sinceLastImport, recentNights, recentNotes, latestBriefing, guidance }`. Findings reuse `apiFindings` plus human-readable caveats and add `longTerm: { median90d, median1y, n90d, n1y }` computed only from primary-stint `usable = 1` values at/after the stint start inside `[as-of - 89, as-of]` and `[as-of - 364, as-of]`. `recentNights` is empty when as-of is null, else up to `days` nights newest first aligning sleep stages, usable primary-stint overnight metrics (missing/unusable → `null`), timezone change, partial reason and overlapping notes. `summary` matches the Changes counts (stands out, close to the edge, within, other, shared confounders). |
 
 ## 5. Non-behaviors (v1)
 

@@ -66,6 +66,13 @@ const changesRoute = createRoute({
   component: ChangesPage,
 });
 
+const trendsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/trends",
+  component: lazyRouteComponent(() => import("@/pages/Trends"), "TrendsPage"),
+  pendingComponent: RouteFallback,
+});
+
 const metricsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/metrics",
@@ -97,6 +104,7 @@ const importRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   changesRoute,
+  trendsRoute,
   metricsRoute,
   metricDetailRoute,
   devicesRoute,

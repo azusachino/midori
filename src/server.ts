@@ -108,7 +108,8 @@ export function startServer(opts: ServerOptions): Bun.Server<undefined> {
       ...(opts.onDeriveStage ? { onDeriveStage: opts.onDeriveStage } : {}),
     },
   });
-  mountMcp(app, { db: opts.db });
+  // B-A7: the HTTP /mcp surface serves the auditable write tools; stdio stays opt-in.
+  mountMcp(app, { db: opts.db, writable: true });
   return Bun.serve({
     port: opts.port ?? DEFAULT_PORT,
     hostname: opts.hostname ?? "127.0.0.1",

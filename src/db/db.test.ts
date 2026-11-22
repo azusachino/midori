@@ -31,6 +31,7 @@ describe("migrations", () => {
       "0006_import_as_of_day.sql",
       "0007_notes_and_snapshots.sql",
       "0008_profile_context.sql",
+      "0009_agent_writes_and_briefings.sql",
     ]);
     const second = applyMigrations(db);
     expect(second).toEqual([]);
@@ -68,6 +69,7 @@ describe("migrations", () => {
       "0006_import_as_of_day.sql",
       "0007_notes_and_snapshots.sql",
       "0008_profile_context.sql",
+      "0009_agent_writes_and_briefings.sql",
     ]);
     const rows = db.query("SELECT zip_name, as_of_day FROM imports ORDER BY id").all();
     expect(rows).toEqual([
@@ -107,6 +109,7 @@ describe("migrations", () => {
     expect(applyMigrations(db)).toEqual([
       "0007_notes_and_snapshots.sql",
       "0008_profile_context.sql",
+      "0009_agent_writes_and_briefings.sql",
     ]);
     const rows = db
       .query(
@@ -167,6 +170,7 @@ describe("migrations", () => {
       "0006_import_as_of_day.sql",
       "0007_notes_and_snapshots.sql",
       "0008_profile_context.sql",
+      "0009_agent_writes_and_briefings.sql",
     ]);
 
     const imported = db.query("SELECT id, export_date FROM imports").get() as {
@@ -276,6 +280,29 @@ describe("check constraints", () => {
     expect(() => ins.run("rebooted")).toThrow(/CHECK/);
     db.close();
   });
+
+  test("B-A7 migration 0009 adds auditable notes.author limited to owner or agent", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    const ins = db.prepare(
+      `INSERT INTO notes (start_day, end_day, category, label, created_at, updated_at, author, author_name)
+       VALUES ('2026-02-10', '2026-02-10', 'travel', 'trip', '2026-02-10T00:00:00Z', '2026-02-10T00:00:00Z', ?, ?)`,
+    );
+    // Backfilled owner rows keep the default and carry no author name.
+    db.run(
+      `INSERT INTO notes (start_day, end_day, category, label, created_at, updated_at)
+       VALUES ('2026-02-11', '2026-02-11', 'stress', 'deadline', '2026-02-11T00:00:00Z', '2026-02-11T00:00:00Z')`,
+    );
+    expect(db.query("SELECT author, author_name FROM notes").get()).toEqual({
+      author: "owner",
+      author_name: null,
+    });
+    for (const author of ["owner", "agent"]) {
+      expect(() => ins.run(author, author === "agent" ? "luna" : null)).not.toThrow();
+    }
+    expect(() => ins.run("service", "luna")).toThrow(/CHECK/);
+    db.close();
+  });
 });
 
 describe("schema.ts mirrors the SQL migrations", () => {
@@ -294,6 +321,7 @@ describe("schema.ts mirrors the SQL migrations", () => {
       findings: schema.findings,
       seam_steps: schema.seamSteps,
       notes: schema.notes,
+      briefings: schema.briefings,
       profile_context: schema.profileContext,
       finding_snapshots: schema.findingSnapshots,
     };
