@@ -55,7 +55,7 @@ const days = [
 ];
 
 describe("finding checks", () => {
-  test("B-C1–B-C6 all return clear when no confound applies", () => {
+  test("B-C1–B-C7 all return clear when no confound applies", () => {
     const db = makeDb();
     db.exec(
       "DELETE FROM seam_steps; DELETE FROM epoch_events; DELETE FROM metric_values; DELETE FROM stints WHERE start_day = '2026-01-10'; UPDATE nights SET partial_reason = NULL, tz_change = 0",
@@ -68,12 +68,12 @@ describe("finding checks", () => {
       metric("wrist_temp"),
       days.slice(0, 6).concat("2026-01-14"),
     );
-    expect(checks).toHaveLength(6);
+    expect(checks).toHaveLength(7);
     expect(checks.every((check) => !check.flagged)).toBe(true);
     db.close();
   });
 
-  test("B-C1–B-C6 flag recent seams, OS updates, partials, timezone, gaps and low trust", () => {
+  test("B-C1–B-C7 flag recent seams, OS updates, partials, timezone, gaps, low trust and notes", () => {
     const db = makeDb();
     const checks = deriveChecks(db, "wrist_temp", 1, "2026-01-20", metric("active_kj"), days);
     expect(checks.map(({ key, flagged }) => [key, flagged])).toEqual([
@@ -83,7 +83,36 @@ describe("finding checks", () => {
       ["tz_change", true],
       ["missing_nights", true],
       ["low_trust", true],
+      ["user_note", false],
     ]);
+    db.close();
+  });
+
+  test("B-C7 flags an overlapping note, counts it, and clamps its day into the recent window", () => {
+    const db = makeDb();
+    db.run(
+      `INSERT INTO notes (start_day, end_day, category, label, created_at, updated_at) VALUES
+       ('2026-01-02', '2026-01-18', 'travel', 'trip', '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z'),
+       ('2026-01-17', '2026-01-19', 'stress', 'busy week', '2026-01-17T00:00:00Z', '2026-01-17T00:00:00Z'),
+       ('2025-12-01', '2025-12-10', 'illness', 'old', '2025-12-01T00:00:00Z', '2025-12-01T00:00:00Z')`,
+    );
+    const recent = ["2026-01-15", "2026-01-16", "2026-01-17", "2026-01-18", "2026-01-19"];
+    const checks = deriveChecks(db, "wrist_temp", 1, "2026-01-20", metric("wrist_temp"), recent);
+    const note = checks.find((check) => check.key === "user_note");
+    // Two notes overlap the clamped [2026-01-15, 2026-01-19] window; the latest starts 01-17.
+    expect(note).toEqual({ key: "user_note", flagged: true, day: "2026-01-17", count: 2 });
+
+    // A note starting before the recent window links to oldestRecentDay, never outside it.
+    db.run("DELETE FROM notes WHERE id <> 1");
+    const clamped = deriveChecks(
+      db,
+      "wrist_temp",
+      1,
+      "2026-01-20",
+      metric("wrist_temp"),
+      recent,
+    ).find((check) => check.key === "user_note");
+    expect(clamped).toEqual({ key: "user_note", flagged: true, day: "2026-01-15", count: 1 });
     db.close();
   });
 });

@@ -126,6 +126,7 @@ export const copy = {
     tz_change: "Timezone change in recent window",
     missing_nights: "Missing nights in recent window",
     low_trust: "Low trust metric",
+    user_note: "Personal note in recent window",
   },
   chart: {
     dayCol: "Date",
@@ -183,6 +184,7 @@ export const copy = {
         tz_change: "a timezone change",
         missing_nights: "missing nights",
         low_trust: "low-trust data",
+        user_note: "a personal note",
       } as Record<string, string>,
       watchHint: "These become findings only if the shift holds through a full new week of nights.",
       nextLookSoon: (day: string) => `Import again around ${day}.`,
@@ -324,6 +326,7 @@ export const copy = {
         tz_change: "No timezone change",
         missing_nights: (noun: "nights" | "days") => `No missing ${noun}`,
         trust: (trustLabel: string) => `Trust: ${trustLabel}`,
+        user_note: "No personal note",
       },
       checksFlaggedLabels: {
         device_change: (dayLabel?: string) =>
@@ -346,6 +349,8 @@ export const copy = {
         missing_nights: (noun: "nights" | "days", dayLabel?: string) =>
           dayLabel ? `Missing ${noun} (${dayLabel})` : `Missing ${noun} in recent window`,
         low_trust: "Trust: low",
+        user_note: (dayLabel?: string) =>
+          dayLabel ? `Personal note (${dayLabel})` : "Personal note in recent window",
       },
       evidence: {
         title: (prefix: string, metricLabel: string) => `${prefix} · ${metricLabel}`,

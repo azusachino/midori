@@ -11,7 +11,7 @@ import {
 } from "../../web/src/lib/evidence";
 
 describe("evidence and confounder check helpers", () => {
-  test("resolveChecks returns all 6 B-C1–B-C6 checks in canonical order", () => {
+  test("resolveChecks returns all 7 B-C1–B-C7 checks in canonical order", () => {
     const hrv = metricSeriesStub("hrv_sdnn", "90d");
     const checks = resolveChecks(hrv);
     expect(checks.map((c) => c.key)).toEqual([...CHECK_ORDER]);

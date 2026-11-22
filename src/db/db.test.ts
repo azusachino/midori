@@ -29,6 +29,7 @@ describe("migrations", () => {
       "0004_imports.sql",
       "0005_import_progress_summary.sql",
       "0006_import_as_of_day.sql",
+      "0007_notes_and_snapshots.sql",
     ]);
     const second = applyMigrations(db);
     expect(second).toEqual([]);
@@ -62,12 +63,73 @@ describe("migrations", () => {
       `INSERT INTO metric_values (metric, epoch_id, unit_day, unit_kind, value, n, usable)
        VALUES ('sleep_h', 1, '2026-11-06', 'night', 7, 1, 1), ('sleep_h', 1, '2026-11-07', 'night', 7, 1, 0)`,
     );
-    expect(applyMigrations(db)).toEqual(["0006_import_as_of_day.sql"]);
+    expect(applyMigrations(db)).toEqual([
+      "0006_import_as_of_day.sql",
+      "0007_notes_and_snapshots.sql",
+    ]);
     const rows = db.query("SELECT zip_name, as_of_day FROM imports ORDER BY id").all();
     expect(rows).toEqual([
       { zip_name: "a.zip", as_of_day: null },
       { zip_name: "b.zip", as_of_day: "2026-11-06" },
       { zip_name: "c.zip", as_of_day: null },
+    ]);
+    db.close();
+  });
+
+  test("B-I13 migration 0007 backfills finding snapshots from the newest done import", () => {
+    const v6Migrations = mkdtempSync(join(dir, "migrations-v6-"));
+    for (const name of [
+      "0001_init.sql",
+      "0002_capture.sql",
+      "0003_derived.sql",
+      "0004_imports.sql",
+      "0005_import_progress_summary.sql",
+      "0006_import_as_of_day.sql",
+    ]) {
+      copyFileSync(join(import.meta.dir, "../../migrations", name), join(v6Migrations, name));
+    }
+    const db = new Database(":memory:");
+    applyMigrations(db, v6Migrations);
+    db.run(
+      `INSERT INTO imports (created_at, zip_name, zip_size, status) VALUES
+       ('2026-11-01T00:00:00Z', 'a.zip', 1, 'done'),
+       ('2026-11-08T00:00:00Z', 'b.zip', 1, 'done'),
+       ('2026-11-09T00:00:00Z', 'c.zip', 1, 'failed')`,
+    );
+    db.run(
+      `INSERT INTO findings (metric, state, z, severity, confidence, checks_json, asof_day) VALUES
+       ('hrv_sdnn', 'computed', -3.0, 'alert', 'high', '[]', '2026-11-07'),
+       ('sleep_h', 'computed', 0.2, 'within', 'high', '[]', '2026-11-07'),
+       ('wrist_temp', 'warming_up', NULL, 'within', NULL, '[]', '2026-11-07')`,
+    );
+    expect(applyMigrations(db)).toEqual(["0007_notes_and_snapshots.sql"]);
+    const rows = db
+      .query(
+        "SELECT import_id, metric, state, direction, severity FROM finding_snapshots ORDER BY metric",
+      )
+      .all();
+    expect(rows).toEqual([
+      {
+        import_id: 2,
+        metric: "hrv_sdnn",
+        state: "computed",
+        direction: "lower",
+        severity: "alert",
+      },
+      {
+        import_id: 2,
+        metric: "sleep_h",
+        state: "computed",
+        direction: "within",
+        severity: "within",
+      },
+      {
+        import_id: 2,
+        metric: "wrist_temp",
+        state: "warming_up",
+        direction: null,
+        severity: "within",
+      },
     ]);
     db.close();
   });
@@ -98,6 +160,7 @@ describe("migrations", () => {
       "0004_imports.sql",
       "0005_import_progress_summary.sql",
       "0006_import_as_of_day.sql",
+      "0007_notes_and_snapshots.sql",
     ]);
 
     const imported = db.query("SELECT id, export_date FROM imports").get() as {
@@ -224,6 +287,8 @@ describe("schema.ts mirrors the SQL migrations", () => {
       metric_values: schema.metricValues,
       findings: schema.findings,
       seam_steps: schema.seamSteps,
+      notes: schema.notes,
+      finding_snapshots: schema.findingSnapshots,
     };
     for (const [name, table] of Object.entries(tables)) {
       const sqlCols = (

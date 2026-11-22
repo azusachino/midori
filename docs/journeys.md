@@ -73,7 +73,8 @@ Metric set:
    - the number of flagged checks
    - a 35-unit sparkline
 3. Clicking a row opens **Metric detail** at 90 days: band, recent window, seams, partial units.
-4. The *Checks* panel lists confounders (B-C1–B-C6), each "clear" or "flagged" with a link.
+4. The *Checks* panel lists confounders (B-C1–B-C7), each "clear" or "flagged" with a link.
+   A personal note covering a recent night (B-C7) appears here and on the chart.
 5. Clicking a night opens its evidence: sample times and values, sleep stages, device,
    timezone.
 6. Outcome: what moved, since when, how consistently and how confidently, and whether a device
@@ -187,6 +188,18 @@ Metric set:
 | B-F13 | Shared confounders (answer card) | A check flagged on at least half the computed overnight rows is named under the answer: "Inside this window: a watch change and an OS update. Small shifts may come from these rather than from you." No line when no check reaches half |
 | B-F14 | What to watch (close to the edge) | Under the close-to-the-edge rows: "These become findings only if the shift holds through a full new week of nights." plus the next look: "Import again around <as-of + 7 days>", or "Import again now — your data ends <as-of>" once that day has passed |
 
+### Own notes (B-U, B-C7)
+
+Notes are owner-authored annotations of a date or range. They are never cleared by
+`derive()` or imports, and never assert a cause (B-F9).
+
+| ID | Given / when | Then |
+| --- | --- | --- |
+| B-U1 | Create note (`POST /api/notes`) | Requires a valid real calendar date `startDay` (`YYYY-MM-DD`, UTC round-trip so `2026-02-30` fails), optional `endDay` (defaults to `startDay`, valid calendar date, `endDay >= startDay`), `category` in `illness \| travel \| alcohol \| medication \| stress \| other`, and a trimmed `label` (1–140 chars). Invalid input returns `400 { error, retryable: false }`. |
+| B-U2 | Edit / delete note (`PATCH /api/notes/:id`, `DELETE /api/notes/:id`) | `PATCH` loads the row (`404` if missing), merges partial fields, validates the merged range, dates, category and label, and returns `400 { error, retryable: false }` on violation. `DELETE` returns `200 { deleted: true }` or `404`. Mutations return `405 { error: "notes are read-only", retryable: false }` when the app runs read-only (no upload). |
+| B-U3 | Re-import or `derive()` runs | The `notes` table is never cleared or modified. |
+| B-U4 | Read notes (`GET /api/notes?from=&to=`, MCP `list_notes`) | Validates supplied dates (400 / `isError` when invalid). Returns notes overlapping `[from, to]` (all when omitted), ordered by `start_day DESC, id DESC`. MCP is strictly read-only (B-A2). |
+
 ### Checks (confounders, B-C)
 
 Computed per finding row and shown as clear or flagged:
@@ -199,6 +212,7 @@ Computed per finding row and shown as clear or flagged:
 | B-C4 | Timezone change | A `tz_change` night among the recent units |
 | B-C5 | Missing nights | The recent window spans >10 calendar units |
 | B-C6 | Low trust | Metric trust is `low` |
+| B-C7 | Personal note | ≥1 note overlaps `[oldestRecentDay, newestRecentDay]` (clamped to `<= asOfDay`), i.e. `start_day <= newestRecentDay AND end_day >= oldestRecentDay`. Carries `count` and `day = MAX(note.start_day, oldestRecentDay)` for the latest overlapping note. Evaluated live, so adding or deleting a note updates checks without a re-derive. Never asserts a cause |
 
 ### Freshness (B-R)
 
@@ -221,7 +235,7 @@ Computed per finding row and shown as clear or flagged:
 ## 5. Non-behaviors (v1)
 
 - No composite readiness score.
-- No push or HAE intake, no notes, no naps, no workouts.
+- No push or HAE intake, no naps, no workouts.
 - No cross-device value correction.
 - No notifications.
 - No "what changed since the previous import" diff.

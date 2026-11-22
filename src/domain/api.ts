@@ -74,11 +74,56 @@ export interface CheckDTO {
     | "partial_nights"
     | "tz_change"
     | "missing_nights"
-    | "low_trust";
+    | "low_trust"
+    | "user_note";
   flagged: boolean;
   detailKey?: string;
   day?: string;
   count?: number;
+}
+
+export type NoteCategory = "illness" | "travel" | "alcohol" | "medication" | "stress" | "other";
+
+export interface NoteDTO {
+  id: number;
+  startDay: string;
+  endDay: string;
+  category: NoteCategory;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FindingsDiffClassification =
+  | "direction_reversed"
+  | "newly_notable"
+  | "returned_to_usual"
+  | "shifted_further"
+  | "baseline_ready";
+
+export interface FindingSnapshotSummaryDTO {
+  state: FindingState;
+  severity: FindingSeverity;
+  direction: FindingDirection | null;
+  z: number | null;
+  confidence: "high" | "medium" | "low" | null;
+}
+
+export interface FindingsDiffItemDTO {
+  metric: string;
+  kind: "overnight" | "daytime";
+  classification: FindingsDiffClassification;
+  previous: FindingSnapshotSummaryDTO;
+  current: FindingSnapshotSummaryDTO;
+}
+
+export interface FindingsDiffDTO {
+  fromImportId: number;
+  toImportId: number;
+  fromAsOfDay: string;
+  toAsOfDay: string;
+  unchangedCount: number;
+  items: FindingsDiffItemDTO[];
 }
 
 export type CheckResultDTO = CheckDTO;
@@ -149,6 +194,8 @@ export interface ChangesDTO {
   overnight: FindingRowDTO[];
   daytime: FindingRowDTO[];
   lastNight: LastNightDTO | null;
+  sinceLastImport: FindingsDiffDTO | null;
+  recentNotes: NoteDTO[];
 }
 export interface WeeklySeriesPointDTO {
   weekStart: string;
@@ -216,6 +263,7 @@ export interface MetricSeriesDTO {
     nNew: number;
   }>;
   osUpdates: Array<{ epochId: number; day: string; fromSw: string | null; toSw: string }>;
+  notes: NoteDTO[];
 }
 export interface UnitEvidenceDTO {
   metric: string;
@@ -238,6 +286,7 @@ export interface UnitEvidenceDTO {
     coreH: number;
   } | null;
   alsoRecordedBy: EpochRefDTO[];
+  notes: NoteDTO[];
 }
 export interface EpochMetricRoleDTO {
   metric: string;

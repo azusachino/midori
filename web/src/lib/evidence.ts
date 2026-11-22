@@ -9,6 +9,7 @@ export const CHECK_ORDER: readonly CheckKey[] = [
   "tz_change",
   "missing_nights",
   "low_trust",
+  "user_note",
 ];
 
 export interface ResolvedCheck {
@@ -34,6 +35,8 @@ function formatClearLabel(key: CheckKey, series: MetricSeriesDTO, noun: "nights"
       return labels.missing_nights(noun);
     case "low_trust":
       return labels.trust(series.trust);
+    case "user_note":
+      return labels.user_note;
   }
 }
 
@@ -57,6 +60,8 @@ function formatFlaggedLabel(
       return labels.missing_nights(noun, dayLabel);
     case "low_trust":
       return labels.low_trust;
+    case "user_note":
+      return labels.user_note(dayLabel);
   }
 }
 
