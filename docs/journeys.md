@@ -90,8 +90,10 @@ Metric set:
 2. Upload progress shows bytes. On the phone, the page says "Keep this tab open until the upload
    finishes" (B-I11). After upload the stage stepper runs, and the tab can close (B-I7).
 3. **Summary card**: new records, new usable nights, "data through" date, new devices or OS
-   updates, and the current top changes.
-4. "See what changed" opens **Changes**.
+   updates, the current top changes, and — once there is a previous export to compare with —
+   a compact "Since previous export" line (B-F15).
+4. "See what changed" opens **Changes**, whose own "Since previous export" card lists what
+   newly shifted or returned to usual (B-F15).
 
 ### J3 — New watch
 
@@ -200,6 +202,13 @@ Notes are owner-authored annotations of a date or range. They are never cleared 
 | B-U3 | Re-import or `derive()` runs | The `notes` table is never cleared or modified. |
 | B-U4 | Read notes (`GET /api/notes?from=&to=`, MCP `list_notes`) | Validates supplied dates (400 / `isError` when invalid). Returns notes overlapping `[from, to]` (all when omitted), ordered by `start_day DESC, id DESC`. MCP is strictly read-only (B-A2). |
 
+### Import-to-import diff (B-I13, B-F15)
+
+| ID | Given / when | Then |
+| --- | --- | --- |
+| B-I13 | Import finishes `done` | Inside `derive(db, { importId })` (same `BEGIN IMMEDIATE` transaction), delete this import's `finding_snapshots` rows and insert one per non-trend finding (`import_id, metric, state, z, severity, direction, confidence, asof_day`) before `COMMIT`. Failed imports and rollbacks write no snapshot. Migration `0007` backfills the latest done import on upgraded v1 databases so the first v2 import diffs immediately. |
+| B-F15 | Computing a diff (`GET /api/imports/:id/diff`, `Changes`, MCP `changes()`) | Compare a target snapshot against the most recent prior `done` snapshot with strictly earlier `asof_day`. For `GET /api/imports/:id/diff`, return `null` when any earlier done import (`id < :id`) already reached `asof_day >= target`. `Changes.sinceLastImport` compares the latest done snapshot against the most recent prior done snapshot with earlier as-of (null if none). Classify each metric in this exact priority order: (1) `direction_reversed` — both computed notable/alert and the direction differs; (2) `newly_notable` — current computed notable/alert while the previous pair was not computed-notable; (3) `returned_to_usual` — previous computed notable/alert and current computed `within`; (4) `shifted_further` — both computed notable/alert, same direction, and either notable→alert or `\|curr.z\| - \|prev.z\| >= 0.5`; (5) `baseline_ready` — previous warming_up/insufficient and current computed `within`. Every other pair (including moderating notable/alert metrics and transitions to non-computed states) is omitted and counted in `unchangedCount`. |
+
 ### Checks (confounders, B-C)
 
 Computed per finding row and shown as clear or flagged:
@@ -238,6 +247,5 @@ Computed per finding row and shown as clear or flagged:
 - No push or HAE intake, no naps, no workouts.
 - No cross-device value correction.
 - No notifications.
-- No "what changed since the previous import" diff.
 - Primary-only sums: steps can be lower than Apple's merged total. The trust note says so.
 - Without shared nights, midori reports a device-change confound; it cannot resolve it.

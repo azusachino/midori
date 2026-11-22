@@ -10,6 +10,7 @@ import type {
   UnitEvidenceDTO,
 } from "../domain/api";
 import { METRICS } from "../domain/metrics";
+import { latestSinceLastImport } from "../stats/diff";
 import { readFindings } from "../stats/findings";
 import { listNotes } from "../stats/notes";
 import { type MetricUnit, minorEpochs } from "../stats/stints";
@@ -295,7 +296,7 @@ export function getChanges(db: Database): ChangesDTO {
       : null,
     overnight: rows.filter((r) => r.kind === "overnight"),
     daytime: rows.filter((r) => r.kind === "daytime"),
-    sinceLastImport: null,
+    sinceLastImport: latestSinceLastImport(db),
     recentNotes: day ? listNotes(db, addDays(day, -34), null) : listNotes(db),
     lastNight: night
       ? {

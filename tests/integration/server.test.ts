@@ -224,6 +224,13 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     });
     const toolBody = (await tools.json()) as { result?: { tools?: { name: string }[] } };
     const names = toolBody.result?.tools?.map((t) => t.name) ?? [];
-    expect(names).toEqual(["changes", "metric_series", "nights", "epochs", "list_imports"]);
+    expect(names).toEqual([
+      "changes",
+      "metric_series",
+      "nights",
+      "epochs",
+      "list_notes",
+      "list_imports",
+    ]);
   });
 });

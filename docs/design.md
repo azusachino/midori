@@ -81,6 +81,9 @@ The SQL migrations are the source of truth. Changes from v0:
 - `notes(id, start_day, end_day, category, label, created_at, updated_at)`: owner-authored
   annotations (B-U1–B-U4) that derive and imports never clear. `category` is one of
   `illness | travel | alcohol | medication | stress | other`.
+- `finding_snapshots(import_id, metric, state, z, severity, direction, confidence, asof_day)`:
+  a compact per-import snapshot written inside derive (B-I13), used only for the
+  import-to-import diff (B-F15). Primary key `(import_id, metric)`.
 - `device_events` and `daily_metrics` are dropped.
 
 ## Stats engine
@@ -102,8 +105,10 @@ REST (Hono, JSON):
   - `POST /api/imports` (validated before job creation, B-I1)
   - `GET /api/imports`
   - `GET /api/imports/:id` (stage, progress, summary)
+  - `GET /api/imports/:id/diff` (`FindingsDiffDTO` or `null`, B-F15)
   - `POST /api/imports/:id/retry`
-- `GET /api/changes`: ranked findings, as-of, freshness, warming-up notice, last usable night.
+- `GET /api/changes`: ranked findings, as-of, freshness, warming-up notice, last usable night,
+  `sinceLastImport`, and recent notes.
 - `GET /api/metrics`: index, one entry per metric with its state and 1-year weekly series.
 - `GET /api/metrics/:metric?range=90d|180d|1y|all`: units with epoch, usability, band, recent
   window, stints, seam steps. `all` returns weekly medians.
@@ -180,7 +185,7 @@ router. Ask first before adding any other runtime dependency.
 - **Never**: commit health data, the db or screenshots of real data; LLM arithmetic on raw
   series; assert a device or health cause.
 
-## Roadmap (after v1)
+## Roadmap (after v2)
 
-Own notes and annotations as confounders; HAE push ingest if freshness starts to matter; naps;
-a visit-prep summary; an advice layer grounded in HowToLiveBetter; workouts and routes.
+HAE push ingest if freshness starts to matter; naps; a visit-prep summary; an advice layer
+grounded in HowToLiveBetter; workouts and routes.

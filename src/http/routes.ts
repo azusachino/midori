@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
+import { getImportDiff } from "../stats/diff";
 import {
   createNote,
   deleteNote,
@@ -14,6 +15,7 @@ import { type ImportRouteOptions, mountImportRoutes } from "./import";
 import {
   getChanges,
   getEpochs,
+  getImport,
   getMetrics,
   getNights,
   getSeries,
@@ -36,6 +38,12 @@ export function createApp({ db, upload }: RouteDeps): Hono {
     return c.json({ ok: true as const });
   });
   app.get("/api/imports", (c) => c.json(listImports(db)));
+  app.get("/api/imports/:id/diff", (c) => {
+    const id = Number(c.req.param("id"));
+    if (!Number.isInteger(id) || id <= 0 || !getImport(db, id))
+      return c.json({ error: "import not found", retryable: false }, 404);
+    return c.json({ diff: getImportDiff(db, id) });
+  });
   app.get("/api/changes", (c) => c.json(getChanges(db)));
   app.get("/api/metrics", (c) => c.json(getMetrics(db)));
   app.get("/api/metrics/:metric/units/:day", (c) => {

@@ -3,10 +3,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { METRICS } from "../domain/metrics";
 import { getChanges, getEpochs, getNights, getSeries, listImports } from "../http/queries";
+import { isCalendarDay, listNotes } from "../stats/notes";
 
 const KNOWN_METRICS = Object.keys(METRICS);
 const AGENT_GUIDANCE =
-  "Cite the specific nights behind findings. Device changes, OS updates, partial data, and travel are confounders; midori does not assert causes.";
+  "Cite the specific nights behind findings. Device changes, OS updates, partial data, travel, and personal notes are confounders; midori does not assert causes.";
 
 const CHECK_CAVEATS: Record<string, string> = {
   device_change: "A device change overlaps this finding.",
@@ -15,6 +16,7 @@ const CHECK_CAVEATS: Record<string, string> = {
   tz_change: "A timezone change appears in the recent window.",
   missing_nights: "The recent observations are spread across a long calendar span.",
   low_trust: "This metric has low trust.",
+  user_note: "A personal note overlaps the recent window.",
 };
 
 function caveatsFor(row: ReturnType<typeof getChanges>["overnight"][number]): string[] {
@@ -55,7 +57,19 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
             : { id: row.epochId, label: row.epochLabel, hardware: row.epochLabel },
         caveats: caveatsFor(row),
       }));
-      return { content: [{ type: "text", text: JSON.stringify({ asOf: changes.asOfDay, rows }) }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              asOf: changes.asOfDay,
+              rows,
+              sinceLastImport: changes.sinceLastImport,
+              recentNotes: changes.recentNotes,
+            }),
+          },
+        ],
+      };
     },
   );
 
@@ -121,6 +135,31 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
       inputSchema: {},
     },
     async () => ({ content: [{ type: "text", text: JSON.stringify(getEpochs(db)) }] }),
+  );
+
+  server.registerTool(
+    "list_notes",
+    {
+      description: `Owner-authored notes (illness, travel, alcohol, medication, stress, other) for an optional inclusive date range. Notes are confounders, never causes. ${AGENT_GUIDANCE}`,
+      inputSchema: {
+        from: z.string().optional().describe("First date, YYYY-MM-DD"),
+        to: z.string().optional().describe("Last date, YYYY-MM-DD"),
+      },
+    },
+    async ({ from, to }) => {
+      if (
+        (from !== undefined && !isCalendarDay(from)) ||
+        (to !== undefined && !isCalendarDay(to))
+      ) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: "valid from and to dates are required (YYYY-MM-DD)" }],
+        };
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify({ notes: listNotes(db, from, to) }) }],
+      };
+    },
   );
 
   server.registerTool(
