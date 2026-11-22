@@ -147,7 +147,7 @@ export async function runImport(
     setStatus("deriving");
     await options.beforeDerive?.();
     checkAborted();
-    derive(db);
+    derive(db, { importId: id });
     const nextUsableNights = Number(
       (
         db

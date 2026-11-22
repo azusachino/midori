@@ -124,6 +124,11 @@ export function MetricDetailPage() {
     [navigate],
   );
 
+  const handleNotesChanged = useCallback(() => {
+    query.retry();
+    shell.refresh();
+  }, [query, shell]);
+
   const handleCloseEvidence = useCallback(() => {
     void navigate({
       replace: true,
@@ -436,6 +441,7 @@ export function MetricDetailPage() {
         day={search.night ?? null}
         returnFocusTo={evidenceTriggerRef}
         onClose={handleCloseEvidence}
+        onNotesChanged={handleNotesChanged}
       />
     </div>
   );

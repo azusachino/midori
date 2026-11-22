@@ -16,6 +16,7 @@ import {
   buildCalendarDays,
   buildMetricChartSummary,
   buildMetricChartTable,
+  clampNotesToAxis,
   currentStintBandPoints,
   estimateLegendRows,
   findRecentWindow,
@@ -193,8 +194,66 @@ export function MetricChart({
         }
       }
       const osUpdateXIndices = Array.from(osUpdateXSet).sort((a, b) => a - b);
+      const noteBands = clampNotesToAxis(series.notes, days, axisDay);
 
       const echartsSeries: Record<string, unknown>[] = [];
+
+      // 0. Personal-note bands: translucent spans plus a top square, distinct from
+      // dashed seam lines and OS tick triangles. Clamped into the rendered axis.
+      if (noteBands.length > 0) {
+        echartsSeries.push({
+          name: copy.chart.noteBandLabel,
+          type: "custom",
+          silent: true,
+          z: 0.5,
+          encode: { x: [0, 1] },
+          renderItem: (
+            params: { coordSys: unknown },
+            api: {
+              value: (idx: number) => number | string;
+              coord: (val: [number, number]) => number[];
+            },
+          ) => {
+            const startIdx = Number(api.value(0));
+            const endIdx = Number(api.value(1));
+            const startPt = api.coord([startIdx, 0]);
+            const endPt = api.coord([endIdx, 0]);
+            const coordSys = params.coordSys as {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            };
+            const left = Math.max(coordSys.x, Math.min(startPt[0] ?? 0, endPt[0] ?? 0) - 3);
+            const right = Math.min(
+              coordSys.x + coordSys.width,
+              Math.max(startPt[0] ?? 0, endPt[0] ?? 0) + 3,
+            );
+            if (right <= left) return null;
+            return {
+              type: "group" as const,
+              children: [
+                {
+                  type: "rect" as const,
+                  shape: { x: left, y: coordSys.y, width: right - left, height: coordSys.height },
+                  style: { fill: "rgba(52, 211, 153, 0.08)" },
+                },
+                {
+                  type: "rect" as const,
+                  shape: {
+                    x: left,
+                    y: coordSys.y + 4,
+                    width: Math.max(5, right - left),
+                    height: 4,
+                  },
+                  style: { fill: theme.accent, opacity: 0.85 },
+                },
+              ],
+            };
+          },
+          data: noteBands.map((band) => [band.startIndex, band.endIndex]),
+        });
+      }
 
       // 1. Custom polygon baseline band (works across negative, zero-crossing, or positive bounds)
       if (bandSegments.length > 0) {
@@ -581,6 +640,18 @@ export function MetricChart({
                   `<div style="color:${theme.notable};margin-top:3px;">${escapeHtml(formatSeamLabel(seam, series.epochs, series.metric, series.unit))}</div>`,
                 );
               }
+            }
+
+            const noteBandsForDay =
+              typeof firstIdx === "number"
+                ? noteBands.filter(
+                    (band) => firstIdx >= band.startIndex && firstIdx <= band.endIndex,
+                  )
+                : [];
+            for (const band of noteBandsForDay) {
+              lines.push(
+                `<div style="color:${theme.accent};margin-top:3px;">${escapeHtml(copy.chart.noteLabel)}: ${escapeHtml(band.label)} <span style="color:${theme.mutedForeground};">· ${escapeHtml(copy.notes.categories[band.category] ?? band.category)}</span></div>`,
+              );
             }
 
             const osUpdatesForDay = osUpdatesByDay.get(day);

@@ -125,6 +125,31 @@ export const findings = sqliteTable("findings", {
   stintId: integer("stint_id"),
 });
 
+export const notes = sqliteTable("notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  startDay: text("start_day").notNull(),
+  endDay: text("end_day").notNull(),
+  category: text("category").notNull(),
+  label: text("label").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const findingSnapshots = sqliteTable(
+  "finding_snapshots",
+  {
+    importId: integer("import_id").notNull(),
+    metric: text("metric").notNull(),
+    state: text("state").notNull(),
+    z: real("z"),
+    severity: text("severity"),
+    direction: text("direction"),
+    confidence: text("confidence"),
+    asofDay: text("asof_day").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.importId, t.metric] })],
+);
+
 export const seamSteps = sqliteTable(
   "seam_steps",
   {

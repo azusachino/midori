@@ -6,10 +6,12 @@ import { EmptyState } from "@/components/EmptyState";
 import { FindingRow } from "@/components/FindingRow";
 import { LastNightCard } from "@/components/LastNightCard";
 import { LoadingState } from "@/components/LoadingState";
+import { NotesPanel } from "@/components/NotesPanel";
 import { ReadError } from "@/components/ReadError";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { copy } from "@/copy";
+import { formatDiffFooter, formatDiffItems } from "@/lib/diff";
 import {
   formatDayWithWeekday,
   formatRangeSpan,
@@ -130,6 +132,43 @@ export function ChangesPage() {
           </p>
         ) : null}
       </div>
+
+      {/* Import-to-import diff (B-F15): only when something was classified. */}
+      {changes.sinceLastImport && changes.sinceLastImport.items.length > 0 ? (
+        <section
+          data-testid="since-last-import"
+          className="rounded-lg border border-border bg-card px-5 py-4"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-medium text-foreground">{copy.diff.title}</h2>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {copy.diff.span(
+                formatShortDay(changes.sinceLastImport.fromAsOfDay),
+                formatShortDay(changes.sinceLastImport.toAsOfDay),
+              )}
+            </span>
+          </div>
+          <ul className="mt-2 space-y-1 text-sm text-foreground/90">
+            {formatDiffItems(changes.sinceLastImport).map((line, index) => (
+              <li key={changes.sinceLastImport?.items[index]?.metric ?? index}>{line}</li>
+            ))}
+          </ul>
+          {formatDiffFooter(changes.sinceLastImport) ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {formatDiffFooter(changes.sinceLastImport)}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* Personal notes as confounders (B-C7); changes refresh after each mutation. */}
+      <section
+        data-testid="changes-notes"
+        className="rounded-lg border border-border bg-card px-5 py-4"
+      >
+        <h2 className="mb-2 text-sm font-medium text-foreground">{copy.notes.heading}</h2>
+        <NotesPanel notes={changes.recentNotes} compact onChanged={refresh} />
+      </section>
 
       {/* Overnight findings in B-F12 groups; the full ranked set stays one click away (B-F7) */}
       <section

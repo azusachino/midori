@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { ApiError, apiClient, ImportFailedError } from "@/api/client";
-import type { ImportDTO } from "@/api/types";
+import type { FindingsDiffDTO, ImportDTO } from "@/api/types";
 import { LoadingState } from "@/components/LoadingState";
 import { ReadError } from "@/components/ReadError";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { copy } from "@/copy";
+import { formatDiffFooter, formatDiffItems } from "@/lib/diff";
 import { formatDayWithWeekday } from "@/lib/finding-format";
 import {
   formatDurationClock,
@@ -65,6 +66,7 @@ export function ImportPage() {
 
   const [activeJob, setActiveJob] = useState<ImportDTO | null>(null);
   const [completedJob, setCompletedJob] = useState<ImportDTO | null>(null);
+  const [completedDiff, setCompletedDiff] = useState<FindingsDiffDTO | null>(null);
   const [failedJob, setFailedJob] = useState<ImportDTO | null>(null);
   const [retryExpiredIds, setRetryExpiredIds] = useState<Record<number, boolean>>({});
   const [retryingId, setRetryingId] = useState<number | null>(null);
@@ -200,6 +202,27 @@ export function ImportPage() {
       uploadAbortRef.current?.abort();
     };
   }, [loadInitial]);
+
+  useEffect(() => {
+    if (!completedJob) {
+      setCompletedDiff(null);
+      return;
+    }
+    if ((completedJob.recordsInserted ?? 0) <= 0 || completedJob.olderThanStored) {
+      setCompletedDiff(null);
+      return;
+    }
+    const ac = new AbortController();
+    void apiClient
+      .importDiff(completedJob.id, ac.signal)
+      .then((diff) => {
+        if (!ac.signal.aborted) setCompletedDiff(diff);
+      })
+      .catch(() => {
+        if (!ac.signal.aborted) setCompletedDiff(null);
+      });
+    return () => ac.abort();
+  }, [completedJob]);
 
   useEffect(() => {
     if (!activeJob) {
@@ -618,6 +641,31 @@ export function ImportPage() {
                   .join(", ")}
                 .
               </p>
+            ) : null}
+
+            {completedDiff && completedDiff.items.length > 0 ? (
+              <div
+                data-testid="import-diff-summary"
+                className="space-y-1 border-t border-border pt-2 text-xs"
+              >
+                <p className="font-medium text-foreground">
+                  {copy.diff.title} ·{" "}
+                  <span className="font-normal text-muted-foreground tabular-nums">
+                    {copy.diff.span(
+                      formatDayWithWeekday(completedDiff.fromAsOfDay),
+                      formatDayWithWeekday(completedDiff.toAsOfDay),
+                    )}
+                  </span>
+                </p>
+                <ul className="space-y-0.5 text-foreground/90">
+                  {formatDiffItems(completedDiff).map((line, index) => (
+                    <li key={completedDiff.items[index]?.metric ?? index}>{line}</li>
+                  ))}
+                </ul>
+                {formatDiffFooter(completedDiff) ? (
+                  <p className="text-muted-foreground">{formatDiffFooter(completedDiff)}</p>
+                ) : null}
+              </div>
             ) : null}
           </CardContent>
         </Card>

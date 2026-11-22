@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { rebuildBaselines } from "./baselines";
+import { captureFindingSnapshot } from "./diff";
 import { type FindingRowDTO, rebuildFindings } from "./findings";
 import { rebuildNightPipeline } from "./nights";
 import { rebuildSeamSteps } from "./seams";
@@ -12,6 +13,8 @@ export type DeriveStage =
   | "findings";
 
 export interface DeriveOptions {
+  /** Import that produced this derived snapshot; when set, its finding snapshot is written. */
+  importId?: number;
   /** Test seam for proving rollback when any post-stage work fails. */
   afterStage?: (stage: DeriveStage) => void;
 }
@@ -39,6 +42,9 @@ export function derive(db: Database, options: DeriveOptions = {}): DeriveResult 
     rebuildSeamSteps(db, () => true);
     options.afterStage?.("seams");
     const findings = rebuildFindings(db, baselines);
+    // B-I13: snapshot this import's findings inside the same transaction. Rollbacks and
+    // failed imports therefore leave no snapshot rows behind.
+    if (options.importId !== undefined) captureFindingSnapshot(db, options.importId);
     options.afterStage?.("findings");
     db.exec("COMMIT");
     const asOfDay = (

@@ -10,7 +10,9 @@ import type {
   UnitEvidenceDTO,
 } from "../domain/api";
 import { METRICS } from "../domain/metrics";
+import { latestSinceLastImport } from "../stats/diff";
 import { readFindings } from "../stats/findings";
+import { listNotes } from "../stats/notes";
 import { type MetricUnit, minorEpochs } from "../stats/stints";
 
 // Retained for src/mcp/server.ts until Slice 10 drops v0 MCP source tools.
@@ -294,6 +296,8 @@ export function getChanges(db: Database): ChangesDTO {
       : null,
     overnight: rows.filter((r) => r.kind === "overnight"),
     daytime: rows.filter((r) => r.kind === "daytime"),
+    sinceLastImport: latestSinceLastImport(db),
+    recentNotes: day ? listNotes(db, addDays(day, -34), null) : listNotes(db),
     lastNight: night
       ? {
           date: night.date,
@@ -600,6 +604,7 @@ export function getSeries(db: Database, metric: string, range: string): MetricSe
         const [fromSw, toSw] = e.detail.split(" → ");
         return { epochId: e.epochId, day: e.day, fromSw: fromSw ?? null, toSw: toSw ?? e.detail };
       }),
+    notes: listNotes(db, range === "all" ? null : from, day),
   };
 }
 export function getUnitEvidence(db: Database, metric: string, day: string): UnitEvidenceDTO | null {
@@ -756,6 +761,7 @@ export function getUnitEvidence(db: Database, metric: string, day: string): Unit
       colorIndex: epochTraits.byEpoch.get(other.id)?.colorIndex ?? null,
       minor: epochTraits.minorByMetric.get(metric)?.has(other.id) ?? true,
     })),
+    notes: listNotes(db, day, day),
   };
 }
 export function getEpochs(db: Database): EpochsDTO {

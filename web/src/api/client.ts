@@ -4,11 +4,15 @@ import type {
   ChangesDTO,
   EpochsDTO,
   ErrorResponse,
+  FindingsDiffDTO,
   ImportDTO,
   MetricRange,
   MetricSeriesDTO,
   MetricsIndexDTO,
   NightsDTO,
+  NoteDTO,
+  NoteInputDTO,
+  NotePatchDTO,
   UnitEvidenceDTO,
   UploadAcceptedDTO,
 } from "./types";
@@ -117,6 +121,11 @@ export interface ApiClient {
   nights(from: string, to: string, signal?: AbortSignal): Promise<NightsDTO>;
   imports(signal?: AbortSignal): Promise<ImportDTO[]>;
   importDetail(id: number, signal?: AbortSignal): Promise<ImportDTO>;
+  importDiff(id: number, signal?: AbortSignal): Promise<FindingsDiffDTO | null>;
+  notes(params?: { from?: string; to?: string }, signal?: AbortSignal): Promise<NoteDTO[]>;
+  createNote(input: NoteInputDTO, signal?: AbortSignal): Promise<NoteDTO>;
+  updateNote(id: number, patch: NotePatchDTO, signal?: AbortSignal): Promise<NoteDTO>;
+  deleteNote(id: number, signal?: AbortSignal): Promise<void>;
   retryImport(id: number, signal?: AbortSignal): Promise<UploadAcceptedDTO>;
   pollImport(id: number, options?: PollOptions): Promise<ImportDTO>;
   upload(file: File | Blob, opts?: UploadOptions): Promise<UploadAcceptedDTO>;
@@ -359,6 +368,54 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     async importDetail(id, signal) {
       return getJson<ImportDTO>(`/api/imports/${id}`, signal);
+    },
+
+    async importDiff(id, signal) {
+      const body = await getJson<{ diff: FindingsDiffDTO | null }>(
+        `/api/imports/${id}/diff`,
+        signal,
+      );
+      return body.diff;
+    },
+
+    async notes(params, signal) {
+      const body = await getJson<{ notes: NoteDTO[] }>(
+        `/api/notes${query({ from: params?.from, to: params?.to })}`,
+        signal,
+      );
+      return body.notes;
+    },
+
+    createNote(input, signal) {
+      return send<NoteDTO>(
+        "/api/notes",
+        {
+          method: "POST",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify(input),
+        },
+        signal,
+      );
+    },
+
+    updateNote(id, patch, signal) {
+      return send<NoteDTO>(
+        `/api/notes/${id}`,
+        {
+          method: "PATCH",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify(patch),
+        },
+        signal,
+      );
+    },
+
+    async deleteNote(id, signal) {
+      await send<{ deleted: boolean }>(
+        `/api/notes/${id}`,
+        { method: "DELETE", headers: { accept: "application/json" } },
+        signal,
+      );
     },
 
     retryImport(id, signal) {

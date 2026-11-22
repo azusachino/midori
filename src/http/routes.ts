@@ -1,9 +1,21 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
+import { getImportDiff } from "../stats/diff";
+import {
+  createNote,
+  deleteNote,
+  getNote,
+  isCalendarDay,
+  listNotes,
+  noteFields,
+  updateNote,
+  validateNoteFields,
+} from "../stats/notes";
 import { type ImportRouteOptions, mountImportRoutes } from "./import";
 import {
   getChanges,
   getEpochs,
+  getImport,
   getMetrics,
   getNights,
   getSeries,
@@ -26,6 +38,12 @@ export function createApp({ db, upload }: RouteDeps): Hono {
     return c.json({ ok: true as const });
   });
   app.get("/api/imports", (c) => c.json(listImports(db)));
+  app.get("/api/imports/:id/diff", (c) => {
+    const id = Number(c.req.param("id"));
+    if (!Number.isInteger(id) || id <= 0 || !getImport(db, id))
+      return c.json({ error: "import not found", retryable: false }, 404);
+    return c.json({ diff: getImportDiff(db, id) });
+  });
   app.get("/api/changes", (c) => c.json(getChanges(db)));
   app.get("/api/metrics", (c) => c.json(getMetrics(db)));
   app.get("/api/metrics/:metric/units/:day", (c) => {
@@ -42,6 +60,49 @@ export function createApp({ db, upload }: RouteDeps): Hono {
     return value ? c.json(value) : c.json({ error: "unknown metric", retryable: false }, 404);
   });
   app.get("/api/epochs", (c) => c.json(getEpochs(db)));
+
+  // Owner notes: reads are always available; mutations only where uploads are (B-U1–B-U4).
+  app.get("/api/notes", (c) => {
+    const from = c.req.query("from") ?? "";
+    const to = c.req.query("to") ?? "";
+    if ((from !== "" && !isCalendarDay(from)) || (to !== "" && !isCalendarDay(to)))
+      return c.json({ error: "from and to must be calendar dates", retryable: false }, 400);
+    return c.json({ notes: listNotes(db, from || null, to || null) });
+  });
+  if (upload) {
+    app.post("/api/notes", async (c) => {
+      const body: unknown = await c.req.json().catch(() => null);
+      const validation = validateNoteFields(body);
+      if (!validation.ok) return c.json({ error: validation.error, retryable: false }, 400);
+      return c.json(createNote(db, validation.value), 201);
+    });
+    app.patch("/api/notes/:id", async (c) => {
+      const id = Number(c.req.param("id"));
+      if (!Number.isInteger(id) || id <= 0)
+        return c.json({ error: "note not found", retryable: false }, 404);
+      const existing = getNote(db, id);
+      if (!existing) return c.json({ error: "note not found", retryable: false }, 404);
+      const body: unknown = await c.req.json().catch(() => null);
+      const validation = validateNoteFields(body, noteFields(existing));
+      if (!validation.ok) return c.json({ error: validation.error, retryable: false }, 400);
+      return c.json(updateNote(db, id, validation.value));
+    });
+    app.delete("/api/notes/:id", (c) => {
+      const id = Number(c.req.param("id"));
+      if (!Number.isInteger(id) || id <= 0 || !deleteNote(db, id))
+        return c.json({ error: "note not found", retryable: false }, 404);
+      return c.json({ deleted: true as const });
+    });
+  } else {
+    app.post("/api/notes", (c) => c.json({ error: "notes are read-only", retryable: false }, 405));
+    app.patch("/api/notes/:id", (c) =>
+      c.json({ error: "notes are read-only", retryable: false }, 405),
+    );
+    app.delete("/api/notes/:id", (c) =>
+      c.json({ error: "notes are read-only", retryable: false }, 405),
+    );
+  }
+
   app.get("/api/nights", (c) => {
     const from = c.req.query("from") ?? "",
       to = c.req.query("to") ?? "";

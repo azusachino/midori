@@ -321,6 +321,8 @@ export function emptyChangesStub(): ChangesDTO {
     overnight: [],
     daytime: [],
     lastNight: null,
+    sinceLastImport: null,
+    recentNotes: [],
   };
 }
 
@@ -367,6 +369,8 @@ export function changesStub(imports: ImportDTO[] = []): ChangesDTO {
       skippedPartialDay: "2026-03-01",
       skippedPartialReason: "export_cut",
     },
+    sinceLastImport: null,
+    recentNotes: [],
   };
 }
 
@@ -811,6 +815,7 @@ export function metricSeriesStub(metric: string, range: MetricRange = "180d"): M
     stints,
     seams: seamDay >= cutoffDay ? [allSeam] : [],
     osUpdates: allOsUpdates.filter((u) => u.day >= cutoffDay),
+    notes: [],
   };
 }
 
@@ -894,6 +899,7 @@ export function unitEvidenceStub(metric: string, day: string): UnitEvidenceDTO {
       samples: [],
       sleep: null,
       alsoRecordedBy: [],
+      notes: [],
     };
   }
 
@@ -932,6 +938,7 @@ export function unitEvidenceStub(metric: string, day: string): UnitEvidenceDTO {
     samples,
     sleep,
     alsoRecordedBy,
+    notes: [],
   };
 }
 

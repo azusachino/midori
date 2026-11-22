@@ -13,6 +13,9 @@ export function openDb(path: string, opts: { readonly?: boolean } = {}): Databas
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA foreign_keys = ON");
     db.exec("PRAGMA synchronous = NORMAL");
+    // Notes writes can land while the import worker holds the write lock; wait rather
+    // than surfacing SQLITE_BUSY as a 500 to the owner.
+    db.exec("PRAGMA busy_timeout = 10000");
     applyMigrations(db);
   }
   return db;

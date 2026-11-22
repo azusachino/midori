@@ -126,6 +126,7 @@ export const copy = {
     tz_change: "Timezone change in recent window",
     missing_nights: "Missing nights in recent window",
     low_trust: "Low trust metric",
+    user_note: "Personal note in recent window",
   },
   chart: {
     dayCol: "Date",
@@ -139,6 +140,8 @@ export const copy = {
     baselineMedianLabel: "Usual median",
     recentWindowLabel: "last 7",
     osUpdateLabel: "OS update",
+    noteLabel: "Personal note",
+    noteBandLabel: "Personal note",
     minorEpochNote: "Secondary source",
     seamOffset: (fromLabel: string, toLabel: string, offsetText: string) =>
       `${fromLabel} → ${toLabel} · offset ${offsetText}`,
@@ -149,6 +152,50 @@ export const copy = {
     tzShiftNote: "tz shift",
     smokeSummary: (metricLabel: string, count: number) =>
       `${metricLabel} series with ${count} synthetic units.`,
+  },
+  notes: {
+    heading: "Notes",
+    addHeading: "Add a note",
+    editHeading: "Edit note",
+    empty: "No notes in this window.",
+    startField: "From",
+    endField: "To",
+    categoryField: "Category",
+    labelField: "Note",
+    labelPlaceholder: "e.g. travel, illness, medication",
+    save: "Save note",
+    saving: "Saving…",
+    cancel: "Cancel",
+    edit: "Edit",
+    delete: "Delete",
+    deleted: "Note deleted",
+    range: (startDay: string, endDay: string) =>
+      startDay === endDay ? startDay : `${startDay}–${endDay}`,
+    categories: {
+      illness: "Illness",
+      travel: "Travel",
+      alcohol: "Alcohol",
+      medication: "Medication",
+      stress: "Stress",
+      other: "Other",
+    } as Record<string, string>,
+    error: "Couldn't save the note.",
+    deleteError: "Couldn't delete the note.",
+  },
+  diff: {
+    title: "Since previous export",
+    span: (fromDay: string, toDay: string) => `${fromDay} → ${toDay}`,
+    unchanged: (count: number) =>
+      count === 1 ? "1 metric unchanged" : `${count} metrics unchanged`,
+    empty: "No classified movement since the previous export.",
+    classifications: {
+      direction_reversed: "direction reversed",
+      newly_notable: "newly notable",
+      returned_to_usual: "returned to usual",
+      shifted_further: "further from usual",
+      baseline_ready: "baseline ready",
+    } as Record<string, string>,
+    item: (metricLabel: string, classification: string) => `${metricLabel}: ${classification}`,
   },
   pages: {
     changes: {
@@ -183,6 +230,7 @@ export const copy = {
         tz_change: "a timezone change",
         missing_nights: "missing nights",
         low_trust: "low-trust data",
+        user_note: "a personal note",
       } as Record<string, string>,
       watchHint: "These become findings only if the shift holds through a full new week of nights.",
       nextLookSoon: (day: string) => `Import again around ${day}.`,
@@ -324,6 +372,7 @@ export const copy = {
         tz_change: "No timezone change",
         missing_nights: (noun: "nights" | "days") => `No missing ${noun}`,
         trust: (trustLabel: string) => `Trust: ${trustLabel}`,
+        user_note: "No personal note",
       },
       checksFlaggedLabels: {
         device_change: (dayLabel?: string) =>
@@ -346,6 +395,8 @@ export const copy = {
         missing_nights: (noun: "nights" | "days", dayLabel?: string) =>
           dayLabel ? `Missing ${noun} (${dayLabel})` : `Missing ${noun} in recent window`,
         low_trust: "Trust: low",
+        user_note: (dayLabel?: string) =>
+          dayLabel ? `Personal note (${dayLabel})` : "Personal note in recent window",
       },
       evidence: {
         title: (prefix: string, metricLabel: string) => `${prefix} · ${metricLabel}`,

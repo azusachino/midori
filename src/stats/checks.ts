@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { MetricSpec } from "../domain/metrics";
+import { userNoteCheck } from "./notes";
 
 export type CheckKey =
   | "device_change"
@@ -7,7 +8,8 @@ export type CheckKey =
   | "partial_nights"
   | "tz_change"
   | "missing_nights"
-  | "low_trust";
+  | "low_trust"
+  | "user_note";
 
 export interface CheckDTO {
   key: CheckKey;
@@ -81,6 +83,7 @@ export function deriveChecks(
           86_400_000 +
         1
       : 0;
+  const note = userNoteCheck(db, oldestRecentDay, newestRecentDay);
   return [
     { key: "device_change", flagged: seam !== null, ...(seam ? { day: seam.day } : {}) },
     { key: "os_update", flagged: event !== null, ...(event ? { day: event.day } : {}) },
@@ -96,5 +99,11 @@ export function deriveChecks(
     },
     { key: "missing_nights", flagged: span > 10, ...(span > 10 ? { count: span } : {}) },
     { key: "low_trust", flagged: spec.trust === "low" },
+    {
+      key: "user_note",
+      flagged: note.flagged,
+      ...(note.day ? { day: note.day } : {}),
+      ...(note.count ? { count: note.count } : {}),
+    },
   ];
 }
