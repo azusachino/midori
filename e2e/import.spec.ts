@@ -266,6 +266,43 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
     });
   });
 
+  await page.route("**/api/imports/91/diff", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        diff: {
+          fromImportId: 90,
+          toImportId: 91,
+          fromAsOfDay: "2026-02-22",
+          toAsOfDay: "2026-03-01",
+          unchangedCount: 4,
+          items: [
+            {
+              metric: "sleep_h",
+              kind: "overnight",
+              classification: "returned_to_usual",
+              previous: {
+                state: "computed",
+                severity: "alert",
+                direction: "lower",
+                z: -2.8,
+                confidence: "high",
+              },
+              current: {
+                state: "computed",
+                severity: "within",
+                direction: "within",
+                z: -0.4,
+                confidence: "high",
+              },
+            },
+          ],
+        },
+      }),
+    });
+  });
+
   await page.route("**/api/imports/91", async (route) => {
     detailPoll += 1;
     if (detailPoll === 1) {
@@ -354,6 +391,10 @@ test("§8 states: uploading progress, running stage/progress stepper, B-I2 busy 
   await expect(summary).toContainText("3 new usable nights");
   await expect(summary).toContainText("Data through Mar 1 (Sun)");
   await expect(summary).toContainText("New device: Synthetic Watch C");
+  const diffSummary = page.getByTestId("import-diff-summary");
+  await expect(diffSummary).toBeVisible();
+  await expect(diffSummary).toContainText("Sleep: returned to usual");
+  await expect(diffSummary).toContainText("4 metrics unchanged");
   expect(errors).toEqual([]);
 });
 
@@ -505,6 +546,14 @@ test("§8 states: empty history, B-I5/B-I10 failed job card, Retry -> done, and 
       status: 202,
       contentType: "application/json",
       body: JSON.stringify({ importId: 55, status: "queued" }),
+    });
+  });
+
+  await page.route("**/api/imports/55/diff", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ diff: null }),
     });
   });
 

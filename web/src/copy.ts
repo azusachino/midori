@@ -140,6 +140,8 @@ export const copy = {
     baselineMedianLabel: "Usual median",
     recentWindowLabel: "last 7",
     osUpdateLabel: "OS update",
+    noteLabel: "Personal note",
+    noteBandLabel: "Personal note",
     minorEpochNote: "Secondary source",
     seamOffset: (fromLabel: string, toLabel: string, offsetText: string) =>
       `${fromLabel} → ${toLabel} · offset ${offsetText}`,
@@ -150,6 +152,50 @@ export const copy = {
     tzShiftNote: "tz shift",
     smokeSummary: (metricLabel: string, count: number) =>
       `${metricLabel} series with ${count} synthetic units.`,
+  },
+  notes: {
+    heading: "Notes",
+    addHeading: "Add a note",
+    editHeading: "Edit note",
+    empty: "No notes in this window.",
+    startField: "From",
+    endField: "To",
+    categoryField: "Category",
+    labelField: "Note",
+    labelPlaceholder: "e.g. travel, illness, medication",
+    save: "Save note",
+    saving: "Saving…",
+    cancel: "Cancel",
+    edit: "Edit",
+    delete: "Delete",
+    deleted: "Note deleted",
+    range: (startDay: string, endDay: string) =>
+      startDay === endDay ? startDay : `${startDay}–${endDay}`,
+    categories: {
+      illness: "Illness",
+      travel: "Travel",
+      alcohol: "Alcohol",
+      medication: "Medication",
+      stress: "Stress",
+      other: "Other",
+    } as Record<string, string>,
+    error: "Couldn't save the note.",
+    deleteError: "Couldn't delete the note.",
+  },
+  diff: {
+    title: "Since previous export",
+    span: (fromDay: string, toDay: string) => `${fromDay} → ${toDay}`,
+    unchanged: (count: number) =>
+      count === 1 ? "1 metric unchanged" : `${count} metrics unchanged`,
+    empty: "No classified movement since the previous export.",
+    classifications: {
+      direction_reversed: "direction reversed",
+      newly_notable: "newly notable",
+      returned_to_usual: "returned to usual",
+      shifted_further: "further from usual",
+      baseline_ready: "baseline ready",
+    } as Record<string, string>,
+    item: (metricLabel: string, classification: string) => `${metricLabel}: ${classification}`,
   },
   pages: {
     changes: {

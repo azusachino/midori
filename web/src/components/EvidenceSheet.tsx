@@ -2,6 +2,7 @@ import { Check, Copy } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useId, useRef, useState } from "react";
 import { apiClient } from "@/api/client";
 import type { MetricKind, UnitEvidenceDTO } from "@/api/types";
+import { NotesPanel } from "@/components/NotesPanel";
 import { ReadError } from "@/components/ReadError";
 import { SleepStageBar } from "@/components/SleepStageBar";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,8 @@ export interface EvidenceSheetProps {
   day: string | null;
   returnFocusTo?: RefObject<HTMLElement | null>;
   onClose: () => void;
+  /** Called after a note mutation so the parent can refetch checks/charts. */
+  onNotesChanged?: () => void;
 }
 
 /**
@@ -42,6 +45,7 @@ export function EvidenceSheet({
   day,
   returnFocusTo,
   onClose,
+  onNotesChanged,
 }: EvidenceSheetProps) {
   const unitKind: UnitEvidenceDTO["unitKind"] = kind === "daytime" ? "day" : "night";
   const evCopy = copy.pages.metricDetail.evidence;
@@ -99,7 +103,14 @@ export function EvidenceSheet({
           <SheetDescription className="sr-only">{evCopy.sheetDescription}</SheetDescription>
         </SheetHeader>
 
-        {day ? <EvidenceLoader metric={metric} unit={unit} day={day} /> : null}
+        {day ? (
+          <EvidenceLoader
+            metric={metric}
+            unit={unit}
+            day={day}
+            {...(onNotesChanged ? { onNotesChanged } : {})}
+          />
+        ) : null}
       </SheetContent>
     </Sheet>
   );
@@ -109,9 +120,10 @@ interface EvidenceLoaderProps {
   metric: string;
   unit: string;
   day: string;
+  onNotesChanged?: () => void;
 }
 
-function EvidenceLoader({ metric, unit, day }: EvidenceLoaderProps) {
+function EvidenceLoader({ metric, unit, day, onNotesChanged }: EvidenceLoaderProps) {
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<number | null>(null);
   const evCopy = copy.pages.metricDetail.evidence;
@@ -165,8 +177,19 @@ function EvidenceLoader({ metric, unit, day }: EvidenceLoaderProps) {
     return <ReadError title={evCopy.loadError} message={query.error} onRetry={query.retry} />;
   }
 
+  const handleNotesChanged = () => {
+    query.retry();
+    onNotesChanged?.();
+  };
+
   return (
-    <EvidenceBody evidence={query.data} unit={unit} copied={copied} onCopyLink={handleCopyLink} />
+    <EvidenceBody
+      evidence={query.data}
+      unit={unit}
+      copied={copied}
+      onCopyLink={handleCopyLink}
+      onNotesChanged={handleNotesChanged}
+    />
   );
 }
 
@@ -175,11 +198,13 @@ interface EvidenceBodyProps {
   unit: string;
   copied: boolean;
   onCopyLink: () => void;
+  onNotesChanged: () => void;
 }
 
-function EvidenceBody({ evidence, unit, copied, onCopyLink }: EvidenceBodyProps) {
+function EvidenceBody({ evidence, unit, copied, onCopyLink, onNotesChanged }: EvidenceBodyProps) {
   const samplesHeadingId = useId();
   const sleepHeadingId = useId();
+  const notesHeadingId = useId();
   const evCopy = copy.pages.metricDetail.evidence;
   const partialReasonText = formatEvidencePartialReason(evidence.partialReason);
   const hasSamples =
@@ -292,6 +317,22 @@ function EvidenceBody({ evidence, unit, copied, onCopyLink }: EvidenceBodyProps)
           </span>
         </p>
       ) : null}
+
+      <section aria-labelledby={notesHeadingId} className="space-y-2">
+        <h3
+          id={notesHeadingId}
+          className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+        >
+          {copy.notes.heading}
+        </h3>
+        <NotesPanel
+          notes={evidence.notes}
+          defaultDay={evidence.day}
+          compact
+          onChanged={onNotesChanged}
+          testId="evidence-notes"
+        />
+      </section>
 
       <div className="mt-auto border-t border-border pt-4">
         <Button

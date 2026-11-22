@@ -10,7 +10,11 @@ import type {
   FindingDTO,
   FindingRowDTO,
   FindingSeverity,
+  FindingSnapshotSummaryDTO,
   FindingState,
+  FindingsDiffClassification,
+  FindingsDiffDTO,
+  FindingsDiffItemDTO,
   FreshnessSummaryDTO,
   ImportDTO,
   ImportStatus,
@@ -20,6 +24,8 @@ import type {
   MetricsIndexDTO,
   MetricUnitPointDTO,
   NightsDTO,
+  NoteCategory,
+  NoteDTO,
   UnitEvidenceDTO,
   UploadAcceptedDTO,
   WeeklySeriesPointDTO,
@@ -43,7 +49,11 @@ export type {
   FindingDTO,
   FindingRowDTO,
   FindingSeverity,
+  FindingSnapshotSummaryDTO,
   FindingState,
+  FindingsDiffClassification,
+  FindingsDiffDTO,
+  FindingsDiffItemDTO,
   FreshnessSummaryDTO,
   ImportDTO,
   ImportStatus,
@@ -53,6 +63,8 @@ export type {
   MetricsIndexDTO,
   MetricUnitPointDTO,
   NightsDTO,
+  NoteCategory,
+  NoteDTO,
   UnitEvidenceDTO,
   UploadAcceptedDTO,
   WeeklySeriesPointDTO,
@@ -78,3 +90,11 @@ export type SeamStepDTO = MetricSeriesDTO["seams"][number];
 export type OsUpdateEventDTO = MetricSeriesDTO["osUpdates"][number];
 export type SamplePointDTO = UnitEvidenceDTO["samples"][number];
 export type NightSummaryDTO = NightsDTO["nights"][number];
+export type NoteCategoryDTO = NoteCategory;
+export type NoteInputDTO = {
+  startDay: string;
+  endDay?: string;
+  category: NoteCategory;
+  label: string;
+};
+export type NotePatchDTO = Partial<NoteInputDTO>;

@@ -4,6 +4,7 @@ import type {
   MetricRange,
   MetricSeriesDTO,
   MetricUnitPointDTO,
+  NoteDTO,
   OsUpdateEventDTO,
   SeamStepDTO,
 } from "../api/types";
@@ -181,6 +182,52 @@ export function buildCalendarDays(series: MetricSeriesDTO): string[] {
     out.push(formatMsAsIsoDay(firstMs + i * stepMs));
   }
   return out;
+}
+
+export interface NoteAxisBand {
+  id: number;
+  label: string;
+  category: string;
+  startDay: string;
+  endDay: string;
+  startIndex: number;
+  endIndex: number;
+}
+
+/**
+ * Clamps notes to the rendered axis (B-U4/M5). Multi-day notes that begin before or end
+ * after the chart window keep their in-window part; weekly axes snap through `axisDay`.
+ */
+export function clampNotesToAxis(
+  notes: readonly NoteDTO[],
+  days: readonly string[],
+  axisDay: (day: string) => string = (day) => day,
+): NoteAxisBand[] {
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (!first || !last) return [];
+  const dayIndex = new Map(days.map((day, idx) => [day, idx]));
+  const bands: NoteAxisBand[] = [];
+  for (const note of notes) {
+    if (note.endDay < first || note.startDay > last) continue;
+    const startDay = note.startDay < first ? first : note.startDay;
+    const endDay = note.endDay > last ? last : note.endDay;
+    const startIndex = dayIndex.get(axisDay(startDay));
+    if (startIndex === undefined) continue;
+    const endIndex =
+      dayIndex.get(axisDay(endDay)) ?? days.findLastIndex((day) => day <= axisDay(endDay));
+    if (endIndex < startIndex) continue;
+    bands.push({
+      id: note.id,
+      label: note.label,
+      category: note.category,
+      startDay,
+      endDay,
+      startIndex,
+      endIndex,
+    });
+  }
+  return bands.sort((a, b) => a.startIndex - b.startIndex || a.id - b.id);
 }
 
 /**
