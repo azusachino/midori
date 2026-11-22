@@ -136,9 +136,7 @@ export function MetricsPage() {
         if (items.length === 0) return null;
         return (
           <section key={kind} data-testid={`metrics-group-${kind}`} className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              {copy.pages.metrics.groups[kind]}
-            </h2>
+            <h2 className="midori-kicker">{copy.pages.metrics.groups[kind]}</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {items.map((item) => {
                 const label = copy.metrics[item.metric] ?? item.metric;
@@ -147,7 +145,7 @@ export function MetricsPage() {
                   <Card
                     key={item.metric}
                     data-testid={`metric-card-${item.metric}`}
-                    className="relative flex h-full overflow-hidden transition-colors hover:border-border-strong"
+                    className="midori-tile-interactive relative flex h-full overflow-hidden transition-colors hover:border-border-strong"
                   >
                     <span
                       aria-hidden="true"

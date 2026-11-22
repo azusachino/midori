@@ -25,7 +25,7 @@ export function SleepStageBar({ deepH, remH, coreH, className }: SleepStageBarPr
         role="img"
         aria-label={copy.pages.changes.lastNight.stageBarAria(deep, rem, core)}
         data-testid="sleep-stage-bar"
-        className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
+        className="flex h-3 w-full overflow-hidden rounded-full bg-muted shadow-[0_0_18px_-6px_var(--color-accent)]"
       >
         {deepPct > 0 ? (
           <div style={{ width: `${deepPct.toFixed(1)}%` }} className="h-full bg-epoch-2" />

@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Check, Flag } from "lucide-react";
 import { type MouseEvent, useCallback, useMemo } from "react";
 import type { MetricSeriesDTO } from "@/api/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { copy } from "@/copy";
 import { resolveChecks } from "@/lib/evidence";
 import { formatShortDay } from "@/lib/finding-format";
@@ -28,7 +28,7 @@ export function ChecksPanel({ series, onSelectDay }: ChecksPanelProps) {
   return (
     <Card data-testid="checks-panel" className="min-w-0 overflow-hidden">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium">{copy.pages.metricDetail.checksTitle}</CardTitle>
+        <h2 className="midori-kicker">{copy.pages.metricDetail.checksTitle}</h2>
       </CardHeader>
       <CardContent className="pt-0">
         <ul className="divide-y divide-border text-sm">

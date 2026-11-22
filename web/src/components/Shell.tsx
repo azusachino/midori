@@ -54,9 +54,9 @@ export function Shell({ children }: { children: ReactNode }) {
         {copy.app.skipToContent}
       </a>
 
-      {/* Top bar (B-R1, B-I6): below 768px freshness moves to its own line */}
-      <header className="border-b border-border bg-card/60">
-        <div className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
+      {/* Top bar (B-R1, B-I6): below 768px freshness moves to its own line. */}
+      <header className="midori-glass sticky top-0 z-30 border-b border-border shadow-[0_1px_0_rgb(255_255_255_/_0.04)] md:h-13">
+        <div className="flex h-full flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6 md:py-0">
           <div className="flex items-center justify-between gap-3">
             <Link
               to="/"
@@ -131,9 +131,9 @@ export function Shell({ children }: { children: ReactNode }) {
 
       <div className="flex flex-1">
         {/* Desktop sidebar (>=768px) */}
-        {/* The column stretches with the page; its content stays pinned at the top. */}
+        {/* The column stretches with the page; its content stays pinned below the header. */}
         <aside className="hidden md:block md:w-52 md:shrink-0 md:border-r md:border-border md:bg-card/30">
-          <div className="md:sticky md:top-0 md:max-h-dvh md:overflow-y-auto md:p-4">
+          <div className="md:sticky md:top-13 md:max-h-[calc(100dvh-3.25rem)] md:overflow-y-auto md:p-4">
             <nav aria-label={copy.nav.label} className="space-y-1" data-testid="sidebar-nav">
               {NAV_ITEMS.map((item) => {
                 const active = isRouteActive(pathname, item.to, item.matchPrefix);
@@ -145,7 +145,7 @@ export function Shell({ children }: { children: ReactNode }) {
                     className={cn(
                       "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors no-underline",
                       active
-                        ? "bg-muted text-foreground"
+                        ? "bg-muted text-foreground shadow-[inset_2px_0_0_var(--color-accent)]"
                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
                   >
@@ -157,7 +157,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
             {primaryWatch ? (
               <div className="pt-6" data-testid="sidebar-watch">
-                <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="midori-kicker mb-2 flex items-center gap-2">
                   <span>{copy.sidebar.watchHeading}</span>
                   <Separator className="flex-1" />
                 </div>

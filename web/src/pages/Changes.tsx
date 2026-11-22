@@ -11,7 +11,9 @@ import { LoadingState } from "@/components/LoadingState";
 import { AgentBadge } from "@/components/NotesPanel";
 import { ReadError } from "@/components/ReadError";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { VitalsBento } from "@/components/VitalTile";
 import { copy } from "@/copy";
 import { formatDiffFooter, formatDiffItems } from "@/lib/diff";
 import {
@@ -25,6 +27,7 @@ import {
   sharedFlaggedChecks,
 } from "@/lib/finding-format";
 import { useShell } from "@/lib/shell-context";
+import { cn } from "@/lib/utils";
 
 export function ChangesPage() {
   const overnightHeadingId = useId();
@@ -54,6 +57,8 @@ export function ChangesPage() {
   const daytimeRows = rankFindingRows(changes.daytime.filter(isNotableDaytime));
   const groups = groupChangesRows(overnightRows);
   const standsOutCount = groups.standsOut.length + daytimeRows.length;
+  const overnightStandsOut = groups.standsOut.length;
+  const hasOvernightAlert = overnightRows.some((row) => row.severity === "alert");
   const withinCount = overnightRows.filter(
     (r) => r.state === "computed" && r.severity === "within",
   ).length;
@@ -119,9 +124,17 @@ export function ChangesPage() {
         <div className="lg:col-span-7">
           <div
             data-testid="changes-answer"
-            className="flex h-full flex-col rounded-lg border border-border bg-card px-5 py-4"
+            className={cn(
+              "midori-tile flex h-full flex-col px-5 py-4",
+              overnightStandsOut === 0
+                ? "midori-glow-emerald"
+                : hasOvernightAlert
+                  ? "midori-glow-alert"
+                  : "midori-glow-notable",
+            )}
           >
-            <p className="text-lg font-medium text-foreground">
+            <p className="midori-kicker">{copy.pages.changes.hero.kicker}</p>
+            <p className="mt-1.5 text-lg font-medium text-foreground">
               {standsOutCount > 0
                 ? copy.pages.changes.answerSome(standsOutCount)
                 : copy.pages.changes.answerNone}
@@ -136,6 +149,27 @@ export function ChangesPage() {
                 {copy.pages.changes.sharedChecks(sharedNouns)}
               </p>
             ) : null}
+
+            <ul className="mt-3 flex flex-wrap items-center gap-1.5">
+              <li>
+                <Badge variant="accent" className="tabular-nums">
+                  {copy.pages.changes.hero.inRange(withinCount)}
+                </Badge>
+              </li>
+              <li>
+                <Badge
+                  variant={overnightStandsOut > 0 ? "notable" : "secondary"}
+                  className="tabular-nums"
+                >
+                  {copy.pages.changes.hero.shifted(overnightStandsOut)}
+                </Badge>
+              </li>
+              <li>
+                <Badge variant="learning" className="tabular-nums">
+                  {copy.pages.changes.hero.learning(otherCount)}
+                </Badge>
+              </li>
+            </ul>
 
             <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
               <Button
@@ -156,6 +190,11 @@ export function ChangesPage() {
               >
                 {copy.context.openProfile}
               </Button>
+              <Button variant="ghost" size="sm" asChild className="ml-auto">
+                <Link to="/trends" data-testid="answer-view-trends">
+                  {copy.pages.changes.hero.viewTrends}
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -171,14 +210,14 @@ export function ChangesPage() {
         <BriefingCard briefing={changes.latestBriefing} onDismissed={refresh} />
       ) : null}
 
+      {/* Always-visible overnight vitals bento (v5), outside the grouped findings list. */}
+      <VitalsBento rows={changes.overnight} />
+
       {/* Import-to-import diff (B-F15): only when something was classified. */}
       {changes.sinceLastImport && changes.sinceLastImport.items.length > 0 ? (
-        <section
-          data-testid="since-last-import"
-          className="rounded-lg border border-border bg-card px-5 py-4"
-        >
+        <section data-testid="since-last-import" className="midori-tile px-5 py-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-medium text-foreground">{copy.diff.title}</h2>
+            <h2 className="midori-kicker">{copy.diff.title}</h2>
             <span className="text-xs text-muted-foreground tabular-nums">
               {copy.diff.span(
                 formatShortDay(changes.sinceLastImport.fromAsOfDay),
@@ -201,12 +240,9 @@ export function ChangesPage() {
 
       {/* Compact note chips only when notes overlap the window; the form lives in ContextSheet. */}
       {changes.recentNotes.length > 0 ? (
-        <section
-          data-testid="changes-notes"
-          className="rounded-lg border border-border bg-card px-5 py-4"
-        >
+        <section data-testid="changes-notes" className="midori-tile px-5 py-4">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-medium text-foreground">{copy.notes.heading}</h2>
+            <h2 className="midori-kicker">{copy.notes.heading}</h2>
             <Button
               type="button"
               variant="ghost"
@@ -250,7 +286,7 @@ export function ChangesPage() {
         {overnightRows.length === 0 ? (
           <p
             data-testid="overnight-empty"
-            className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground"
+            className="midori-tile px-4 py-6 text-center text-sm text-muted-foreground"
           >
             {copy.pages.changes.emptyOvernight}
           </p>
@@ -301,7 +337,7 @@ export function ChangesPage() {
               </span>
               <span className="hidden group-open/all:inline">{copy.pages.changes.hideAll}</span>
             </summary>
-            <div className="mt-2 divide-y divide-border rounded-lg border border-border bg-card">
+            <div className="mt-2 divide-y divide-border rounded-xl border border-border bg-card">
               {groups.rest.map((row) => (
                 <FindingRow key={row.metric} row={row} />
               ))}
@@ -324,7 +360,7 @@ export function ChangesPage() {
             <span className="text-xs text-muted-foreground">{copy.pages.changes.daytimeHint}</span>
           </div>
 
-          <div className="divide-y divide-border rounded-lg border border-border bg-card">
+          <div className="divide-y divide-border rounded-xl border border-border bg-card">
             {daytimeRows.map((row) => (
               <FindingRow key={row.metric} row={row} />
             ))}
@@ -362,10 +398,10 @@ function RowGroup({
   return (
     <div data-testid={testId} className="space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+        <h3 className="midori-kicker">{title}</h3>
         <span className="text-xs text-muted-foreground">{hint}</span>
       </div>
-      <div className="divide-y divide-border rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border rounded-xl border border-border bg-card">
         {rows.map((row) => (
           <FindingRow key={row.metric} row={row} />
         ))}

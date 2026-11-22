@@ -257,6 +257,28 @@ export const copy = {
     changes: {
       title: "Changes",
       asOf: (day: string) => `as of ${day}`,
+      /** Editorial hero card (v5): kicker, status pill strip and the trends link. */
+      hero: {
+        kicker: "Overnight status",
+        inRange: (count: number) => `${count} in range`,
+        shifted: (count: number) => `${count} shifted`,
+        learning: (count: number) => `${count} learning`,
+        viewTrends: "View trends →",
+      },
+      /** Always-visible overnight vitals bento (v5). */
+      vitalsBento: {
+        title: "Overnight vitals",
+        hint: "Six core metrics · most recent night first",
+        status: {
+          within: "within",
+          higher: "higher",
+          lower: "lower",
+          learning: "learning",
+          noRecent: "no recent",
+        },
+        flaggedChecks: (count: number) => `${count} flagged`,
+        openMetricAria: (metricLabel: string) => `Open ${metricLabel} details`,
+      },
       staleBanner: (daysAgo: number, span: string) =>
         `Your last import was ${daysAgo} days ago. Findings describe ${span}.`,
       staleImportCta: "Import",

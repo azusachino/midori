@@ -1,7 +1,7 @@
 import type { EChartsCoreOption } from "echarts/core";
 import { useCallback, useMemo } from "react";
 import { EChart } from "@/components/EChart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { copy } from "@/copy";
 import { formatMetricNumber, formatShortDay } from "@/lib/finding-format";
 import type { ChartTheme } from "@/lib/theme";
@@ -173,6 +173,23 @@ export function CorrelatedVitalsChart({
           symbolSize: 4,
           lineStyle: { color: panel.color(theme), width: 1.75 },
           itemStyle: { color: panel.color(theme) },
+          // Soft vertical fill under each curve (v5); `origin: "start"` keeps a
+          // scaled yAxis (wrist temp, RHR) filled from the plot bottom, not y = 0.
+          areaStyle: {
+            origin: "start" as const,
+            opacity: 0.18,
+            color: {
+              type: "linear" as const,
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: panel.color(theme) },
+                { offset: 1, color: "rgba(18, 22, 20, 0)" },
+              ],
+            },
+          },
           data: seriesFor(data, panel.series),
           ...(noteAreas.length > 0 ? { markArea: { silent: true, data: noteAreas } } : {}),
         })),
@@ -184,7 +201,7 @@ export function CorrelatedVitalsChart({
   return (
     <Card className={cn("min-w-0", className)}>
       <CardHeader className="space-y-1 pb-2">
-        <CardTitle className="text-sm">{copy.pages.trends.vitalsTitle}</CardTitle>
+        <h2 className="midori-kicker">{copy.pages.trends.vitalsTitle}</h2>
         <p className="text-xs text-muted-foreground">{copy.pages.trends.vitalsSubtitle}</p>
       </CardHeader>
       <CardContent>

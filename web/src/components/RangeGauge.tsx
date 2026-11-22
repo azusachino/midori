@@ -12,13 +12,18 @@ import { cn } from "@/lib/utils";
 export interface RangeGaugeProps {
   row: FindingRowDTO;
   className?: string;
+  /** `inline` pairs a short track with a caption; `stacked` puts the caption under a full-width track. */
+  layout?: "inline" | "stacked";
+  /** Overrides the `range-gauge-<metric>` test id so a tile never duplicates a row's gauge. */
+  testId?: string;
 }
 
 /**
  * Fixed-proportion horizontal usual-range gauge (v3 plan §5). Always
- * `pointer-events-none`: `FindingRow`'s stretched link keeps the whole row clickable.
+ * `pointer-events-none`: `FindingRow`'s stretched link keeps the whole row clickable,
+ * and `VitalTile`'s whole tile is the link.
  */
-export function RangeGauge({ row, className }: RangeGaugeProps) {
+export function RangeGauge({ row, className, layout = "inline", testId }: RangeGaugeProps) {
   const geometry = buildRangeGaugeGeometry(row);
   if (
     !geometry ||
@@ -42,12 +47,21 @@ export function RangeGauge({ row, className }: RangeGaugeProps) {
     row.direction === "higher" ? "higher" : row.direction === "lower" ? "lower" : "within";
 
   return (
-    <div className="pointer-events-none flex shrink-0 items-center gap-2">
+    <div
+      className={cn(
+        "pointer-events-none flex shrink-0",
+        layout === "stacked" ? "w-full flex-col items-start gap-1.5" : "items-center gap-2",
+      )}
+    >
       <div
-        data-testid={`range-gauge-${row.metric}`}
+        data-testid={testId ?? `range-gauge-${row.metric}`}
         data-in-band={geometry.inBand ? "true" : "false"}
         data-direction={direction}
-        className={cn("relative h-2 w-28 rounded-full bg-muted sm:w-32", className)}
+        className={cn(
+          "relative rounded-full bg-muted",
+          layout === "stacked" ? "h-1.5 w-full" : "h-2 w-28 sm:w-32",
+          className,
+        )}
         role="img"
         aria-label={copy.pages.changes.gaugeAria(metricLabel, recentText, lowText, highText)}
       >
@@ -78,7 +92,12 @@ export function RangeGauge({ row, className }: RangeGaugeProps) {
           style={{ left: `${geometry.dotPct}%` }}
         />
       </div>
-      <span className="hidden text-xs whitespace-nowrap text-muted-foreground tabular-nums sm:inline">
+      <span
+        className={cn(
+          "text-xs whitespace-nowrap text-muted-foreground tabular-nums",
+          layout === "inline" && "hidden sm:inline",
+        )}
+      >
         {unitLabel
           ? copy.pages.changes.usualBand(rangeText, unitLabel)
           : copy.pages.changes.usualBand(rangeText, "")}
