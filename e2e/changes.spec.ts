@@ -74,6 +74,27 @@ test("Changes page: real server overnight/daytime findings, popovers, last night
   await expect(daytime.getByTestId("finding-row-active_kj")).toHaveCount(0);
   await expect(daytime.getByTestId("finding-row-heart_rate")).toHaveCount(0);
 
+  // v5: the overnight vitals bento is always visible, in fixed order and outside the
+  // grouped findings list, and it never renders FindingRow test ids.
+  const vitalsBento = page.getByTestId("vitals-bento");
+  await expect(vitalsBento).toBeVisible();
+  const vitalTiles = vitalsBento.locator('[data-testid^="vital-tile-"]');
+  await expect(vitalTiles).toHaveCount(6);
+  for (const [index, metric] of [
+    "sleep_h",
+    "rhr",
+    "hrv_sdnn",
+    "wrist_temp",
+    "resp_rate",
+    "spo2",
+  ].entries()) {
+    await expect(vitalTiles.nth(index)).toHaveAttribute("data-testid", `vital-tile-${metric}`);
+  }
+  await expect(vitalsBento.getByTestId("vital-gauge-rhr")).toHaveCount(1);
+  await expect(vitalsBento.getByTestId("range-gauge-rhr")).toHaveCount(0);
+  await expect(vitalsBento.locator('[data-testid^="finding-row-"]')).toHaveCount(0);
+  await expect(page.getByTestId("overnight-section").getByTestId("vitals-bento")).toHaveCount(0);
+
   // Last complete night card (B-R3)
   const lastNight = page.getByTestId("last-night-card");
   await expect(lastNight).toContainText("Last complete night — Nov 14 (Sat)");
@@ -101,6 +122,11 @@ test("Changes page: real server overnight/daytime findings, popovers, last night
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId("finding-row-hrv_sdnn")).toBeVisible();
   await expect(page.getByTestId("last-night-card")).toBeVisible();
+  await expect(page.getByTestId("vitals-bento")).toBeVisible();
+  await expect(
+    page.getByTestId("vitals-bento").locator('[data-testid^="vital-tile-"]'),
+  ).toHaveCount(6);
+  await expect(page.getByTestId("vital-tile-rhr")).toBeVisible();
   await snapShot(page, "int-changes-390.png");
   await assertNoHorizontalOverflow(page);
 

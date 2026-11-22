@@ -674,7 +674,7 @@ export function ImportPage() {
       {/* History */}
       <Card>
         <CardHeader>
-          <CardTitle>{copy.pages.import.historyTitle}</CardTitle>
+          <h2 className="midori-kicker">{copy.pages.import.historyTitle}</h2>
           {history.length === 0 ? (
             <CardDescription>{copy.pages.import.noImportsYet}</CardDescription>
           ) : null}

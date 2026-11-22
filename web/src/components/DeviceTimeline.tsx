@@ -2,7 +2,7 @@ import type { EChartsCoreOption } from "echarts/core";
 import { useCallback, useMemo } from "react";
 import type { EpochCardDTO } from "@/api/types";
 import { EChart } from "@/components/EChart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { copy } from "@/copy";
 import {
   buildDevicesSummary,
@@ -295,7 +295,7 @@ export function DeviceTimeline({ epochs }: DeviceTimelineProps) {
   return (
     <Card data-testid="device-timeline-card" className="min-w-0 overflow-hidden">
       <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
-        <CardTitle className="text-sm font-medium">{copy.pages.devices.timelineTitle}</CardTitle>
+        <h2 className="midori-kicker">{copy.pages.devices.timelineTitle}</h2>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {model.legendEpochs.map((ep) => {
             const cIdx = ep.colorIndex ?? 0;

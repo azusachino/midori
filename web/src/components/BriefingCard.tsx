@@ -44,8 +44,8 @@ export function BriefingCard({ briefing, onDismissed, className }: BriefingCardP
       data-testid="briefing-card"
       aria-label={copy.briefing.cardAria(briefing.title, briefing.authorName)}
       className={cn(
-        "relative rounded-lg border border-border bg-card px-5 py-4",
-        "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:rounded-l-lg before:bg-accent/70 before:content-['']",
+        "midori-tile midori-glow-emerald px-5 py-4",
+        "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:rounded-l-[14px] before:bg-accent/70 before:content-['']",
         className,
       )}
     >
@@ -53,7 +53,7 @@ export function BriefingCard({ briefing, onDismissed, className }: BriefingCardP
         <div className="min-w-0 space-y-1">
           <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <Bot aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent" />
-            <span className="font-medium uppercase tracking-wider">{copy.briefing.heading}</span>
+            <span className="midori-kicker">{copy.briefing.heading}</span>
             <span aria-hidden="true" className="hidden sm:inline">
               ·
             </span>

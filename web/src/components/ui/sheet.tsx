@@ -47,7 +47,7 @@ export function SheetContent({
       <SheetOverlay />
       <DialogPrimitive.Content
         className={cn(
-          "fixed inset-0 z-50 flex h-full w-full flex-col gap-5 overflow-y-auto bg-card p-5 text-foreground outline-none transition-transform duration-150 sm:p-6",
+          "midori-glass fixed inset-0 z-50 flex h-full w-full flex-col gap-5 overflow-y-auto p-5 text-foreground outline-none transition-transform duration-150 sm:p-6",
           "md:inset-y-0 md:left-auto md:right-0 md:max-w-lg md:border-l md:border-border",
           "data-[state=open]:translate-x-0 data-[state=closed]:translate-x-full",
           className,

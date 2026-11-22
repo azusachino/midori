@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { copy } from "../web/src/copy";
+import { snapShot } from "./shots";
 
 /**
  * B-T1 multi-metric graphs and B-B1 agent briefing card against the real server and the
@@ -57,6 +58,7 @@ test("desktop 1440px: /trends renders the sleep architecture and correlated vita
   await expect(sleepChart).toContainText("30 nights");
   await expect(vitalsChart).toContainText("30 nights");
 
+  await snapShot(page, "int-trends-1440.png");
   await assertNoHorizontalOverflow(page);
   expect(errors).toEqual([]);
 });
@@ -74,6 +76,7 @@ test("phone 390px: /trends keeps both charts, the range toggle, and no horizonta
   await expect(page.getByTestId("correlated-vitals-echart").locator("canvas")).toBeVisible();
   await expect(page.getByTestId("trends-range-14d")).toHaveAttribute("aria-pressed", "true");
 
+  await snapShot(page, "int-trends-390.png");
   await assertNoHorizontalOverflow(page);
   expect(errors).toEqual([]);
 });

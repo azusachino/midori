@@ -159,9 +159,7 @@ export function MetricDetailPage() {
           <CardDescription>{copy.pages.metricDetail.unknownBody(key)}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {copy.pages.metricDetail.knownListLabel}
-          </p>
+          <p className="midori-kicker">{copy.pages.metricDetail.knownListLabel}</p>
           <div className="flex flex-wrap gap-2">
             {knownKeys.map((k) => (
               <Button key={k} variant="outline" size="sm" asChild>
@@ -335,9 +333,9 @@ export function MetricDetailPage() {
 
               <Card data-testid="recent-units-card" className="min-w-0 overflow-hidden">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">
+                  <h2 className="midori-kicker">
                     {copy.pages.metricDetail.recentUnitsTitle(noun)}
-                  </CardTitle>
+                  </h2>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
                   <Table data-testid="recent-units-table">

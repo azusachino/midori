@@ -1,7 +1,7 @@
 import type { EChartsCoreOption } from "echarts/core";
 import { useCallback, useMemo } from "react";
 import { EChart } from "@/components/EChart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { copy } from "@/copy";
 import { formatShortDay } from "@/lib/finding-format";
 import type { ChartTheme } from "@/lib/theme";
@@ -186,7 +186,7 @@ export function SleepArchitectureChart({
   return (
     <Card className={cn("min-w-0", className)}>
       <CardHeader className="space-y-1 pb-2">
-        <CardTitle className="text-sm">{copy.pages.trends.sleepTitle}</CardTitle>
+        <h2 className="midori-kicker">{copy.pages.trends.sleepTitle}</h2>
         <p className="text-xs text-muted-foreground">{copy.pages.trends.sleepSubtitle}</p>
       </CardHeader>
       <CardContent>

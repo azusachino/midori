@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { FindingSeverity, SparklinePointDTO } from "@/api/types";
 import { copy } from "@/copy";
 import { buildSparklineGeometry } from "@/lib/finding-format";
@@ -18,6 +19,18 @@ function accentColorClass(severity: FindingSeverity): string {
   return "text-muted-foreground";
 }
 
+/**
+ * Closes one recent-segment polyline down to `bottom`, so each contiguous run fills as
+ * its own area and a `null` gap never draws a twisted polygon across the break.
+ */
+function closeAreaPath(segment: string, bottom: number): string {
+  const vertices = [...segment.matchAll(/[ML](-?[\d.]+),(-?[\d.]+)/g)];
+  const first = vertices[0];
+  const last = vertices[vertices.length - 1];
+  if (!first || !last) return segment;
+  return `${segment} L${last[1]},${bottom} L${first[1]},${bottom} Z`;
+}
+
 export function Sparkline({
   metricLabel,
   points,
@@ -26,10 +39,16 @@ export function Sparkline({
   severity,
   className,
 }: SparklineProps) {
+  // Every instance needs its own gradient id: the bento, the grouped rows and a
+  // collapsed details list all render sparklines in one document (H2).
+  const gradientId = useId();
+
   if (points.length === 0) return null;
 
   const geo = buildSparklineGeometry(points, baselineLow, baselineHigh);
   const accentClass = accentColorClass(severity);
+  const areaBottom = geo.height - 3;
+  const areaPaths = geo.recentSegments.map((d) => closeAreaPath(d, areaBottom));
   const clippedPoints = geo.points.filter((p) => p.clipped !== null);
   const partialPoints = geo.points.filter((p) => !p.usable && p.clipped === null);
   const recentEnd = [...geo.points].reverse().find((p) => p.isRecent && p.usable);
@@ -43,8 +62,14 @@ export function Sparkline({
       width={geo.width}
       height={geo.height}
       viewBox={`0 0 ${geo.width} ${geo.height}`}
-      className={cn("shrink-0 overflow-visible", className)}
+      className={cn("shrink-0 overflow-visible", accentClass, className)}
     >
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity={0.24} />
+          <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
+        </linearGradient>
+      </defs>
       {geo.bandRect ? (
         <rect
           x={2}
@@ -68,6 +93,10 @@ export function Sparkline({
           className="text-border-strong"
         />
       ) : null}
+
+      {areaPaths.map((d) => (
+        <path key={`area-${d}`} d={d} fill={`url(#${gradientId})`} stroke="none" />
+      ))}
 
       {geo.baselineSegments.map((d) => (
         <path
