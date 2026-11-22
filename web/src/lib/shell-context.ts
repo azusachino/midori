@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import { type ApiClient, ApiError } from "../api/client";
-import type { ChangesDTO } from "../api/types";
+import type { BuildInfoDTO, ChangesDTO } from "../api/types";
 import { copy } from "../copy";
 
 export interface ShellState {
@@ -8,6 +8,8 @@ export interface ShellState {
   changes: ChangesDTO | null;
   errorMessage: string | null;
   refresh: () => void;
+  /** B-R5 build identity, or null while it is loading or unavailable. */
+  build: BuildInfoDTO | null;
 }
 
 export type ShellLoadResult =

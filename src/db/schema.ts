@@ -135,6 +135,18 @@ export const notes = sqliteTable("notes", {
   updatedAt: text("updated_at").notNull(),
 });
 
+/**
+ * B-P1–B-P2: owner-authored agent context, a singleton row (`id = 1`). derive()
+ * and imports never clear or modify it.
+ */
+export const profileContext = sqliteTable("profile_context", {
+  id: integer("id").primaryKey(),
+  goals: text("goals").notNull().default(""),
+  routine: text("routine").notNull().default(""),
+  medicalContext: text("medical_context").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const findingSnapshots = sqliteTable(
   "finding_snapshots",
   {

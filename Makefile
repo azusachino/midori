@@ -14,13 +14,13 @@ SOURCE_REVISION ?= $(shell git rev-parse HEAD)$(if $(shell git status --porcelai
 .PHONY: image-app image-local images smoke-container
 
 image-app: ## Build the midori image and import it into the local k3s containerd store (TAG=0.0.1-rcN)
-	podman build --build-arg SOURCE_REVISION=$(SOURCE_REVISION) -t $(IMAGE_NS)/midori:$(TAG) .
+	podman build --build-arg MIDORI_VERSION=$(TAG) --build-arg SOURCE_REVISION=$(SOURCE_REVISION) -t $(IMAGE_NS)/midori:$(TAG) .
 	podman save $(IMAGE_NS)/midori:$(TAG) | sudo k3s ctr images import --all-platforms --digests --skip-digest-for-named -
 
 images: image-app ## Alias used by the ship-to-cluster playbook
 
 image-local: ## Build only, no containerd import (TAG=0.0.1-rcN)
-	podman build --build-arg SOURCE_REVISION=$(SOURCE_REVISION) -t $(IMAGE_NS)/midori:$(TAG) .
+	podman build --build-arg MIDORI_VERSION=$(TAG) --build-arg SOURCE_REVISION=$(SOURCE_REVISION) -t $(IMAGE_NS)/midori:$(TAG) .
 
 smoke-container: ## In-container check: image hygiene + import + briefing + MCP (TAG=0.0.1-rcN)
 	bun scripts/smoke-container.ts --image $(IMAGE_NS)/midori:$(TAG)

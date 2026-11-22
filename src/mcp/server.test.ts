@@ -46,6 +46,7 @@ describe("MCP v1 tools", () => {
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name)).toEqual([
       "changes",
+      "health_context",
       "metric_series",
       "nights",
       "epochs",
@@ -70,6 +71,29 @@ describe("MCP v1 tools", () => {
       sinceLastImport: null,
       recentNotes: [],
     });
+  });
+
+  test("B-A5 health_context returns the dossier shape and rejects days outside 7..30", async () => {
+    const result = await client.callTool({ name: "health_context", arguments: { days: 7 } });
+    expect(result.isError).toBeUndefined();
+    const dossier = JSON.parse(textContent(result));
+    expect(dossier).toMatchObject({
+      asOfDay: null,
+      primaryWatch: null,
+      profile: { goals: "", routine: "", medicalContext: "", updatedAt: null },
+      summary: { standsOut: 0, closeToEdge: 0, within: 0, other: 0, sharedConfounders: [] },
+      findings: [],
+      sinceLastImport: null,
+      recentNights: [],
+      recentNotes: [],
+    });
+    expect(dossier.guidance).toContain("midori does not assert causes");
+
+    for (const days of [6, 31, 14.5]) {
+      const invalid = await client.callTool({ name: "health_context", arguments: { days } });
+      expect(invalid.isError).toBe(true);
+      expect(textContent(invalid)).toContain("days must be an integer between 7 and 30");
+    }
   });
 
   test("B-U4 list_notes is read-only, filters by range, and rejects invalid dates", async () => {

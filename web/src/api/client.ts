@@ -5,6 +5,7 @@ import type {
   EpochsDTO,
   ErrorResponse,
   FindingsDiffDTO,
+  HealthDTO,
   ImportDTO,
   MetricRange,
   MetricSeriesDTO,
@@ -13,6 +14,8 @@ import type {
   NoteDTO,
   NoteInputDTO,
   NotePatchDTO,
+  ProfileContextDTO,
+  ProfileInputDTO,
   UnitEvidenceDTO,
   UploadAcceptedDTO,
 } from "./types";
@@ -113,6 +116,9 @@ export interface UploadOptions {
 }
 
 export interface ApiClient {
+  health(signal?: AbortSignal): Promise<HealthDTO>;
+  profile(signal?: AbortSignal): Promise<ProfileContextDTO>;
+  updateProfile(input: ProfileInputDTO, signal?: AbortSignal): Promise<ProfileContextDTO>;
   changes(signal?: AbortSignal): Promise<ChangesDTO>;
   metricsIndex(signal?: AbortSignal): Promise<MetricsIndexDTO>;
   metricSeries(metric: string, range?: MetricRange, signal?: AbortSignal): Promise<MetricSeriesDTO>;
@@ -294,6 +300,38 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   }
 
   const client: ApiClient = {
+    async health(signal) {
+      try {
+        return await getJson<HealthDTO>("/api/health", signal);
+      } catch (err) {
+        if (!fallbackOn404 || !is404(err)) throw err;
+        const fixtures = await import("./fixtures");
+        return fixtures.healthStub();
+      }
+    },
+
+    async profile(signal) {
+      try {
+        return await getJson<ProfileContextDTO>("/api/profile", signal);
+      } catch (err) {
+        if (!fallbackOn404 || !is404(err)) throw err;
+        const fixtures = await import("./fixtures");
+        return fixtures.emptyProfileStub();
+      }
+    },
+
+    updateProfile(input, signal) {
+      return send<ProfileContextDTO>(
+        "/api/profile",
+        {
+          method: "PUT",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify(input),
+        },
+        signal,
+      );
+    },
+
     async changes(signal) {
       try {
         return await getJson<ChangesDTO>("/api/changes", signal);

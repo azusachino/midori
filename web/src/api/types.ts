@@ -16,6 +16,7 @@ import type {
   FindingsDiffDTO,
   FindingsDiffItemDTO,
   FreshnessSummaryDTO,
+  HealthDTO,
   ImportDTO,
   ImportStatus,
   LastNightDTO,
@@ -26,6 +27,7 @@ import type {
   NightsDTO,
   NoteCategory,
   NoteDTO,
+  ProfileContextDTO,
   UnitEvidenceDTO,
   UploadAcceptedDTO,
   WeeklySeriesPointDTO,
@@ -55,6 +57,7 @@ export type {
   FindingsDiffDTO,
   FindingsDiffItemDTO,
   FreshnessSummaryDTO,
+  HealthDTO,
   ImportDTO,
   ImportStatus,
   LastNightDTO,
@@ -65,6 +68,7 @@ export type {
   NightsDTO,
   NoteCategory,
   NoteDTO,
+  ProfileContextDTO,
   UnitEvidenceDTO,
   UploadAcceptedDTO,
   WeeklySeriesPointDTO,
@@ -98,3 +102,9 @@ export type NoteInputDTO = {
   label: string;
 };
 export type NotePatchDTO = Partial<NoteInputDTO>;
+
+/** B-R5 build identity surfaced in the shell (sidebar footer and mobile header). */
+export type BuildInfoDTO = Pick<HealthDTO, "version" | "revision">;
+
+/** B-P1 fields the owner edits from the ContextSheet agent-profile tab. */
+export type ProfileInputDTO = Pick<ProfileContextDTO, "goals" | "routine" | "medicalContext">;

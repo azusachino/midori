@@ -202,6 +202,16 @@ Notes are owner-authored annotations of a date or range. They are never cleared 
 | B-U3 | Re-import or `derive()` runs | The `notes` table is never cleared or modified. |
 | B-U4 | Read notes (`GET /api/notes?from=&to=`, MCP `list_notes`) | Validates supplied dates (400 / `isError` when invalid). Returns notes overlapping `[from, to]` (all when omitted), ordered by `start_day DESC, id DESC`. MCP is strictly read-only (B-A2). |
 
+### Owner profile context (B-P)
+
+The owner's goals, routine and medical context are a single row the owner edits; they are advice
+context for an agent, never a diagnosis, and are never cleared by `derive()` or imports.
+
+| ID | Given / when | Then |
+| --- | --- | --- |
+| B-P1 | `GET /api/profile` and `PUT /api/profile` | Returns `{ goals, routine, medicalContext, updatedAt }`, defaulting to empty strings and `updatedAt: null` when row `id = 1` is absent. `PUT` rejects non-object JSON with `400 { error, retryable: false }`, requires `goals`, `routine` and `medicalContext` to be strings whose trimmed length is `0..1000` (`""` clears a field), and upserts `id = 1`. Mutations return `405 { error: "profile is read-only", retryable: false }` in read-only deployments. |
+| B-P2 | Re-import or `derive()` runs | `profile_context` is never cleared or modified. |
+
 ### Import-to-import diff (B-I13, B-F15)
 
 | ID | Given / when | Then |
@@ -231,6 +241,7 @@ Computed per finding row and shown as clear or flagged:
 | B-R2 | >30 days since the last import | Banner on Changes: "Your last import was 34 days ago. Findings describe <oldest recent unit>–<as-of>." with an Import link |
 | B-R3 | Last-night card | Newest usable night within 14 days. If the newest night is partial: "Nov 7 skipped: export taken before noon." If there is none: "No complete night in the last 14 days." |
 | B-R4 | No imports yet | Every page except Import shows the empty state with export steps |
+| B-R5 | `GET /api/health` and the UI shell | `/api/health` returns `{ ok: true, version, revision }`: `version` is trimmed `MIDORI_VERSION`, then `package.json` `version`, then `"dev"`; `revision` is trimmed `MIDORI_REVISION` shortened from a 40-char hex SHA to 7 chars preserving a `-dirty` suffix, else `"dev"`. The UI shows version/revision in the desktop sidebar footer (`sidebar-version`, below `sidebar-watch`) and the mobile header (`mobile-version`). |
 
 ### Agents (B-A)
 
@@ -240,6 +251,7 @@ Computed per finding row and shown as clear or flagged:
 | B-A2 | Any tool | Read-only; unknown metric → `isError` with the known list |
 | B-A3 | Tool descriptions | Cite nights; device changes, OS updates, partial data and travel are confounders; midori asserts no causes |
 | B-A4 | Range limits | `nights` >400 days is rejected with a hint. `metric_series(range=all)` returns weekly medians |
+| B-A5 | `health_context({ days? })` and `GET /api/context?days=` | Read-only one-call dossier. `days` defaults to 14 and must be an integer 7..30 (`400` on REST, `isError` on MCP). Returns `{ asOfDay, freshness, primaryWatch, profile, summary, findings, sinceLastImport, recentNights, recentNotes, guidance }`. Findings reuse `apiFindings` plus human-readable caveats and add `longTerm: { median90d, median1y, n90d, n1y }` computed only from primary-stint `usable = 1` values at/after the stint start inside `[as-of - 89, as-of]` and `[as-of - 364, as-of]`. `recentNights` is empty when as-of is null, else up to `days` nights newest first aligning sleep stages, usable primary-stint overnight metrics (missing/unusable → `null`), timezone change, partial reason and overlapping notes. `summary` matches the Changes counts (stands out, close to the edge, within, other, shared confounders). |
 
 ## 5. Non-behaviors (v1)
 

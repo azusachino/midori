@@ -25,7 +25,7 @@ function isRouteActive(pathname: string, to: string, matchPrefix: boolean): bool
 export function Shell({ children }: { children: ReactNode }) {
   const mainId = useId();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { status, changes } = useShell();
+  const { status, changes, build } = useShell();
 
   const activeImport = changes?.activeImport ?? null;
   const primaryWatch = changes?.primaryWatch ?? null;
@@ -89,6 +89,16 @@ export function Shell({ children }: { children: ReactNode }) {
               data-testid="topbar-freshness"
             >
               {freshnessLabel}
+            </p>
+          ) : null}
+
+          {/* B-R5 mobile build badge; the desktop equivalent lives in the sidebar footer. */}
+          {build ? (
+            <p
+              className="text-xs text-muted-foreground tabular-nums md:hidden"
+              data-testid="mobile-version"
+            >
+              {copy.shell.version(build.version, build.revision)}
             </p>
           ) : null}
         </div>
@@ -171,6 +181,16 @@ export function Shell({ children }: { children: ReactNode }) {
                   ) : null}
                 </div>
               </div>
+            ) : null}
+
+            {/* B-R5 desktop build badge, below the watch card so nav geometry is untouched. */}
+            {build ? (
+              <p
+                className="pt-6 text-xs text-muted-foreground tabular-nums"
+                data-testid="sidebar-version"
+              >
+                {copy.shell.version(build.version, build.revision)}
+              </p>
             ) : null}
           </div>
         </aside>

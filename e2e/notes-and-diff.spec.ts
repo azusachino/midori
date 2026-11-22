@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { changesStub } from "../web/src/api/fixtures";
 import type { FindingsDiffDTO } from "../web/src/api/types";
 import { copy } from "../web/src/copy";
+import { snapShot } from "./shots";
 
 function trackErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -53,15 +54,25 @@ test("B-U1–B-U4/B-C7: add a note from evidence, see user_note flagged, then de
   await expect(sheet.locator('[data-testid^="note-row-"]')).toContainText("Long flight home");
   await page.keyboard.press("Escape");
 
-  // Changes lists recent notes and can delete them; the check returns to clear.
+  // Changes shows a compact note chip; deleting inside ContextSheet clears it and the check.
   await page.goto("/");
   const changesNotes = page.getByTestId("changes-notes");
   await expect(changesNotes).toBeVisible();
-  await expect(changesNotes.locator('[data-testid^="note-row-"]')).toContainText(
+  await expect(changesNotes.locator('[data-testid^="note-chip-"]')).toContainText(
     "Long flight home",
   );
-  await changesNotes.locator('[data-testid^="note-delete-btn-"]').click();
-  await expect(changesNotes.getByTestId("notes-empty")).toBeVisible();
+  await changesNotes.getByTestId("manage-notes-btn").click();
+  const contextSheet = page.getByTestId("context-sheet");
+  await expect(contextSheet).toBeVisible();
+  const contextNotes = contextSheet.getByTestId("context-notes");
+  await expect(contextNotes.locator('[data-testid^="note-row-"]')).toContainText(
+    "Long flight home",
+  );
+  await contextNotes.locator('[data-testid^="note-delete-btn-"]').click();
+  await expect(contextNotes.getByTestId("notes-empty")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(contextSheet).toBeHidden();
+  await expect(page.getByTestId("changes-notes")).toHaveCount(0);
 
   await page.goto("/metrics/hrv_sdnn?range=90d&tab=chart");
   await expect(page.getByTestId("check-row-user_note")).toHaveAttribute("data-status", "clear");
@@ -134,6 +145,38 @@ test("B-F15: Changes renders the 'Since previous export' card for a supplied dif
   await expect(card).toContainText("Sleep: returned to usual");
   await expect(card).toContainText(copy.diff.unchanged(3));
 
-  // The notes panel is present alongside the diff.
-  await expect(page.getByTestId("changes-notes")).toBeVisible();
+  // With no recent notes the compact strip is absent; the hero trigger opens the sheet.
+  await expect(page.getByTestId("open-notes-sheet")).toBeVisible();
+  await expect(page.getByTestId("changes-notes")).toHaveCount(0);
+});
+
+test("B-P1: the hero ContextSheet saves and reloads the agent profile", async ({ page }) => {
+  const errors = trackErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  await page.getByTestId("open-profile-sheet").click();
+  const sheet = page.getByTestId("context-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByTestId("context-tab-profile")).toHaveAttribute("data-state", "active");
+  const goals = sheet.getByTestId("profile-goals-input");
+  await goals.fill("Sleep 7.5 h");
+  await sheet.getByTestId("profile-routine-input").fill("Lift Mon/Wed/Fri");
+  await snapShot(page, "context-sheet-1440.png");
+  await sheet.getByTestId("profile-save-btn").click();
+  await expect(sheet.getByTestId("profile-saved")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  // Reopening reads the stored row back from the server.
+  await page.getByTestId("open-profile-sheet").click();
+  await expect(sheet.getByTestId("profile-goals-input")).toHaveValue("Sleep 7.5 h");
+  await expect(sheet.getByTestId("profile-routine-input")).toHaveValue("Lift Mon/Wed/Fri");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(sheet.getByTestId("profile-goals-input")).toBeVisible();
+  await snapShot(page, "context-sheet-390.png", { fullPage: false });
+
+  expect(errors).toEqual([]);
 });

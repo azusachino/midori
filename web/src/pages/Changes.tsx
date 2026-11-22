@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ChevronRight, CircleDashed } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { type ReactNode, useId, useState } from "react";
 import type { FindingRowDTO } from "@/api/types";
+import { ContextSheet, type ContextSheetTab } from "@/components/ContextSheet";
 import { EmptyState } from "@/components/EmptyState";
 import { FindingRow } from "@/components/FindingRow";
 import { LastNightCard } from "@/components/LastNightCard";
 import { LoadingState } from "@/components/LoadingState";
-import { NotesPanel } from "@/components/NotesPanel";
 import { ReadError } from "@/components/ReadError";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { useShell } from "@/lib/shell-context";
 export function ChangesPage() {
   const overnightHeadingId = useId();
   const daytimeHeadingId = useId();
+  const [sheetTab, setSheetTab] = useState<ContextSheetTab | null>(null);
   const { status, changes, errorMessage, refresh } = useShell();
 
   if (status === "loading") {
@@ -111,26 +112,56 @@ export function ChangesPage() {
         </Alert>
       ) : null}
 
-      {/* One-line answer (B-F12) */}
-      <div
-        data-testid="changes-answer"
-        className="rounded-lg border border-border bg-card px-5 py-4"
-      >
-        <p className="text-lg font-medium text-foreground">
-          {standsOutCount > 0
-            ? copy.pages.changes.answerSome(standsOutCount)
-            : copy.pages.changes.answerNone}
-        </p>
-        {overnightRows.length > 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground tabular-nums">
-            {copy.pages.changes.answerDetail(withinCount, otherCount)}
-          </p>
-        ) : null}
-        {sharedNouns.length > 0 ? (
-          <p data-testid="shared-checks" className="mt-2 text-sm text-foreground/80">
-            {copy.pages.changes.sharedChecks(sharedNouns)}
-          </p>
-        ) : null}
+      {/* One-line answer (B-F12) beside tonight's overview (B-R3), 2 columns from lg up. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-7">
+          <div
+            data-testid="changes-answer"
+            className="flex h-full flex-col rounded-lg border border-border bg-card px-5 py-4"
+          >
+            <p className="text-lg font-medium text-foreground">
+              {standsOutCount > 0
+                ? copy.pages.changes.answerSome(standsOutCount)
+                : copy.pages.changes.answerNone}
+            </p>
+            {overnightRows.length > 0 ? (
+              <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+                {copy.pages.changes.answerDetail(withinCount, otherCount)}
+              </p>
+            ) : null}
+            {sharedNouns.length > 0 ? (
+              <p data-testid="shared-checks" className="mt-2 text-sm text-foreground/80">
+                {copy.pages.changes.sharedChecks(sharedNouns)}
+              </p>
+            ) : null}
+
+            <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="open-notes-sheet"
+                onClick={() => setSheetTab("notes")}
+              >
+                {copy.context.openNotes}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-testid="open-profile-sheet"
+                onClick={() => setSheetTab("profile")}
+              >
+                {copy.context.openProfile}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* B-R3: always rendered, including the no-complete-night state. */}
+        <div className="lg:col-span-5">
+          <LastNightCard lastNight={changes.lastNight} />
+        </div>
       </div>
 
       {/* Import-to-import diff (B-F15): only when something was classified. */}
@@ -161,14 +192,42 @@ export function ChangesPage() {
         </section>
       ) : null}
 
-      {/* Personal notes as confounders (B-C7); changes refresh after each mutation. */}
-      <section
-        data-testid="changes-notes"
-        className="rounded-lg border border-border bg-card px-5 py-4"
-      >
-        <h2 className="mb-2 text-sm font-medium text-foreground">{copy.notes.heading}</h2>
-        <NotesPanel notes={changes.recentNotes} compact onChanged={refresh} />
-      </section>
+      {/* Compact note chips only when notes overlap the window; the form lives in ContextSheet. */}
+      {changes.recentNotes.length > 0 ? (
+        <section
+          data-testid="changes-notes"
+          className="rounded-lg border border-border bg-card px-5 py-4"
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-medium text-foreground">{copy.notes.heading}</h2>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              data-testid="manage-notes-btn"
+              aria-label={copy.pages.changes.notesManageAria}
+              onClick={() => setSheetTab("notes")}
+            >
+              {copy.context.manage}
+            </Button>
+          </div>
+          <ul className="flex flex-wrap gap-2">
+            {changes.recentNotes.map((note) => (
+              <li
+                key={note.id}
+                data-testid={`note-chip-${note.id}`}
+                className="rounded-full border border-border bg-background/60 px-2.5 py-1 text-xs"
+              >
+                <span className="font-medium text-foreground">{note.label}</span>
+                <span className="ml-1.5 text-muted-foreground">
+                  {copy.notes.categories[note.category] ?? note.category} ·{" "}
+                  {copy.notes.range(note.startDay, note.endDay)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* Overnight findings in B-F12 groups; the full ranked set stays one click away (B-F7) */}
       <section
@@ -265,8 +324,16 @@ export function ChangesPage() {
         </section>
       ) : null}
 
-      {/* Last complete night card (B-R3) */}
-      <LastNightCard lastNight={changes.lastNight} />
+      <ContextSheet
+        open={sheetTab !== null}
+        tab={sheetTab ?? "notes"}
+        onTabChange={setSheetTab}
+        onOpenChange={(open) => {
+          if (!open) setSheetTab(null);
+        }}
+        notes={changes.recentNotes}
+        onChanged={refresh}
+      />
     </div>
   );
 }

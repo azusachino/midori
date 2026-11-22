@@ -7,9 +7,12 @@ import {
   flaggedChecksFor,
   formatDayWithWeekday,
   formatRangeSpan,
+  formatReading,
   formatRecentVsBaseline,
   formatShortDay,
+  formatValueWithUnit,
   groupChangesRows,
+  isFractionPercent,
   isLeaning,
   isNotableDaytime,
   nextLook,
@@ -104,6 +107,31 @@ describe("finding-format", () => {
         }),
       ),
     ).toBe("96.5 vs 97.2 %");
+  });
+
+  test("prominent readings lead with human units and keep the fraction '%' guard", () => {
+    expect(
+      formatReading(makeRow({ metric: "sleep_hr", unit: "count/min", recentMedian: 56 })),
+    ).toBe("56 bpm");
+    expect(formatReading(makeRow({ metric: "sleep_h", unit: "h", recentMedian: 7.2 }))).toBe(
+      "7.2 h",
+    );
+    expect(formatReading(makeRow({ metric: "hrv_sdnn", unit: "ms", recentMedian: 48 }))).toBe(
+      "48 ms",
+    );
+    expect(formatReading(makeRow({ metric: "steps", unit: "count", recentMedian: 9100 }))).toBe(
+      "9.1k",
+    );
+    expect(formatReading(makeRow({ recentMedian: null }))).toBeNull();
+    expect(
+      formatReading(
+        makeRow({ metric: "spo2", unit: "%", recentMedian: 0.97, baselineMedian: 0.98 }),
+      ),
+    ).toBeNull();
+    expect(formatValueWithUnit(7.2, "sleep_h", "h")).toBe("7.2 h");
+    expect(isFractionPercent("%", 96.5, 97.2)).toBe(false);
+    expect(isFractionPercent("%", 0.97, 97.2)).toBe(true);
+    expect(isFractionPercent("ms", 0.5, 1.0)).toBe(false);
   });
 
   test("rankFindingRows follows B-F7: |z| capped at 10, confidence, state tiers, registry order", () => {
