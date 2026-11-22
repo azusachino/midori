@@ -1,10 +1,12 @@
 import { copy } from "../copy";
 import { isKnownMetric } from "../lib/metrics";
 import type {
+  BriefingDTO,
   ChangesDTO,
   EpochsDTO,
   ErrorResponse,
   FindingsDiffDTO,
+  HealthContextDTO,
   HealthDTO,
   ImportDTO,
   MetricRange,
@@ -128,7 +130,10 @@ export interface ApiClient {
   imports(signal?: AbortSignal): Promise<ImportDTO[]>;
   importDetail(id: number, signal?: AbortSignal): Promise<ImportDTO>;
   importDiff(id: number, signal?: AbortSignal): Promise<FindingsDiffDTO | null>;
+  context(days: number, signal?: AbortSignal): Promise<HealthContextDTO>;
   notes(params?: { from?: string; to?: string }, signal?: AbortSignal): Promise<NoteDTO[]>;
+  briefings(limit?: number, signal?: AbortSignal): Promise<BriefingDTO[]>;
+  deleteBriefing(id: number, signal?: AbortSignal): Promise<void>;
   createNote(input: NoteInputDTO, signal?: AbortSignal): Promise<NoteDTO>;
   updateNote(id: number, patch: NotePatchDTO, signal?: AbortSignal): Promise<NoteDTO>;
   deleteNote(id: number, signal?: AbortSignal): Promise<void>;
@@ -416,12 +421,33 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return body.diff;
     },
 
+    /** B-T1: the same B-A5 dossier agents read, behind the Trends page. */
+    async context(days, signal) {
+      return getJson<HealthContextDTO>(`/api/context${query({ days })}`, signal);
+    },
+
     async notes(params, signal) {
       const body = await getJson<{ notes: NoteDTO[] }>(
         `/api/notes${query({ from: params?.from, to: params?.to })}`,
         signal,
       );
       return body.notes;
+    },
+
+    async briefings(limit, signal) {
+      const body = await getJson<{ briefings: BriefingDTO[] }>(
+        `/api/briefings${query({ limit })}`,
+        signal,
+      );
+      return body.briefings;
+    },
+
+    async deleteBriefing(id, signal) {
+      await send<{ deleted: boolean }>(
+        `/api/briefings/${id}`,
+        { method: "DELETE", headers: { accept: "application/json" } },
+        signal,
+      );
     },
 
     createNote(input, signal) {

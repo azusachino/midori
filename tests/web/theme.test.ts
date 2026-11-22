@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { copy } from "../../web/src/copy";
 import { EPOCH_PALETTE, THEME_DEFAULTS } from "../../web/src/lib/theme";
 
@@ -134,5 +136,71 @@ describe("B-F9 neutral copy", () => {
     expect(serialized).not.toContain("better");
     expect(serialized).not.toContain("worse");
     expect(serialized).not.toContain("your watch is wrong");
+  });
+});
+
+/** Every `--color-*` hex token declared in the `@theme` block of app.css. */
+function readAppCssTokens(): Map<string, string> {
+  const css = readFileSync(join(import.meta.dir, "../../web/src/styles/app.css"), "utf8");
+  const tokens = new Map<string, string>();
+  for (const match of css.matchAll(/--color-([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)) {
+    const name = match[1];
+    const hex = match[2];
+    if (!name || !hex) continue;
+    tokens.set(name, hex.toLowerCase());
+  }
+  return tokens;
+}
+
+const CSS_TOKEN_FOR_DEFAULT = {
+  background: "background",
+  foreground: "foreground",
+  card: "card",
+  muted: "muted",
+  mutedForeground: "muted-foreground",
+  border: "border",
+  borderStrong: "border-strong",
+  accent: "accent",
+  primaryForeground: "primary-foreground",
+  notable: "notable",
+  alert: "alert",
+  learning: "learning",
+  partial: "partial",
+  minor: "minor",
+} as const;
+
+describe("app.css and theme.ts stay in sync", () => {
+  test("every THEME_DEFAULTS token matches its --color-* declaration", () => {
+    const tokens = readAppCssTokens();
+    for (const [key, cssName] of Object.entries(CSS_TOKEN_FOR_DEFAULT)) {
+      const expected = THEME_DEFAULTS[key as keyof typeof THEME_DEFAULTS];
+      expect(tokens.get(cssName)).toBe(expected.toLowerCase());
+    }
+  });
+
+  test("the 6 epoch palette slots match EPOCH_PALETTE in order", () => {
+    const tokens = readAppCssTokens();
+    EPOCH_PALETTE.forEach((hex, index) => {
+      expect(tokens.get(`epoch-${index + 1}`)).toBe(hex.toLowerCase());
+    });
+  });
+
+  test("the dark-botanical surfaces stay distinct and green-shifted", () => {
+    expect(THEME_DEFAULTS.background).not.toBe(THEME_DEFAULTS.card);
+    expect(THEME_DEFAULTS.card).not.toBe(THEME_DEFAULTS.muted);
+    expect(THEME_DEFAULTS.muted).not.toBe(THEME_DEFAULTS.border);
+    expect(THEME_DEFAULTS.border).not.toBe(THEME_DEFAULTS.borderStrong);
+    // Each surface is near-black with green above the red and blue channels.
+    for (const hex of [
+      THEME_DEFAULTS.background,
+      THEME_DEFAULTS.card,
+      THEME_DEFAULTS.muted,
+      THEME_DEFAULTS.border,
+    ]) {
+      const [r, g, b] = hexToRgb(hex);
+      expect(g).toBeGreaterThan(r);
+      expect(g).toBeGreaterThan(b);
+      expect(g).toBeLessThan(64);
+    }
   });
 });

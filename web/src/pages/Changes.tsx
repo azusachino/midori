@@ -2,11 +2,13 @@ import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ChevronRight, CircleDashed } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import type { FindingRowDTO } from "@/api/types";
+import { BriefingCard } from "@/components/BriefingCard";
 import { ContextSheet, type ContextSheetTab } from "@/components/ContextSheet";
 import { EmptyState } from "@/components/EmptyState";
 import { FindingRow } from "@/components/FindingRow";
 import { LastNightCard } from "@/components/LastNightCard";
 import { LoadingState } from "@/components/LoadingState";
+import { AgentBadge } from "@/components/NotesPanel";
 import { ReadError } from "@/components/ReadError";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -164,6 +166,11 @@ export function ChangesPage() {
         </div>
       </div>
 
+      {/* B-B1: the newest agent briefing, dismissable by the owner. */}
+      {changes.latestBriefing ? (
+        <BriefingCard briefing={changes.latestBriefing} onDismissed={refresh} />
+      ) : null}
+
       {/* Import-to-import diff (B-F15): only when something was classified. */}
       {changes.sinceLastImport && changes.sinceLastImport.items.length > 0 ? (
         <section
@@ -216,13 +223,14 @@ export function ChangesPage() {
               <li
                 key={note.id}
                 data-testid={`note-chip-${note.id}`}
-                className="rounded-full border border-border bg-background/60 px-2.5 py-1 text-xs"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 text-xs"
               >
                 <span className="font-medium text-foreground">{note.label}</span>
-                <span className="ml-1.5 text-muted-foreground">
+                <span className="text-muted-foreground">
                   {copy.notes.categories[note.category] ?? note.category} ·{" "}
                   {copy.notes.range(note.startDay, note.endDay)}
                 </span>
+                {note.author === "agent" ? <AgentBadge authorName={note.authorName} /> : null}
               </li>
             ))}
           </ul>

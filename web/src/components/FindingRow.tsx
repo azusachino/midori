@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Flag, Info } from "lucide-react";
 import type { ConfidenceLevel, FindingRowDTO, FindingSeverity } from "@/api/types";
+import { MetricIcon } from "@/components/MetricIcon";
 import { RangeGauge } from "@/components/RangeGauge";
 import { Sparkline } from "@/components/Sparkline";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +75,7 @@ export function FindingRow({ row, mode = "link", className }: FindingRowProps) {
         {/* Primary line: metric name, prominent reading, trust popover, direction/state */}
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+            <MetricIcon metric={row.metric} className="text-muted-foreground" />
             {mode === "link" ? (
               <Link
                 to="/metrics/$key"

@@ -11,6 +11,7 @@ import { FindingRow } from "@/components/FindingRow";
 import { LoadingState } from "@/components/LoadingState";
 import { LongViewCalendar } from "@/components/LongViewCalendar";
 import { MetricChart } from "@/components/MetricChart";
+import { MetricIcon } from "@/components/MetricIcon";
 import { ReadError } from "@/components/ReadError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -217,7 +218,10 @@ export function MetricDetailPage() {
               {copy.pages.metricDetail.backToChanges}
             </Link>
           </Button>
-          <h1 className="text-xl font-semibold tracking-tight">{label}</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <MetricIcon metric={data.metric} size={18} className="text-muted-foreground" />
+            {label}
+          </h1>
           {unitDisplay ? (
             <span className="text-sm text-muted-foreground">{unitDisplay}</span>
           ) : null}

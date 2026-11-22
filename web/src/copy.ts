@@ -15,6 +15,7 @@ export const copy = {
   nav: {
     label: "Primary",
     changes: "Changes",
+    trends: "Trends",
     metrics: "Metrics",
     devices: "Devices",
     import: "Import",
@@ -66,6 +67,7 @@ export const copy = {
   error: {
     title: "Couldn't load this view.",
     changesTitle: "Couldn't load changes.",
+    trendsTitle: "Couldn't load trends.",
     metricsTitle: "Couldn't load metrics.",
     metricDetailTitle: "Couldn't load this metric.",
     devicesTitle: "Couldn't load devices.",
@@ -186,6 +188,24 @@ export const copy = {
     } as Record<string, string>,
     error: "Couldn't save the note.",
     deleteError: "Couldn't delete the note.",
+    /** B-A7: subtle badge on a note an agent appended. */
+    agentBadge: "agent",
+    agentBadgeAria: (authorName: string | null) =>
+      authorName ? `Written by the agent ${authorName}` : "Written by an agent",
+  },
+  /** B-B1: the agent briefing card on Changes. Neutral wording only (B-F9). */
+  briefing: {
+    heading: "Agent briefing",
+    byAuthor: (authorName: string, asOfLabel: string) => `by ${authorName} · as of ${asOfLabel}`,
+    citedNightsLabel: "Cited nights",
+    citedMetricsLabel: "Cited metrics",
+    noCitations: "No nights cited",
+    dismiss: "Dismiss",
+    dismissing: "Dismissing…",
+    dismissAria: "Dismiss this briefing",
+    dismissError: "Couldn't dismiss the briefing.",
+    cardAria: (title: string, authorName: string) => `Agent briefing by ${authorName}: ${title}`,
+    metricLinkAria: (metricLabel: string) => `Open ${metricLabel} with this briefing's citations`,
   },
   /** Notes & agent profile slide-over (B-P1, B-U1–B-U4). */
   context: {
@@ -323,6 +343,48 @@ export const copy = {
           rem: "REM",
           core: "Core",
         },
+      },
+    },
+    trends: {
+      title: "Trends",
+      subtitle: "Sleep architecture and overnight vitals over the last 14 or 30 nights.",
+      rangeLabel: "Nights shown",
+      ranges: { "14d": "14d", "30d": "30d" },
+      sleepTitle: "Sleep architecture",
+      sleepSubtitle: "Deep, REM and core asleep per night, oldest night first.",
+      vitalsTitle: "Correlated vitals",
+      vitalsSubtitle: "Sleep, HRV (SDNN), resting HR and wrist temp on one shared night axis.",
+      usualMedianLabel: "usual sleep",
+      noteBandLabel: "Personal note",
+      partialLabel: "Partial night",
+      partialMarkerAria: "partial night",
+      empty: "No nights in this range yet.",
+      columns: {
+        day: "Night",
+        deep: "Deep (h)",
+        rem: "REM (h)",
+        core: "Core (h)",
+        asleep: "Asleep (h)",
+        hrv: "HRV (SDNN)",
+        rhr: "Resting HR",
+        wristTemp: "Wrist temp",
+        notes: "Notes",
+      },
+      sleepSummary: (count: number, rangeLabel: string, usualText: string | null) => {
+        const nightWord = count === 1 ? "night" : "nights";
+        const base = `Sleep architecture across ${count} ${nightWord} (${rangeLabel})`;
+        return usualText ? `${base}, usual median ${usualText}.` : `${base}.`;
+      },
+      vitalsSummary: (count: number, rangeLabel: string) => {
+        const nightWord = count === 1 ? "night" : "nights";
+        return `Sleep, HRV (SDNN), resting HR and wrist temp across ${count} ${nightWord} (${rangeLabel}).`;
+      },
+      noValue: "—",
+      panelLabels: {
+        sleep: "Sleep (h)",
+        hrv: "HRV (SDNN)",
+        rhr: "Resting HR",
+        wristTemp: "Wrist temp",
       },
     },
     metrics: {

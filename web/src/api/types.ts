@@ -1,4 +1,6 @@
 import type {
+  AlignedNightDTO,
+  BriefingDTO,
   ChangesDTO,
   CheckDTO,
   EpochCardDTO,
@@ -16,6 +18,7 @@ import type {
   FindingsDiffDTO,
   FindingsDiffItemDTO,
   FreshnessSummaryDTO,
+  HealthContextDTO,
   HealthDTO,
   ImportDTO,
   ImportStatus,
@@ -25,6 +28,7 @@ import type {
   MetricsIndexDTO,
   MetricUnitPointDTO,
   NightsDTO,
+  NoteAuthor,
   NoteCategory,
   NoteDTO,
   ProfileContextDTO,
@@ -40,6 +44,8 @@ import { IMPORT_STATUSES } from "@midori/domain/api";
  */
 
 export type {
+  AlignedNightDTO,
+  BriefingDTO,
   ChangesDTO,
   CheckDTO,
   EpochCardDTO,
@@ -57,6 +63,7 @@ export type {
   FindingsDiffDTO,
   FindingsDiffItemDTO,
   FreshnessSummaryDTO,
+  HealthContextDTO,
   HealthDTO,
   ImportDTO,
   ImportStatus,
@@ -66,6 +73,7 @@ export type {
   MetricsIndexDTO,
   MetricUnitPointDTO,
   NightsDTO,
+  NoteAuthor,
   NoteCategory,
   NoteDTO,
   ProfileContextDTO,
@@ -95,6 +103,9 @@ export type OsUpdateEventDTO = MetricSeriesDTO["osUpdates"][number];
 export type SamplePointDTO = UnitEvidenceDTO["samples"][number];
 export type NightSummaryDTO = NightsDTO["nights"][number];
 export type NoteCategoryDTO = NoteCategory;
+export type NoteAuthorDTO = NoteAuthor;
+/** B-B1: newest briefing shown on Changes, if any. */
+export type LatestBriefingDTO = Exclude<ChangesDTO["latestBriefing"], null>;
 export type NoteInputDTO = {
   startDay: string;
   endDay?: string;

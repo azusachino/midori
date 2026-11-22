@@ -53,6 +53,16 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render against real server",
   await expect(page.getByTestId("topbar-freshness")).toContainText("Data through Nov 14 (Sat)");
   await expect(page.getByTestId("sidebar-watch")).toContainText("Synthetic Watch B");
 
+  // Identity: the evergreen mark is decorative, so the brand link's accessible name stays
+  // exactly the app name, and /favicon.svg is served from web/public (no 404 console error).
+  const brandMark = page.getByTestId("brand-mark").first();
+  await expect(brandMark).toBeVisible();
+  await expect(brandMark).toHaveAttribute("aria-hidden", "true");
+  await expect(page.getByRole("link", { name: copy.app.name, exact: true })).toHaveCount(1);
+  const favicon = await page.request.get("/favicon.svg");
+  expect(favicon.status()).toBe(200);
+  expect(favicon.headers()["content-type"]).toContain("image/svg+xml");
+
   // B-R5: the build badge sits below the watch card, and the mobile badge is hidden here.
   const sidebarVersion = page.getByTestId("sidebar-version");
   await expect(sidebarVersion).toBeVisible();
@@ -63,6 +73,15 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render against real server",
   await expect(page.getByTestId("mobile-version")).toBeHidden();
 
   await assertNoHorizontalOverflow(page);
+
+  // B-T1: Trends sits between Changes and Metrics as its own lazy route.
+  await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.trends }).click();
+  await expect(page).toHaveURL(/\/trends$/);
+  await expect(page.getByTestId("trends-page")).toBeVisible();
+  await expect(page.getByTestId("sleep-architecture-echart").locator("canvas")).toBeVisible();
+  await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.changes }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId("changes-answer")).toBeVisible();
 
   // Navigate to lazy-loaded Metrics index
   await page.getByTestId("sidebar-nav").getByRole("link", { name: copy.nav.metrics }).click();

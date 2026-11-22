@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { type ReactNode, useId } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { copy } from "@/copy";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { to: "/", label: copy.nav.changes, matchPrefix: false },
+  { to: "/trends", label: copy.nav.trends, matchPrefix: false },
   { to: "/metrics", label: copy.nav.metrics, matchPrefix: true },
   { to: "/devices", label: copy.nav.devices, matchPrefix: false },
   { to: "/import", label: copy.nav.import, matchPrefix: false },
@@ -60,10 +62,7 @@ export function Shell({ children }: { children: ReactNode }) {
               to="/"
               className="inline-flex items-center gap-2 text-base font-semibold tracking-tight text-foreground no-underline hover:text-accent"
             >
-              <span
-                aria-hidden="true"
-                className="inline-block h-2.5 w-2.5 rounded-full bg-accent"
-              />
+              <BrandMark size={18} />
               <span>{copy.app.name}</span>
             </Link>
 
