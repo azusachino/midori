@@ -1,9 +1,10 @@
 import type { Database } from "bun:sqlite";
-import type { NoteCategory, NoteDTO } from "../domain/api";
+import type { NoteAuthor, NoteCategory, NoteDTO } from "../domain/api";
 
 /**
- * Owner notes as confounders (B-U1–B-U4, B-C7). Notes are owner-authored rows: derive()
- * and imports never clear or modify them, and reads never assert a cause (B-F9).
+ * Notes as confounders (B-U1–B-U4, B-C7, B-A7). Notes are owner-authored rows unless an
+ * auditable agent write claims them: derive() and imports never clear or modify them, and
+ * reads never assert a cause (B-F9).
  */
 
 export const NOTE_CATEGORIES: readonly NoteCategory[] = [
@@ -16,6 +17,14 @@ export const NOTE_CATEGORIES: readonly NoteCategory[] = [
 ];
 
 const MAX_LABEL_LENGTH = 140;
+
+/** B-A7: longest accepted agent name after trimming. */
+export const AUTHOR_NAME_MAX_LENGTH = 64;
+
+export interface NoteProvenance {
+  author?: NoteAuthor;
+  authorName?: string | null;
+}
 
 export interface NoteFields {
   startDay: string;
@@ -35,6 +44,21 @@ export function isCalendarDay(value: unknown): value is string {
 
 function isNoteCategory(value: unknown): value is NoteCategory {
   return typeof value === "string" && (NOTE_CATEGORIES as readonly string[]).includes(value);
+}
+
+export type AuthorNameValidation = { ok: true; value: string } | { ok: false; error: string };
+
+/**
+ * B-A7: an omitted author name defaults to `"agent"`; anything else must be a trimmed
+ * 1..64 character string. Shared by the note and briefing write paths.
+ */
+export function validateAuthorName(input: unknown): AuthorNameValidation {
+  const raw = input === undefined || input === null ? "agent" : input;
+  if (typeof raw !== "string") return { ok: false, error: "authorName must be a string" };
+  const trimmed = raw.trim();
+  if (trimmed.length < 1 || trimmed.length > AUTHOR_NAME_MAX_LENGTH)
+    return { ok: false, error: `authorName must be 1–${AUTHOR_NAME_MAX_LENGTH} characters` };
+  return { ok: true, value: trimmed };
 }
 
 function hasOwn(input: object, key: string): boolean {
@@ -81,6 +105,8 @@ type NoteRow = {
   label: string;
   created_at: string;
   updated_at: string;
+  author: string;
+  author_name: string | null;
 };
 
 function toDto(row: NoteRow): NoteDTO {
@@ -92,6 +118,8 @@ function toDto(row: NoteRow): NoteDTO {
     label: row.label,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    author: row.author === "agent" ? "agent" : "owner",
+    authorName: row.author_name,
   };
 }
 
@@ -120,24 +148,69 @@ export function getNote(db: Database, id: number): NoteDTO | null {
   return row ? toDto(row) : null;
 }
 
-export function createNote(db: Database, value: NoteFields): NoteDTO {
+/**
+ * Creates a note. `provenance` defaults to the owner, so every existing call site keeps
+ * writing owner rows; MCP `add_note` passes `{ author: "agent", authorName }` (B-A7).
+ */
+export function createNote(
+  db: Database,
+  value: NoteFields,
+  provenance: NoteProvenance = {},
+): NoteDTO {
   const now = new Date().toISOString();
   db.run(
-    `INSERT INTO notes (start_day, end_day, category, label, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [value.startDay, value.endDay, value.category, value.label, now, now],
+    `INSERT INTO notes (start_day, end_day, category, label, created_at, updated_at, author, author_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      value.startDay,
+      value.endDay,
+      value.category,
+      value.label,
+      now,
+      now,
+      provenance.author ?? "owner",
+      provenance.authorName ?? null,
+    ],
   );
   const id = Number((db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
   const row = db.query("SELECT * FROM notes WHERE id = ?").get(id) as NoteRow;
   return toDto(row);
 }
 
-export function updateNote(db: Database, id: number, value: NoteFields): NoteDTO {
-  db.run(
-    `UPDATE notes SET start_day = ?, end_day = ?, category = ?, label = ?, updated_at = ?
-     WHERE id = ?`,
-    [value.startDay, value.endDay, value.category, value.label, new Date().toISOString(), id],
-  );
+/**
+ * Updates a note's fields. Provenance is preserved when `provenance` is omitted, so an
+ * owner edit over REST never relabels an agent row (B-A7).
+ */
+export function updateNote(
+  db: Database,
+  id: number,
+  value: NoteFields,
+  provenance: NoteProvenance = {},
+): NoteDTO {
+  const setProvenance = provenance.author !== undefined || provenance.authorName !== undefined;
+  if (setProvenance) {
+    db.run(
+      `UPDATE notes SET start_day = ?, end_day = ?, category = ?, label = ?, updated_at = ?,
+         author = COALESCE(?, author), author_name = ?
+       WHERE id = ?`,
+      [
+        value.startDay,
+        value.endDay,
+        value.category,
+        value.label,
+        new Date().toISOString(),
+        provenance.author ?? null,
+        provenance.authorName ?? null,
+        id,
+      ],
+    );
+  } else {
+    db.run(
+      `UPDATE notes SET start_day = ?, end_day = ?, category = ?, label = ?, updated_at = ?
+       WHERE id = ?`,
+      [value.startDay, value.endDay, value.category, value.label, new Date().toISOString(), id],
+    );
+  }
   const row = db.query("SELECT * FROM notes WHERE id = ?").get(id) as NoteRow;
   return toDto(row);
 }

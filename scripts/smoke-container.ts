@@ -110,6 +110,13 @@ try {
     fail("/api/health missing revision");
   console.log(`smoke-container: /api/health version ${health.version} revision ${health.revision}`);
 
+  // 2c. B-B1: briefings are readable on a fresh store and empty until an agent publishes.
+  const briefingsRes = await fetch(`${baseUrl}/api/briefings?limit=10`);
+  if (briefingsRes.status !== 200) fail(`/api/briefings status ${briefingsRes.status}`);
+  const briefings = (await briefingsRes.json()) as { briefings?: unknown[] };
+  if (!Array.isArray(briefings.briefings)) fail("/api/briefings missing a briefings array");
+  console.log("smoke-container: /api/briefings answers 200 with a briefing list");
+
   // 3. Fresh store must have no imports yet, then upload the synthetic zip.
   const zipPath = join(workdir, "fixture.zip");
   writeFileSync(
@@ -189,6 +196,16 @@ try {
   if (!names.includes("changes")) fail(`tools/list missing changes: ${names.join(",")}`);
   if (!names.includes("health_context"))
     fail(`tools/list missing health_context: ${names.join(",")}`);
+  // B-A6/B-A7: list_briefings is always mounted; the container's /mcp is writable.
+  for (const writeTool of [
+    "list_briefings",
+    "add_note",
+    "update_note",
+    "save_briefing",
+    "update_profile",
+  ]) {
+    if (!names.includes(writeTool)) fail(`tools/list missing ${writeTool}: ${names.join(",")}`);
+  }
   console.log(`smoke-container: MCP over HTTP ok (${names.length} tools)`);
 
   // 7. Backup + archive landed on the volume path (the archive keeps the spooled
