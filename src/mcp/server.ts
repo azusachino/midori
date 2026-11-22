@@ -1,33 +1,20 @@
 import type { Database } from "bun:sqlite";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { AGENT_GUIDANCE } from "../domain/api";
 import { METRICS } from "../domain/metrics";
 import { getChanges, getEpochs, getNights, getSeries, listImports } from "../http/queries";
+import {
+  CONTEXT_DEFAULT_DAYS,
+  CONTEXT_MAX_DAYS,
+  CONTEXT_MIN_DAYS,
+  caveatsFor,
+  getHealthContext,
+  isValidContextDays,
+} from "../stats/context";
 import { isCalendarDay, listNotes } from "../stats/notes";
 
 const KNOWN_METRICS = Object.keys(METRICS);
-const AGENT_GUIDANCE =
-  "Cite the specific nights behind findings. Device changes, OS updates, partial data, travel, and personal notes are confounders; midori does not assert causes.";
-
-const CHECK_CAVEATS: Record<string, string> = {
-  device_change: "A device change overlaps this finding.",
-  os_update: "An operating system update overlaps this finding.",
-  partial_nights: "Partial nights were skipped in the recent window.",
-  tz_change: "A timezone change appears in the recent window.",
-  missing_nights: "The recent observations are spread across a long calendar span.",
-  low_trust: "This metric has low trust.",
-  user_note: "A personal note overlaps the recent window.",
-};
-
-function caveatsFor(row: ReturnType<typeof getChanges>["overnight"][number]): string[] {
-  const caveats = row.checks
-    .filter((check) => check.flagged)
-    .map((check) => CHECK_CAVEATS[check.key] ?? "A data check is flagged.");
-  if (row.state === "warming_up") caveats.push("The baseline is still warming up.");
-  else if (row.state === "insufficient") caveats.push("There is not enough data for a finding.");
-  else if (row.state === "stale") caveats.push("The latest usable data is stale.");
-  return caveats;
-}
 
 /** Read-only MCP tools over the same query functions used by REST. */
 export function createMcpServer({ db }: { db: Database }): McpServer {
@@ -36,6 +23,8 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
     {
       instructions:
         "Read-only access to an Apple Health warehouse. Never a substitute for medical advice. " +
+        "Start with health_context for a holistic dossier (findings, long-term baselines, aligned " +
+        "nights, profile); use changes for quick ranked findings. " +
         AGENT_GUIDANCE,
     },
   );
@@ -70,6 +59,35 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
           },
         ],
       };
+    },
+  );
+
+  server.registerTool(
+    "health_context",
+    {
+      description: `One-call dossier: current findings with primary-stint long-term medians (90d and 1y), aligned recent nights (sleep stages, usable overnight vitals, timezone, partial data, overlapping notes), owner profile context, and what changed since the previous import. days defaults to ${CONTEXT_DEFAULT_DAYS} and must be an integer ${CONTEXT_MIN_DAYS}..${CONTEXT_MAX_DAYS}. ${AGENT_GUIDANCE}`,
+      inputSchema: {
+        days: z
+          .number()
+          .optional()
+          .describe(
+            `Number of recent nights to align, ${CONTEXT_MIN_DAYS}..${CONTEXT_MAX_DAYS} (default ${CONTEXT_DEFAULT_DAYS})`,
+          ),
+      },
+    },
+    async ({ days }) => {
+      if (days !== undefined && !isValidContextDays(days)) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `days must be an integer between ${CONTEXT_MIN_DAYS} and ${CONTEXT_MAX_DAYS}`,
+            },
+          ],
+        };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(getHealthContext(db, days)) }] };
     },
   );
 

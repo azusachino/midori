@@ -30,6 +30,7 @@ describe("migrations", () => {
       "0005_import_progress_summary.sql",
       "0006_import_as_of_day.sql",
       "0007_notes_and_snapshots.sql",
+      "0008_profile_context.sql",
     ]);
     const second = applyMigrations(db);
     expect(second).toEqual([]);
@@ -66,6 +67,7 @@ describe("migrations", () => {
     expect(applyMigrations(db)).toEqual([
       "0006_import_as_of_day.sql",
       "0007_notes_and_snapshots.sql",
+      "0008_profile_context.sql",
     ]);
     const rows = db.query("SELECT zip_name, as_of_day FROM imports ORDER BY id").all();
     expect(rows).toEqual([
@@ -102,7 +104,10 @@ describe("migrations", () => {
        ('sleep_h', 'computed', 0.2, 'within', 'high', '[]', '2026-11-07'),
        ('wrist_temp', 'warming_up', NULL, 'within', NULL, '[]', '2026-11-07')`,
     );
-    expect(applyMigrations(db)).toEqual(["0007_notes_and_snapshots.sql"]);
+    expect(applyMigrations(db)).toEqual([
+      "0007_notes_and_snapshots.sql",
+      "0008_profile_context.sql",
+    ]);
     const rows = db
       .query(
         "SELECT import_id, metric, state, direction, severity FROM finding_snapshots ORDER BY metric",
@@ -161,6 +166,7 @@ describe("migrations", () => {
       "0005_import_progress_summary.sql",
       "0006_import_as_of_day.sql",
       "0007_notes_and_snapshots.sql",
+      "0008_profile_context.sql",
     ]);
 
     const imported = db.query("SELECT id, export_date FROM imports").get() as {
@@ -288,6 +294,7 @@ describe("schema.ts mirrors the SQL migrations", () => {
       findings: schema.findings,
       seam_steps: schema.seamSteps,
       notes: schema.notes,
+      profile_context: schema.profileContext,
       finding_snapshots: schema.findingSnapshots,
     };
     for (const [name, table] of Object.entries(tables)) {

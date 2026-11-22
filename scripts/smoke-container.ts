@@ -97,6 +97,19 @@ try {
   }
   console.log("smoke-container: server up, empty-store /api/changes answers 200");
 
+  // 2b. B-R5: /api/health carries the build tag and short revision.
+  const health = (await (await fetch(`${baseUrl}/api/health`)).json()) as {
+    ok?: boolean;
+    version?: string;
+    revision?: string;
+  };
+  if (health.ok !== true) fail("/api/health missing ok:true");
+  if (typeof health.version !== "string" || health.version.length === 0)
+    fail("/api/health missing version");
+  if (typeof health.revision !== "string" || health.revision.length === 0)
+    fail("/api/health missing revision");
+  console.log(`smoke-container: /api/health version ${health.version} revision ${health.revision}`);
+
   // 3. Fresh store must have no imports yet, then upload the synthetic zip.
   const zipPath = join(workdir, "fixture.zip");
   writeFileSync(
@@ -174,6 +187,8 @@ try {
   };
   const names = tools.result?.tools?.map((t) => t.name) ?? [];
   if (!names.includes("changes")) fail(`tools/list missing changes: ${names.join(",")}`);
+  if (!names.includes("health_context"))
+    fail(`tools/list missing health_context: ${names.join(",")}`);
   console.log(`smoke-container: MCP over HTTP ok (${names.length} tools)`);
 
   // 7. Backup + archive landed on the volume path (the archive keeps the spooled

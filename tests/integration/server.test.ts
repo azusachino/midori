@@ -55,7 +55,7 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     expect(item.retryable).toBe(false);
   });
 
-  test("GET /api/health returns ok", async () => {
+  test("B-R5 GET /api/health returns ok plus build version and revision", async () => {
     const dbPath = join(workdir, "health.db");
     server = startServer({
       db: openDb(dbPath),
@@ -67,7 +67,11 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     });
     const response = await fetch(`http://127.0.0.1:${server.port}/api/health`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true });
+    const body = (await response.json()) as { ok: boolean; version: string; revision: string };
+    expect(body.ok).toBe(true);
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(typeof body.revision).toBe("string");
+    expect(body.revision.length).toBeGreaterThan(0);
   });
 
   test("M1 /api/changes stays responsive while a worker import is deriving", async () => {
@@ -226,6 +230,7 @@ describe("server entry: REST + web shell + MCP on one port", () => {
     const names = toolBody.result?.tools?.map((t) => t.name) ?? [];
     expect(names).toEqual([
       "changes",
+      "health_context",
       "metric_series",
       "nights",
       "epochs",

@@ -1,5 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
+import { getBuildInfo } from "../domain/build";
+import { getHealthContext, isValidContextDays } from "../stats/context";
 import { getImportDiff } from "../stats/diff";
 import {
   createNote,
@@ -11,6 +13,7 @@ import {
   updateNote,
   validateNoteFields,
 } from "../stats/notes";
+import { getProfileContext, saveProfileContext, validateProfileFields } from "../stats/profile";
 import { type ImportRouteOptions, mountImportRoutes } from "./import";
 import {
   getChanges,
@@ -35,7 +38,32 @@ export function createApp({ db, upload }: RouteDeps): Hono {
 
   app.get("/api/health", (c) => {
     db.query("SELECT 1").get();
-    return c.json({ ok: true as const });
+    const { version, revision } = getBuildInfo();
+    return c.json({ ok: true as const, version, revision });
+  });
+
+  // B-P1–B-P2: the owner's profile context is always readable; only mutations need upload.
+  app.get("/api/profile", (c) => c.json(getProfileContext(db)));
+  if (upload) {
+    app.put("/api/profile", async (c) => {
+      const body: unknown = await c.req.json().catch(() => null);
+      const validation = validateProfileFields(body);
+      if (!validation.ok) return c.json({ error: validation.error, retryable: false }, 400);
+      return c.json(saveProfileContext(db, validation.value));
+    });
+  } else {
+    app.put("/api/profile", (c) =>
+      c.json({ error: "profile is read-only", retryable: false }, 405),
+    );
+  }
+
+  // B-A5: the same dossier MCP `health_context` returns.
+  app.get("/api/context", (c) => {
+    const raw = c.req.query("days");
+    const days = raw === undefined || raw === "" ? undefined : Number(raw);
+    if (days !== undefined && !isValidContextDays(days))
+      return c.json({ error: "days must be an integer between 7 and 30", retryable: false }, 400);
+    return c.json(getHealthContext(db, days));
   });
   app.get("/api/imports", (c) => c.json(listImports(db)));
   app.get("/api/imports/:id/diff", (c) => {

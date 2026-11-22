@@ -63,6 +63,21 @@ export interface ErrorResponse {
   retryable: boolean;
 }
 
+/** B-R5 build identity returned by `GET /api/health` and shown in the UI shell. */
+export interface HealthDTO {
+  ok: true;
+  version: string;
+  revision: string;
+}
+
+/** B-P1 owner-authored agent context, a singleton (`id = 1`). */
+export interface ProfileContextDTO {
+  goals: string;
+  routine: string;
+  medicalContext: string;
+  updatedAt: string | null;
+}
+
 export type FindingState = "computed" | "warming_up" | "insufficient" | "stale";
 export type FindingDirection = "higher" | "lower" | "within";
 export type FindingSeverity = "within" | "notable" | "alert";
@@ -327,6 +342,52 @@ export interface NightsDTO {
 
 /** Upload limits pinned by contract (single-user instance). */
 export const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+
+/**
+ * B-A3: every MCP tool description ends with this cautious-evidence guidance, and the
+ * B-A5 dossier repeats it as `guidance` so one agent call carries it too.
+ */
+export const AGENT_GUIDANCE =
+  "Cite the specific nights behind findings. Device changes, OS updates, partial data, travel, and personal notes are confounders; midori does not assert causes.";
+
+/** B-A5 primary-stint long-term baseline medians for one finding (90 days and 1 year). */
+export interface LongTermBaselineDTO {
+  median90d: number | null;
+  median1y: number | null;
+  n90d: number;
+  n1y: number;
+}
+
+/** B-A5 one night aligned across sleep stages, primary-stint vitals and notes. */
+export interface AlignedNightDTO {
+  date: string;
+  zone: string;
+  tzChange: boolean;
+  partialReason: string | null;
+  sleep: { asleepH: number; deepH: number; remH: number; coreH: number } | null;
+  metrics: Record<string, number | null>;
+  notes: Array<{ id: number; category: NoteCategory; label: string }>;
+}
+
+/** B-A5 one-call dossier: findings + long-term baselines + aligned nights + profile. */
+export interface HealthContextDTO {
+  asOfDay: string | null;
+  freshness: FreshnessSummaryDTO;
+  primaryWatch: ChangesDTO["primaryWatch"];
+  profile: ProfileContextDTO;
+  summary: {
+    standsOut: number;
+    closeToEdge: number;
+    within: number;
+    other: number;
+    sharedConfounders: string[];
+  };
+  findings: Array<FindingRowDTO & { longTerm: LongTermBaselineDTO }>;
+  sinceLastImport: FindingsDiffDTO | null;
+  recentNights: AlignedNightDTO[];
+  recentNotes: NoteDTO[];
+  guidance: string;
+}
 
 export function trustFields(metric: string): Pick<FindingRowDTO, "trust" | "trustNote"> {
   const { label, note } = trustFor(metric);

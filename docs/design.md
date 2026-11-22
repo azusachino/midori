@@ -84,6 +84,9 @@ The SQL migrations are the source of truth. Changes from v0:
 - `finding_snapshots(import_id, metric, state, z, severity, direction, confidence, asof_day)`:
   a compact per-import snapshot written inside derive (B-I13), used only for the
   import-to-import diff (B-F15). Primary key `(import_id, metric)`.
+- `profile_context(id CHECK id = 1, goals, routine, medical_context, updated_at)`: the owner's
+  singleton agent context (B-P1–B-P2), editable from the UI and never cleared by derive or
+  imports.
 - `device_events` and `daily_metrics` are dropped.
 
 ## Stats engine
@@ -101,6 +104,7 @@ transaction commits. Request handlers only read.
 
 REST (Hono, JSON):
 
+- `GET /api/health`: `{ ok, version, revision }` build identity (B-R5).
 - Imports:
   - `POST /api/imports` (validated before job creation, B-I1)
   - `GET /api/imports`
@@ -118,10 +122,16 @@ REST (Hono, JSON):
 - `GET /api/nights?from=&to=` (≤400 days).
 - `GET /api/notes?from=&to=`; `POST /api/notes`; `PATCH /api/notes/:id`;
   `DELETE /api/notes/:id` (mutations are absent in read-only deployments and answer 405).
+- `GET /api/profile`; `PUT /api/profile` (owner agent context, B-P1; mutation answers 405 in
+  read-only deployments).
+- `GET /api/context?days=7..30` (default 14): the B-A5 dossier that MCP `health_context`
+  returns — findings with long-term primary-stint medians, aligned recent nights, profile,
+  freshness and what changed since the previous import.
 
-MCP (read-only; stdio + streamable HTTP): `changes()` (start here), `metric_series(metric,
+MCP (read-only; stdio + streamable HTTP): `changes()` (quick ranked findings),
+`health_context(days?)` (the holistic dossier), `metric_series(metric,
 range)`, `nights(from, to)`, `list_notes(from?, to?)`, `epochs()`, `list_imports()`, per
-B-A1–B-A4.
+B-A1–B-A5.
 
 ## UI
 
