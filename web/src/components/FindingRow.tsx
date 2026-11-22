@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Flag, Info } from "lucide-react";
 import type { ConfidenceLevel, FindingRowDTO, FindingSeverity } from "@/api/types";
+import { RangeGauge } from "@/components/RangeGauge";
 import { Sparkline } from "@/components/Sparkline";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -8,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { copy } from "@/copy";
 import {
   flaggedChecksFor,
-  formatRecentVsBaseline,
+  formatReading,
   formatShortDay,
   isLeaning,
   unitNounFor,
@@ -43,7 +44,7 @@ export function FindingRow({ row, mode = "link", className }: FindingRowProps) {
   const metricLabel = copy.metrics[row.metric] ?? row.metric;
   const noun = unitNounFor(row.kind);
   const flaggedChecks = flaggedChecksFor(row);
-  const valueText = row.state === "computed" ? formatRecentVsBaseline(row) : null;
+  const reading = row.state === "computed" ? formatReading(row) : null;
   const isNotableOrAlert = row.severity === "notable" || row.severity === "alert";
   const showClippedZ = row.state === "computed" && row.z !== null && Math.abs(row.z) >= 10;
 
@@ -70,99 +71,106 @@ export function FindingRow({ row, mode = "link", className }: FindingRowProps) {
       />
 
       <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4">
-        {/* Primary line: Metric name + trust popover + direction/state */}
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-          {mode === "link" ? (
-            <Link
-              to="/metrics/$key"
-              params={{ key: row.metric }}
-              search={{ range: "90d", tab: "chart" }}
-              className="font-medium text-foreground no-underline after:absolute after:inset-0 after:z-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
-            >
-              {metricLabel}
-            </Link>
-          ) : (
-            <span className="font-medium text-foreground">{metricLabel}</span>
-          )}
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label={copy.pages.changes.trustButtonLabel(metricLabel)}
-                data-testid={`trust-trigger-${row.metric}`}
-                className="relative z-10 inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer"
+        {/* Primary line: metric name, prominent reading, trust popover, direction/state */}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+            {mode === "link" ? (
+              <Link
+                to="/metrics/$key"
+                params={{ key: row.metric }}
+                search={{ range: "90d", tab: "chart" }}
+                className="font-medium text-foreground no-underline after:absolute after:inset-0 after:z-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
               >
-                <Info aria-hidden="true" className="h-3.5 w-3.5" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent data-testid={`trust-popover-${row.metric}`}>
-              <p className="font-medium text-foreground">{copy.trust[row.trust]}</p>
-              <p className="mt-1 text-muted-foreground">{row.trustNote}</p>
-            </PopoverContent>
-          </Popover>
+                {metricLabel}
+              </Link>
+            ) : (
+              <span className="font-medium text-foreground">{metricLabel}</span>
+            )}
 
-          {row.trust === "low" ? (
-            <Badge variant="secondary" data-testid={`low-trust-${row.metric}`}>
-              {copy.pages.changes.lowTrustBadge}
-            </Badge>
-          ) : null}
-
-          {row.state === "computed" && row.direction ? (
-            <span className={cn("text-xs md:text-sm", directionTintClass(row.severity))}>
-              {isLeaning(row)
-                ? copy.leaning[(row.z ?? 0) > 0 ? "higher" : "lower"]
-                : copy.direction[row.direction]}
-            </span>
-          ) : null}
-
-          {showClippedZ ? (
-            <Badge
-              variant={row.severity === "alert" ? "alert" : "notable"}
-              className="tabular-nums"
-            >
-              {copy.pages.changes.clippedZ}
-            </Badge>
-          ) : null}
-
-          {row.state === "warming_up" && row.warmup ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-learning">
-              <span className="tabular-nums">
-                {copy.pages.changes.learningRow(row.warmup.current, row.warmup.target, noun)}
+            {reading ? (
+              <span
+                data-testid={`recent-value-${row.metric}`}
+                className="text-sm font-semibold text-foreground tabular-nums whitespace-nowrap"
+              >
+                {reading}
               </span>
-              <Progress
-                value={warmupPct}
-                aria-label={copy.pages.changes.learningRow(
-                  row.warmup.current,
-                  row.warmup.target,
-                  noun,
-                )}
-                className="h-1.5 w-20 bg-muted [&>div]:bg-learning"
-              />
-            </div>
-          ) : null}
+            ) : null}
 
-          {row.state === "insufficient" ? (
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {copy.pages.changes.insufficientRow(row.recentCount, noun)}
-            </span>
-          ) : null}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={copy.pages.changes.trustButtonLabel(metricLabel)}
+                  data-testid={`trust-trigger-${row.metric}`}
+                  className="relative z-10 inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer"
+                >
+                  <Info aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent data-testid={`trust-popover-${row.metric}`}>
+                <p className="font-medium text-foreground">{copy.trust[row.trust]}</p>
+                <p className="mt-1 text-muted-foreground">{row.trustNote}</p>
+              </PopoverContent>
+            </Popover>
 
-          {row.state === "stale" ? (
-            <span className="text-xs text-muted-foreground">
-              {copy.pages.changes.staleRow(noun)}
-            </span>
-          ) : null}
+            {row.trust === "low" ? (
+              <Badge variant="secondary" data-testid={`low-trust-${row.metric}`}>
+                {copy.pages.changes.lowTrustBadge}
+              </Badge>
+            ) : null}
+
+            {row.state === "computed" && row.direction ? (
+              <span className={cn("text-xs md:text-sm", directionTintClass(row.severity))}>
+                {isLeaning(row)
+                  ? copy.leaning[(row.z ?? 0) > 0 ? "higher" : "lower"]
+                  : copy.direction[row.direction]}
+              </span>
+            ) : null}
+
+            {showClippedZ ? (
+              <Badge
+                variant={row.severity === "alert" ? "alert" : "notable"}
+                className="tabular-nums"
+              >
+                {copy.pages.changes.clippedZ}
+              </Badge>
+            ) : null}
+
+            {row.state === "warming_up" && row.warmup ? (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-learning">
+                <span className="tabular-nums">
+                  {copy.pages.changes.learningRow(row.warmup.current, row.warmup.target, noun)}
+                </span>
+                <Progress
+                  value={warmupPct}
+                  aria-label={copy.pages.changes.learningRow(
+                    row.warmup.current,
+                    row.warmup.target,
+                    noun,
+                  )}
+                  className="h-1.5 w-20 bg-muted [&>div]:bg-learning"
+                />
+              </div>
+            ) : null}
+
+            {row.state === "insufficient" ? (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {copy.pages.changes.insufficientRow(row.recentCount, noun)}
+              </span>
+            ) : null}
+
+            {row.state === "stale" ? (
+              <span className="text-xs text-muted-foreground">
+                {copy.pages.changes.staleRow(noun)}
+              </span>
+            ) : null}
+          </div>
+
+          <RangeGauge row={row} />
         </div>
 
-        {/* Secondary cluster: values, frequency, onset, confidence, flagged checks, sparkline */}
+        {/* Secondary cluster: frequency, onset, confidence, flagged checks, sparkline */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs md:justify-end">
-          {valueText ? (
-            <span className="font-medium text-foreground tabular-nums whitespace-nowrap">
-              {valueText}
-            </span>
-          ) : null}
-
           {row.state === "computed" && row.kOutside !== null ? (
             <span className="text-muted-foreground tabular-nums whitespace-nowrap">
               {copy.pages.changes.frequency(row.kOutside, row.recentCount, noun)}

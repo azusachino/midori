@@ -4,12 +4,14 @@ import type {
   ChangesDTO,
   EpochsDTO,
   FindingRowDTO,
+  HealthDTO,
   ImportDTO,
   MetricIndexEntryDTO,
   MetricRange,
   MetricSeriesDTO,
   MetricsIndexDTO,
   NightsDTO,
+  ProfileContextDTO,
   UnitEvidenceDTO,
 } from "./types";
 
@@ -1183,4 +1185,14 @@ export function nightsStub(from: string, to: string): NightsDTO {
     to,
     nights: [],
   };
+}
+
+/** B-R5 dev-only fallback shape for `/api/health` before the build tag is available. */
+export function healthStub(): HealthDTO {
+  return { ok: true, version: "dev", revision: "dev" };
+}
+
+/** B-P1 dev-only fallback for an absent profile row. */
+export function emptyProfileStub(): ProfileContextDTO {
+  return { goals: "", routine: "", medicalContext: "", updatedAt: null };
 }

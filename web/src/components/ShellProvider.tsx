@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "@/api/client";
-import type { ChangesDTO } from "@/api/types";
+import type { BuildInfoDTO, ChangesDTO } from "@/api/types";
 import { loadShellChanges, ShellContext, type ShellState } from "@/lib/shell-context";
 
 const ACTIVE_IMPORT_POLL_MS = 1500;
@@ -9,12 +9,25 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ShellState["status"]>("loading");
   const [changes, setChanges] = useState<ChangesDTO | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [build, setBuild] = useState<BuildInfoDTO | null>(null);
   const [nonce, setNonce] = useState(0);
   const statusRef = useRef<ShellState["status"]>("loading");
   statusRef.current = status;
 
   const refresh = useCallback(() => {
     setNonce((n) => n + 1);
+  }, []);
+
+  // B-R5: the build badge is independent of the changes read; failure leaves it absent.
+  useEffect(() => {
+    const ac = new AbortController();
+    void apiClient
+      .health(ac.signal)
+      .then((info) => setBuild({ version: info.version, revision: info.revision }))
+      .catch(() => {
+        if (!ac.signal.aborted) setBuild(null);
+      });
+    return () => ac.abort();
   }, []);
 
   useEffect(() => {
@@ -78,7 +91,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   }, [hasActiveImport]);
 
   return (
-    <ShellContext.Provider value={{ status, changes, errorMessage, refresh }}>
+    <ShellContext.Provider value={{ status, changes, errorMessage, refresh, build }}>
       {children}
     </ShellContext.Provider>
   );

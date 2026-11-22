@@ -1,6 +1,13 @@
+import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { emptyChangesStub } from "../web/src/api/fixtures";
 import { copy } from "../web/src/copy";
+
+const PACKAGE_VERSION = (
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    version: string;
+  }
+).version;
 
 function trackErrors(page: Page, opts?: { allow404?: boolean; allow500?: boolean }): string[] {
   const errors: string[] = [];
@@ -46,6 +53,15 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render against real server",
   await expect(page.getByTestId("topbar-freshness")).toContainText("Data through Nov 14 (Sat)");
   await expect(page.getByTestId("sidebar-watch")).toContainText("Synthetic Watch B");
 
+  // B-R5: the build badge sits below the watch card, and the mobile badge is hidden here.
+  const sidebarVersion = page.getByTestId("sidebar-version");
+  await expect(sidebarVersion).toBeVisible();
+  await expect(sidebarVersion).toContainText(PACKAGE_VERSION);
+  await expect(sidebarVersion).toHaveText(
+    new RegExp(`${PACKAGE_VERSION.replaceAll(".", "\\.")} · \\S+`),
+  );
+  await expect(page.getByTestId("mobile-version")).toBeHidden();
+
   await assertNoHorizontalOverflow(page);
 
   // Navigate to lazy-loaded Metrics index
@@ -67,8 +83,13 @@ test("desktop 1440px: v1 shell, lazy routes, EChart render against real server",
 
   // Long page: the sidebar watch card sits under the nav and stays on screen when scrolled
   const navBox = await page.getByTestId("sidebar-nav").boundingBox();
-  const watchTop = (await page.getByTestId("sidebar-watch").boundingBox())?.y ?? Infinity;
+  const watchBox = await page.getByTestId("sidebar-watch").boundingBox();
+  const watchTop = watchBox?.y ?? Infinity;
   expect(watchTop - ((navBox?.y ?? 0) + (navBox?.height ?? 0))).toBeLessThan(64);
+  // B-R5 keeps the version below the watch card so this nav geometry is unchanged.
+  const versionBox = await page.getByTestId("sidebar-version").boundingBox();
+  expect(versionBox?.y ?? -1).toBeGreaterThanOrEqual((watchBox?.y ?? 0) + (watchBox?.height ?? 0));
+  expect(versionBox?.y ?? Infinity).toBeLessThan((watchBox?.y ?? 0) + (watchBox?.height ?? 0) + 64);
   await page.setViewportSize({ width: 1440, height: 480 });
   expect(await page.evaluate(() => document.body.scrollHeight > window.innerHeight)).toBe(true);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -101,6 +122,10 @@ test("phone 390px: top tabs replace sidebar and freshness moves to its own line"
   await expect(page.getByTestId("mobile-nav")).toBeVisible();
   await expect(page.getByTestId("sidebar-nav")).toBeHidden();
   await expect(page.getByTestId("topbar-freshness")).toBeVisible();
+  // B-R5: the mobile header carries the build badge; the desktop footer is hidden.
+  await expect(page.getByTestId("mobile-version")).toBeVisible();
+  await expect(page.getByTestId("mobile-version")).toContainText(PACKAGE_VERSION);
+  await expect(page.getByTestId("sidebar-version")).toBeHidden();
 
   const brandBox = await page.getByRole("link", { name: copy.app.name }).boundingBox();
   const freshnessBox = await page.getByTestId("topbar-freshness").boundingBox();

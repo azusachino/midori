@@ -33,6 +33,11 @@ export const copy = {
     learningProgress: (current: number, target: number) => `learning ${current}/${target}`,
     noPrimaryWatch: "No primary watch yet",
   },
+  /** B-R5 build badge; neutral and tabular. */
+  shell: {
+    version: (version: string, revision: string) => `${version} · ${revision}`,
+    versionAria: (version: string, revision: string) => `Build ${version}, revision ${revision}`,
+  },
   empty: {
     title: "No Health data imported yet",
     subtitle: "Export your Apple Health archive from your iPhone, then import it here.",
@@ -182,6 +187,37 @@ export const copy = {
     error: "Couldn't save the note.",
     deleteError: "Couldn't delete the note.",
   },
+  /** Notes & agent profile slide-over (B-P1, B-U1–B-U4). */
+  context: {
+    title: "Notes & agent profile",
+    description:
+      "Notes mark a day or range. The agent profile is context you choose to share with an agent. midori stores both as written.",
+    closeLabel: "Close notes and agent profile",
+    tabs: { notes: "Notes", profile: "Agent profile" },
+    openNotes: "+ Log note",
+    openProfile: "Agent profile",
+    manage: "Manage",
+    notesHint: "Notes are confounders, never causes.",
+    profile: {
+      intro:
+        "Context for advice you ask an agent for. midori stores this text as written and does not read it itself.",
+      goals: "Goals",
+      goalsPlaceholder: "e.g. sleep 7.5 h, train four times a week",
+      routine: "Routine",
+      routinePlaceholder: "e.g. office Tue–Thu, long run Sunday",
+      medicalContext: "Medical context",
+      medicalContextPlaceholder: "e.g. recurring migraines since March",
+      save: "Save profile",
+      saving: "Saving…",
+      saved: "Saved",
+      loading: "Loading profile…",
+      loadError: "Couldn't load the profile.",
+      saveError: "Couldn't save the profile.",
+      retry: "Retry",
+      emptyHint: "Nothing saved yet. All three fields are optional.",
+      charCount: (count: number) => `${count}/1000`,
+    },
+  },
   diff: {
     title: "Since previous export",
     span: (fromDay: string, toDay: string) => `${fromDay} → ${toDay}`,
@@ -252,6 +288,11 @@ export const copy = {
       onset: (day: string, openEnded: boolean) =>
         openEnded ? `at least since ${day}` : `since ${day}`,
       clippedZ: "≥10σ",
+      gaugeAria: (metricLabel: string, recentText: string, lowText: string, highText: string) =>
+        `${metricLabel}: recent ${recentText}, usual range ${lowText} to ${highText}`,
+      usualBand: (range: string, unitLabel: string) =>
+        unitLabel ? `usual ${range} ${unitLabel}` : `usual ${range}`,
+      notesManageAria: "Open notes and agent profile",
       learningRow: (current: number, target: number, noun: "nights" | "days") =>
         `learning · ${current} of ${target} ${noun}`,
       insufficientRow: (recentCount: number, noun: "nights" | "days") =>

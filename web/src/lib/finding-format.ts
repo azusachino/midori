@@ -85,13 +85,43 @@ export function formatMetricNumber(value: number, metric: string, unit: string):
 /** Formats recent vs baseline median pair, e.g. "42 vs 55 ms" or "9.1k vs 6.0k". */
 export function formatRecentVsBaseline(row: FindingRowDTO): string | null {
   if (row.recentMedian === null || row.baselineMedian === null) return null;
-  if (row.unit === "%" && (row.recentMedian < 1.5 || row.baselineMedian < 1.5)) {
+  if (isFractionPercent(row.unit, row.recentMedian, row.baselineMedian)) {
     return null;
   }
   const recent = formatMetricNumber(row.recentMedian, row.metric, row.unit);
   const base = formatMetricNumber(row.baselineMedian, row.metric, row.unit);
   const unitLabel = displayUnit(row.metric, row.unit);
   return unitLabel ? `${recent} vs ${base} ${unitLabel}` : `${recent} vs ${base}`;
+}
+
+/**
+ * Pre-9c exports wrote percentage metrics as 0–1 fractions; a sub-1.5 `%` reading
+ * is that artifact, not a physiological value, so readouts suppress it.
+ */
+export function isFractionPercent(
+  unit: string,
+  recentMedian: number | null,
+  baselineMedian: number | null,
+): boolean {
+  return (
+    unit === "%" &&
+    ((recentMedian !== null && recentMedian < 1.5) ||
+      (baselineMedian !== null && baselineMedian < 1.5))
+  );
+}
+
+/** "/min", "bpm", "°C", or "" for a bare count. */
+export function formatValueWithUnit(value: number, metric: string, unit: string): string {
+  const number = formatMetricNumber(value, metric, unit);
+  const unitLabel = displayUnit(metric, unit);
+  return unitLabel ? `${number} ${unitLabel}` : number;
+}
+
+/** Prominent single reading in human units, e.g. "56 bpm", "7.2 h", "48 ms". */
+export function formatReading(row: FindingRowDTO): string | null {
+  if (row.recentMedian === null) return null;
+  if (isFractionPercent(row.unit, row.recentMedian, row.baselineMedian)) return null;
+  return formatValueWithUnit(row.recentMedian, row.metric, row.unit);
 }
 
 export function unitNounFor(kind: FindingRowDTO["kind"]): "nights" | "days" {
